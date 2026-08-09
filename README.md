@@ -141,6 +141,45 @@ writes to two tables:
   has a day-one anchor. This insert is deliberately non-fatal: the account is
   already usable if it fails.
 
+## Troubleshooting the Android build
+
+### `Could not resolve org.ow2.asm:asm:9.9` while configuring `:app_links`
+
+Two separate problems usually show up together here.
+
+**1. AGP version conflict.** `supabase_flutter` depends on `app_links` (for the
+OAuth deep-link callback) with a wide constraint, `>=6.4.1 <8.0.0`, so pub
+resolves the newest. Recent versions declare their own AGP classpath:
+
+| `app_links` | Declares AGP |
+|---|---|
+| 6.4.1 | 8.6.1 |
+| 7.0.0 | 8.11.1 |
+| 7.2.1 | 9.2.1 — needs Gradle 9.x |
+
+This project is on AGP 8.9.1 / Gradle 8.12, so `app_links` 7.2.1 makes the
+`:app_links` subproject fail to configure. The `dependency_overrides` entry in
+`pubspec.yaml` pins it to 6.4.x. After changing it:
+
+```bash
+flutter clean
+flutter pub get
+```
+
+**2. Maven Central unreachable.** If the log ends with *"Gradle threw an error
+while downloading artifacts from the network"* and the causes bottom out at
+`> repo.maven.apache.org` with no HTTP status, that's a connection failure, not
+a missing artifact — check VPN, corporate proxy or DNS, then retry. The pin
+above reduces what has to be fetched but does not remove the need for network
+access on a cold cache.
+
+### Toolchain upgrade
+
+Flutter also warns that Gradle 8.12, AGP 8.9.1 and Kotlin 2.1.0 are heading for
+end of support. Moving to Gradle >=8.14, AGP >=8.11.1 and Kotlin >=2.2.20 would
+let the `app_links` pin relax to `^7.0.0`. That's an independent change and is
+not required to build today.
+
 ## Tests
 
 ```bash
