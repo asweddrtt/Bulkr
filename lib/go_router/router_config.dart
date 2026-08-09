@@ -1,3 +1,4 @@
+import 'package:bulkr/screens/main_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -102,7 +103,7 @@ class AppRouter {
         GoRoute(
           path: AppRoutes.home,
           pageBuilder: (context, state) =>
-              _stepTransition(state, const HomeScreen()),
+              _stepTransition(state, const MainScreen()),
         ),
       ],
 

@@ -18,4 +18,5 @@ class AppRoutes {
 
   /// Post-onboarding landing (currently a placeholder).
   static const String home = '/home';
+
 }
