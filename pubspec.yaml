@@ -45,6 +45,7 @@ dependencies:
   # Onboarding state has to survive navigation between the five screens.
   flutter_bloc: ^9.1.1
   equatable: ^2.0.7
+  google_sign_in: ^7.2.0
   # NOTE: `intl` (DateFormat/NumberFormat) is not listed here on purpose —
   # easy_localization re-exports it, which is how NumberFormat is already used
   # in the reveal screen. Adding it explicitly risks a resolution conflict with

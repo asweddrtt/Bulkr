@@ -76,12 +76,13 @@ class UserRepository {
     required UnitSystem units,
     required NutritionPlan plan,
   }) async {
+    final activeUserId = _client.auth.currentUser?.id ?? userId;
     var candidate = username;
 
     for (var attempt = 0; attempt < _maxUsernameAttempts; attempt++) {
       try {
         await _client.from('users').upsert({
-          'id': userId,
+          'id': activeUserId,
           'username': candidate,
           'display_name': displayName,
           'avatar_url': avatarUrl,
@@ -100,7 +101,7 @@ class UserRepository {
           'last_active_at': DateTime.now().toUtc().toIso8601String(),
         });
 
-        await _seedWeightLog(userId: userId, weightKg: currentWeightKg);
+        await _seedWeightLog(userId: activeUserId, weightKg: currentWeightKg);
         return candidate;
       } on PostgrestException catch (error) {
         final isUsernameCollision = error.code == _uniqueViolation &&

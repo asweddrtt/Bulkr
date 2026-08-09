@@ -65,9 +65,9 @@ class AuthCubit extends Cubit<AuthenticationState> {
       );
 
   Future<void> _signIn(
-    AuthProviderKind kind,
-    Future<bool> Function() action,
-  ) async {
+      AuthProviderKind kind,
+      Future<void> Function() action, // Changed to Future<void> since native flow doesn't return a 'launched' boolean
+      ) async {
     emit(state.copyWith(
       status: AuthStatus.loading,
       pendingProvider: kind,
@@ -75,16 +75,11 @@ class AuthCubit extends Cubit<AuthenticationState> {
     ));
 
     try {
-      final launched = await action();
-      if (!launched) {
-        emit(state.copyWith(
-          status: AuthStatus.failure,
-          pendingProvider: AuthProviderKind.none,
-          errorMessage: 'auth_error_cancelled',
-        ));
-      }
-      // On success we stay in `loading` on purpose: the session only exists
-      // once the provider redirects back and the listener above fires.
+      // With native sign-in, this awaits the actual dialog and token exchange.
+      await action();
+
+      // On success, the `onAuthStateChange` listener in _bootstrap()
+      // will still automatically catch the new session and emit AuthStatus.authenticated.
     } on AuthException catch (error) {
       emit(state.copyWith(
         status: AuthStatus.failure,
