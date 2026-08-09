@@ -39,6 +39,17 @@ dependencies:
   easy_localization: ^3.0.8
   go_router: ^17.2.3
 
+  # Backend: auth session + the single onboarding INSERT.
+  supabase_flutter: ^2.17.1
+
+  # Onboarding state has to survive navigation between the five screens.
+  flutter_bloc: ^9.1.1
+  equatable: ^2.0.7
+  # NOTE: `intl` (DateFormat/NumberFormat) is not listed here on purpose —
+  # easy_localization re-exports it, which is how NumberFormat is already used
+  # in the reveal screen. Adding it explicitly risks a resolution conflict with
+  # the version flutter_localizations pins.
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

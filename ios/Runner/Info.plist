@@ -41,6 +41,22 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<!-- Supabase OAuth callback. Must match SupabaseConfig.oauthRedirectUrl
+	     and the Redirect URL allow-list in the Supabase dashboard. Without it
+	     the provider finishes in Safari and never returns to the app. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>io.bulkr.oauth</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>io.bulkr</string>
+			</array>
+		</dict>
+	</array>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
