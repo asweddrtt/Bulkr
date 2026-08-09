@@ -77,6 +77,27 @@
   "home_welcome": "Let's go, {name}.",
   "home_placeholder_body": "Your plan is saved. The dashboard, food logging and progress tracking land here next.",
 
+  "dashboard": "Dashboard",
+  "workouts": "Workouts",
+  "progress": "Progress",
+  "profile": "Profile",
+  "section_coming_soon": "This section is on the way.",
+
+  "weight_progress": "WEIGHT PROGRESS",
+  "to_target": "to target",
+  "today": "Today",
+  "chart_needs_more_data": "Log another weigh-in to see your trend.",
+  "current_weight": "CURRENT WEIGHT",
+  "target_weight": "TARGET WEIGHT",
+  "nutrition_plan": "NUTRITION PLAN",
+  "current_daily_goal": "{calories} kcal per day",
+  "nutrition_plan_desc": "Calculated from your metrics at a {activity} lifestyle. Hit this daily to keep the surplus consistent.",
+  "recalculate": "RECALCULATE",
+  "recalculate_coming_soon": "Editing your metrics is coming soon.",
+  "profile_missing": "We couldn't find your profile. Finish onboarding to create it.",
+  "profile_load_failed": "Couldn't load your profile.",
+  "retry": "Retry",
+
   "continue_btn": "CONTINUE",
   "back_btn": "BACK"
 }

@@ -4,6 +4,8 @@ import '../models/activity_level.dart';
 import '../models/gender.dart';
 import '../models/nutrition_plan.dart';
 import '../models/unit_system.dart';
+import '../models/user_profile.dart';
+import '../models/weight_entry.dart';
 import 'username_generator.dart';
 
 /// Raised when the handle the user typed themselves is already taken. A
@@ -50,6 +52,48 @@ class UserRepository {
       // Blocked by RLS, offline, whatever — don't block the user on a hint.
       return true;
     }
+  }
+
+  /// Reads back the signed-in user's profile row.
+  ///
+  /// Returns null when there's no session, or when the row doesn't exist yet —
+  /// which is the normal state for an account that authenticated but abandoned
+  /// onboarding before the final step.
+  Future<UserProfile?> fetchProfile() async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) return null;
+
+    final row = await _client
+        .from('users')
+        .select()
+        .eq('id', userId)
+        .maybeSingle();
+
+    if (row == null) return null;
+    return UserProfile.fromMap(row);
+  }
+
+  /// Weigh-ins, oldest first, for the progress chart.
+  ///
+  /// Fetched newest-first so the limit keeps the most *recent* entries, then
+  /// reversed for plotting — otherwise a user with a long history would see
+  /// their first 90 days forever and never the current trend.
+  Future<List<WeightEntry>> fetchWeightHistory({int limit = 90}) async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) return const [];
+
+    final rows = await _client
+        .from('weight_logs')
+        .select()
+        .eq('user_id', userId)
+        .order('logged_at', ascending: false)
+        .limit(limit);
+
+    return rows
+        .map((row) => WeightEntry.fromMap(row))
+        .toList()
+        .reversed
+        .toList();
   }
 
   /// Commits every field gathered across screens 1-5 as a single row, flags

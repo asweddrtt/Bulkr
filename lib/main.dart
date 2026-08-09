@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/config/supabase_config.dart';
 import 'cubit/auth/auth_cubit.dart';
 import 'cubit/onboarding/onboarding_cubit.dart';
+import 'cubit/profile/profile_cubit.dart';
 import 'data/auth_repository.dart';
 import 'data/user_repository.dart';
 import 'go_router/router_config.dart';
@@ -64,6 +65,9 @@ class _BulkrAppState extends State<BulkrApp> {
         ),
         BlocProvider(
           create: (_) => OnboardingCubit(userRepository: _userRepository),
+        ),
+        BlocProvider(
+          create: (_) => ProfileCubit(userRepository: _userRepository),
         ),
       ],
       child: ScreenUtilInit(

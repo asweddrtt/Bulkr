@@ -1,216 +1,291 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:google_fonts/google_fonts.dart';
 
+import '../core/unit_converter.dart';
+import '../cubit/profile/profile_cubit.dart';
+import '../models/user_profile.dart';
+import '../models/weight_entry.dart';
+import '../styles/app_color.dart';
+import '../widgets/animations/entrance.dart';
+import '../widgets/animations/press_scale.dart';
+import '../widgets/weight_chart.dart';
+
+/// Reads the signed-in user's row and renders it.
+///
+/// Split into a connected shell and a presentational view: the view takes a
+/// [UserProfile] and knows nothing about where it came from, which keeps it
+/// trivial to render for a test or a preview.
 class ProfileScreen extends StatelessWidget {
-  final String displayName;
-  final String? avatarUrl;
-  final double currentWeight;
-  final double targetWeight;
-  final int calorieTarget;
-  final String activityLevel;
+  const ProfileScreen({super.key});
 
-  const ProfileScreen({
-    Key? key,
-    required this.displayName,
-    this.avatarUrl,
-    required this.currentWeight,
-    required this.targetWeight,
-    required this.calorieTarget,
-    required this.activityLevel,
-  }) : super(key: key);
-
-
-  // Theme Constants
+  // Theme constants, kept as aliases of the shared palette so this screen
+  // can't drift away from the rest of the app.
   static const Color bgColor = Color(0xFF121212);
   static const Color cardColor = Color(0xFF1A1A1A);
-  static const Color accentColor = Color(0xFFCBF026);
-  static const Color borderColor = Color(0xFF333333);
+  static const Color accentColor = AppColors.primaryNeon;
+  static const Color borderColor = AppColors.darkBorder;
   static const Color textMuted = Color(0xFF9CA3AF);
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<ProfileCubit, ProfileState>(
+      builder: (context, state) {
+        switch (state.status) {
+          case ProfileStatus.initial:
+          case ProfileStatus.loading:
+            return const Center(
+              child: CircularProgressIndicator(color: accentColor),
+            );
+
+          case ProfileStatus.missing:
+            return _ProfileMessage(
+              icon: Icons.person_off_outlined,
+              message: 'profile_missing'.tr(),
+              actionLabel: 'retry'.tr(),
+              onAction: () => context.read<ProfileCubit>().load(),
+            );
+
+          case ProfileStatus.failure:
+            return _ProfileMessage(
+              icon: Icons.cloud_off_outlined,
+              message: state.errorMessage ?? 'profile_load_failed'.tr(),
+              actionLabel: 'retry'.tr(),
+              onAction: () => context.read<ProfileCubit>().load(),
+            );
+
+          case ProfileStatus.ready:
+            return _ProfileView(
+              profile: state.profile!,
+              weightHistory: state.weightHistory,
+              onRefresh: () => context.read<ProfileCubit>().refresh(),
+            );
+        }
+      },
+    );
+  }
+}
+
+class _ProfileView extends StatelessWidget {
+  const _ProfileView({
+    required this.profile,
+    required this.weightHistory,
+    required this.onRefresh,
+  });
+
+  final UserProfile profile;
+  final List<WeightEntry> weightHistory;
+  final Future<void> Function() onRefresh;
+
+  bool get _isMetric => profile.units.isMetric;
+
+  String get _unitLabel =>
+      _isMetric ? 'kg_unit'.tr().toLowerCase() : 'lb_unit'.tr().toLowerCase();
+
+  /// Weights are stored in kilograms; the display unit is the user's choice
+  /// from onboarding.
+  String _weight(double kg) => _isMetric
+      ? kg.toStringAsFixed(1)
+      : UnitConverter.kgToLb(kg).toStringAsFixed(1);
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
         _buildHeader(),
-          Expanded(
-            child: SingleChildScrollView(
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: onRefresh,
+            color: ProfileScreen.accentColor,
+            backgroundColor: ProfileScreen.cardColor,
+            child: ListView(
               padding: EdgeInsets.all(16.w),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _buildWeightProgress(),
-                  SizedBox(height: 16.h),
-                  _buildWeightCards(),
-                  SizedBox(height: 16.h),
-                  _buildNutritionPlan(),
-                  SizedBox(height: 16.h),
-                  _buildFocusAreas(),
-                  SizedBox(height: 32.h),
-                ],
-              ),
+              children: staggered([
+                _buildWeightProgress(),
+                SizedBox(height: 16.h),
+                _buildWeightCards(),
+                SizedBox(height: 16.h),
+                _buildNutritionPlan(context),
+                SizedBox(height: 16.h),
+                _buildMacroTargets(),
+                SizedBox(height: 32.h),
+              ]),
             ),
           ),
-        ],
+        ),
+      ],
     );
   }
+
   Widget _buildHeader() {
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
       decoration: const BoxDecoration(
         color: Color(0xFF0A0A0A),
-        border: Border(bottom: BorderSide(color: borderColor)),
+        border: Border(bottom: BorderSide(color: ProfileScreen.borderColor)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            children: [
-              Container(
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: accentColor, width: 2.w),
+          Expanded(
+            child: Row(
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border:
+                        Border.all(color: ProfileScreen.accentColor, width: 2.w),
+                  ),
+                  child: CircleAvatar(
+                    radius: 18.r,
+                    backgroundColor: ProfileScreen.borderColor,
+                    backgroundImage: profile.avatarUrl == null
+                        ? null
+                        : NetworkImage(profile.avatarUrl!),
+                    child: profile.avatarUrl == null
+                        ? Icon(Icons.person,
+                            color: ProfileScreen.textMuted, size: 20.sp)
+                        : null,
+                  ),
                 ),
-                child: CircleAvatar(
-                  radius: 18.r,
-                  backgroundColor: borderColor,
-                  backgroundImage: avatarUrl != null ? NetworkImage(avatarUrl!) : null,
-                  child: avatarUrl == null
-                      ? Icon(Icons.person, color: textMuted, size: 20.sp)
-                      : null,
+                SizedBox(width: 12.w),
+                // Flexible: a long OAuth display name would otherwise overflow
+                // the row and paint the yellow-and-black stripes.
+                Flexible(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        profile.preferredName.toUpperCase(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.anton(
+                          color: Colors.white,
+                          fontSize: 20.sp,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                      Text(
+                        '@${profile.username}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.inter(
+                          color: ProfileScreen.textMuted,
+                          fontSize: 11.sp,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              SizedBox(width: 12.w),
-              Text(
-                displayName.toUpperCase(),
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 20.sp,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1.2,
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
-          Icon(Icons.settings_outlined, color: textMuted, size: 24.sp),
+          Icon(Icons.settings_outlined,
+              color: ProfileScreen.textMuted, size: 24.sp),
         ],
       ),
     );
   }
 
-  Widget _buildDashedWrapper({required Widget child}) {
+  Widget _buildBorderedCard({required Widget child, Color? fill}) {
     return Container(
       padding: EdgeInsets.all(2.w),
       decoration: BoxDecoration(
-        color: bgColor,
-        border: Border.all(color: borderColor, width: 1.5.w),
+        color: ProfileScreen.bgColor,
+        border: Border.all(color: ProfileScreen.borderColor, width: 1.5.w),
         borderRadius: BorderRadius.circular(10.r),
       ),
-      child: child,
+      child: Container(
+        decoration: BoxDecoration(
+          color: fill ?? ProfileScreen.cardColor,
+          borderRadius: BorderRadius.circular(8.r),
+        ),
+        child: child,
+      ),
     );
   }
 
   Widget _buildWeightProgress() {
-      final targetDiff = targetWeight - currentWeight;
-      final diffPrefix = targetDiff >= 0 ? '+' : '';
-      final formattedDiff = '$diffPrefix${targetDiff.toStringAsFixed(1)}';
+    final remaining = profile.remainingKg;
+    final prefix = remaining >= 0 ? '+' : '';
 
-      return _buildDashedWrapper(
-        child: Container(
-          decoration: BoxDecoration(
-            color: cardColor,
-            borderRadius: BorderRadius.circular(8.r),
-          ),
-          padding: EdgeInsets.all(16.w),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'weight_progress'.tr(),
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 14.sp,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 1.5,
-                    ),
-                  ),
-                  Text(
-                    'target_kg'.tr(args: [formattedDiff]),
-                    style: TextStyle(
-                      color: accentColor,
-                      fontSize: 10.sp,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.0,
-                    ),
-                  ),
-                ],
-              ),
-            SizedBox(height: 24.h),
-            SizedBox(
-              height: 120.h,
-              child: Stack(
-                children: [
-                  Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          accentColor.withOpacity(0.2),
-                          Colors.transparent,
-                        ],
-                      ),
-                    ),
-                  ),
-                  CustomPaint(
-                    size: Size(double.infinity, 120.h),
-                    painter: ChartMockPainter(),
-                  ),
-                ],
-              ),
-            ),
-            SizedBox(height: 12.h),
+    return _buildBorderedCard(
+      child: Padding(
+        padding: EdgeInsets.all(16.w),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('days_ago'.tr(args: ['30']), style: _chartLabelStyle),
-                Text('days_ago'.tr(args: ['15']), style: _chartLabelStyle),
-                Text('today'.tr(), style: _chartLabelStyle),
+                Text(
+                  'weight_progress'.tr(),
+                  style: GoogleFonts.anton(
+                    color: Colors.white,
+                    fontSize: 14.sp,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+                Text(
+                  '$prefix${_weight(remaining)} $_unitLabel '
+                  '${'to_target'.tr()}',
+                  style: GoogleFonts.inter(
+                    color: ProfileScreen.accentColor,
+                    fontSize: 10.sp,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.0,
+                  ),
+                ),
               ],
             ),
+            SizedBox(height: 24.h),
+            WeightChart(entries: weightHistory, units: profile.units),
+            SizedBox(height: 12.h),
+            if (weightHistory.length >= 2)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(_chartDate(weightHistory.first.loggedAt),
+                      style: _chartLabelStyle),
+                  Text('today'.tr(), style: _chartLabelStyle),
+                ],
+              ),
           ],
         ),
       ),
     );
   }
 
-  static final TextStyle _chartLabelStyle = TextStyle(
-    color: textMuted,
-    fontSize: 10.sp,
-    fontWeight: FontWeight.bold,
-    letterSpacing: 1.2,
-  );
+  static String _chartDate(DateTime date) => DateFormat.MMMd().format(date);
+
+  static TextStyle get _chartLabelStyle => GoogleFonts.inter(
+        color: ProfileScreen.textMuted,
+        fontSize: 10.sp,
+        fontWeight: FontWeight.bold,
+        letterSpacing: 1.2,
+      );
 
   Widget _buildWeightCards() {
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Expanded(
-          child: _buildDashedWrapper(
+          child: _buildBorderedCard(
             child: _buildSingleWeightCard(
-                'current_weight'.tr(),
-                currentWeight.toStringAsFixed(1)
+              'current_weight'.tr(),
+              _weight(profile.currentWeightKg),
             ),
           ),
         ),
         SizedBox(width: 16.w),
         Expanded(
-          child: _buildDashedWrapper(
+          child: _buildBorderedCard(
             child: _buildSingleWeightCard(
-                'target_weight'.tr(),
-                targetWeight.toStringAsFixed(1)
+              'target_weight'.tr(),
+              _weight(profile.targetWeightKg),
             ),
           ),
         ),
@@ -219,50 +294,42 @@ class ProfileScreen extends StatelessWidget {
   }
 
   Widget _buildSingleWeightCard(String label, String value) {
-    return Container(
-      decoration: BoxDecoration(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(8.r),
-      ),
+    return Padding(
       padding: EdgeInsets.all(16.w),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  color: textMuted,
-                  fontSize: 10.sp,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.5,
-                  height: 1.4,
-                ),
-              ),
-              Icon(Icons.edit, color: textMuted, size: 14.sp),
-            ],
+          Text(
+            label,
+            style: GoogleFonts.inter(
+              color: ProfileScreen.textMuted,
+              fontSize: 10.sp,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.5,
+              height: 1.4,
+            ),
           ),
           SizedBox(height: 12.h),
           Row(
             crossAxisAlignment: CrossAxisAlignment.baseline,
             textBaseline: TextBaseline.alphabetic,
             children: [
-              Text(
-                value,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 36.sp,
-                  fontWeight: FontWeight.w900,
+              Flexible(
+                child: Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.anton(
+                    color: Colors.white,
+                    fontSize: 34.sp,
+                  ),
                 ),
               ),
               SizedBox(width: 4.w),
               Text(
-                'kg'.tr(),
-                style: TextStyle(
-                  color: textMuted,
+                _unitLabel,
+                style: GoogleFonts.inter(
+                  color: ProfileScreen.textMuted,
                   fontSize: 12.sp,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 1.0,
@@ -275,27 +342,17 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildNutritionPlan() {
-    // Adds the comma separator for thousands, e.g., 3550 -> 3,550
-    final formattedCalories = calorieTarget.toString().replaceAllMapped(
-        RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-            (Match m) => '${m[1]},'
-    );
-
-    return _buildDashedWrapper(
-      child: Container(
-        decoration: BoxDecoration(
-          color: cardColor,
-          borderRadius: BorderRadius.circular(8.r),
-        ),
+  Widget _buildNutritionPlan(BuildContext context) {
+    return _buildBorderedCard(
+      child: Padding(
         padding: EdgeInsets.all(20.w),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               'nutrition_plan'.tr(),
-              style: TextStyle(
-                color: textMuted,
+              style: GoogleFonts.inter(
+                color: ProfileScreen.textMuted,
                 fontSize: 10.sp,
                 fontWeight: FontWeight.bold,
                 letterSpacing: 1.5,
@@ -303,41 +360,190 @@ class ProfileScreen extends StatelessWidget {
             ),
             SizedBox(height: 4.h),
             Text(
-              'current_daily_goal'.tr(args: [formattedCalories]),
-              style: TextStyle(
+              'current_daily_goal'.tr(
+                namedArgs: {
+                  'calories':
+                      NumberFormat('#,###').format(profile.dailyCalorieTarget),
+                },
+              ),
+              style: GoogleFonts.anton(
                 color: Colors.white,
                 fontSize: 18.sp,
-                fontWeight: FontWeight.w900,
                 letterSpacing: 1.0,
               ),
             ),
             SizedBox(height: 12.h),
             Text(
-              // Assuming your JSON takes the activity level as an argument here
-              'nutrition_plan_desc'.tr(args: [activityLevel.tr()]),
-              style: TextStyle(
+              'nutrition_plan_desc'.tr(
+                namedArgs: {'activity': profile.activityLevel.titleKey.tr()},
+              ),
+              style: GoogleFonts.inter(
                 color: const Color(0xFFD1D5DB),
                 fontSize: 13.sp,
                 height: 1.5,
               ),
             ),
             SizedBox(height: 20.h),
-            SizedBox(
-              width: double.infinity,
-              height: 48.h,
+            PressScale(
+              child: SizedBox(
+                width: double.infinity,
+                height: 48.h,
+                child: OutlinedButton(
+                  onPressed: () => _showRecalculateNotice(context),
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(
+                        color: ProfileScreen.accentColor, width: 2.w),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(4.r),
+                    ),
+                  ),
+                  child: Text(
+                    'recalculate'.tr(),
+                    style: GoogleFonts.inter(
+                      color: ProfileScreen.accentColor,
+                      fontSize: 14.sp,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Recalculation needs an edit flow that doesn't exist yet. Saying so beats
+  /// a button that appears to work and silently does nothing.
+  void _showRecalculateNotice(BuildContext context) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          backgroundColor: const Color(0xFF2A2A2A),
+          content: Text(
+            'recalculate_coming_soon'.tr(),
+            style: GoogleFonts.inter(color: Colors.white, fontSize: 13.sp),
+          ),
+        ),
+      );
+  }
+
+  /// Replaces the mocked "focus areas" list. Those values were invented —
+  /// there's no workout data in the schema to drive them — whereas these
+  /// macro targets are the ones actually stored on the user's row.
+  Widget _buildMacroTargets() {
+    return _buildBorderedCard(
+      fill: ProfileScreen.bgColor,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 8.h),
+            child: Text(
+              'macros_title'.tr().toUpperCase(),
+              style: GoogleFonts.anton(
+                color: Colors.white,
+                fontSize: 14.sp,
+                letterSpacing: 1.5,
+              ),
+            ),
+          ),
+          _buildMacroRow('macro_protein'.tr(), profile.proteinTargetG,
+              AppColors.primaryNeon),
+          SizedBox(height: 2.h),
+          _buildMacroRow(
+              'macro_carbs'.tr(), profile.carbsTargetG, const Color(0xFF6FD3FF)),
+          SizedBox(height: 2.h),
+          _buildMacroRow(
+              'macro_fat'.tr(), profile.fatTargetG, const Color(0xFFFF9E3D)),
+          SizedBox(height: 2.h),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMacroRow(String label, int grams, Color accent) {
+    return Container(
+      color: ProfileScreen.cardColor,
+      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 16.h),
+      child: Row(
+        children: [
+          Container(width: 4.w, height: 16.h, color: accent),
+          SizedBox(width: 12.w),
+          Text(
+            label.toUpperCase(),
+            style: GoogleFonts.inter(
+              color: const Color(0xFFD1D5DB),
+              fontSize: 11.sp,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.5,
+            ),
+          ),
+          const Spacer(),
+          Text(
+            '${grams}g',
+            style: GoogleFonts.anton(
+              color: Colors.white,
+              fontSize: 14.sp,
+              letterSpacing: 1.0,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfileMessage extends StatelessWidget {
+  const _ProfileMessage({
+    required this.icon,
+    required this.message,
+    required this.actionLabel,
+    required this.onAction,
+  });
+
+  final IconData icon;
+  final String message;
+  final String actionLabel;
+  final VoidCallback onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: 32.w),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 40.sp, color: ProfileScreen.textMuted),
+            SizedBox(height: 16.h),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(
+                fontSize: 13.sp,
+                color: ProfileScreen.textMuted,
+                height: 1.5,
+              ),
+            ),
+            SizedBox(height: 20.h),
+            PressScale(
               child: OutlinedButton(
-                onPressed: () {},
+                onPressed: onAction,
                 style: OutlinedButton.styleFrom(
-                  side: BorderSide(color: accentColor, width: 2.w),
+                  side: const BorderSide(color: ProfileScreen.accentColor),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(4.r),
                   ),
                 ),
                 child: Text(
-                  'recalculate'.tr(),
-                  style: TextStyle(
-                    color: accentColor,
-                    fontSize: 14.sp,
+                  actionLabel.toUpperCase(),
+                  style: GoogleFonts.inter(
+                    color: ProfileScreen.accentColor,
+                    fontSize: 12.sp,
                     fontWeight: FontWeight.bold,
                     letterSpacing: 1.5,
                   ),
@@ -349,123 +555,4 @@ class ProfileScreen extends StatelessWidget {
       ),
     );
   }
-
-  Widget _buildFocusAreas() {
-    return _buildDashedWrapper(
-      child: Container(
-        decoration: BoxDecoration(
-          color: bgColor,
-          borderRadius: BorderRadius.circular(8.r),
-        ),
-        padding: EdgeInsets.only(top: 8.h),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 8.h),
-              child: Text(
-                'focus_areas'.tr(),
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 14.sp,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1.5,
-                ),
-              ),
-            ),
-            SizedBox(height: 8.h),
-            _buildFocusRow('quadriceps'.tr(), 'heavy'.tr(), true),
-            SizedBox(height: 2.h),
-            _buildFocusRow('back'.tr(), 'volume'.tr(), true),
-            SizedBox(height: 2.h),
-            _buildFocusRow('delts'.tr(), 'resting'.tr(), false),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFocusRow(String area, String status, bool isActive) {
-    return Container(
-      color: cardColor,
-      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 16.h),
-      child: Row(
-        children: [
-          Container(
-            width: 4.w,
-            height: 16.h,
-            color: isActive ? accentColor : borderColor,
-          ),
-          SizedBox(width: 12.w),
-          Text(
-            area,
-            style: TextStyle(
-              color: isActive ? const Color(0xFFD1D5DB) : textMuted,
-              fontSize: 11.sp,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1.5,
-            ),
-          ),
-          const Spacer(),
-          Text(
-            status,
-            style: TextStyle(
-              color: isActive ? Colors.white : textMuted,
-              fontSize: 11.sp,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1.5,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// Custom Painter for the mock line chart
-class ChartMockPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final linePaint = Paint()
-      ..color = ProfileScreen.accentColor
-      ..strokeWidth = 3
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-
-    final dotPaint = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.fill;
-
-    final path = Path();
-
-    // Mock data points mapping to UI
-    final points = [
-      Offset(0, size.height * 0.9),
-      Offset(size.width * 0.2, size.height * 0.75),
-      Offset(size.width * 0.4, size.height * 0.65),
-      Offset(size.width * 0.6, size.height * 0.45),
-      Offset(size.width * 0.8, size.height * 0.3),
-      Offset(size.width, size.height * 0.15),
-    ];
-
-    path.moveTo(points[0].dx, points[0].dy);
-    for (int i = 1; i < points.length; i++) {
-      // Using quadratic bezier for smooth curves between points
-      final p0 = points[i - 1];
-      final p1 = points[i];
-      final midX = (p0.dx + p1.dx) / 2;
-      path.quadraticBezierTo(midX, p0.dy, midX, (p0.dy + p1.dy) / 2);
-      path.quadraticBezierTo(midX, p1.dy, p1.dx, p1.dy);
-    }
-
-    canvas.drawPath(path, linePaint);
-
-    // Draw the white dots at the actual data points
-    for (final point in points) {
-      canvas.drawCircle(point, 4, dotPaint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import '../data/auth_repository.dart';
 import '../screens/activity_level_screen.dart';
 import '../screens/biometrics_screen.dart';
-import '../screens/home_screen.dart';
 import '../screens/plan_reveal_screen.dart';
 import '../screens/target_pace_screen.dart';
 import '../screens/welcome_screen.dart';
