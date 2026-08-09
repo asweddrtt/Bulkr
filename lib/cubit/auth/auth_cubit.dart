@@ -80,6 +80,14 @@ class AuthCubit extends Cubit<AuthenticationState> {
 
       // On success, the `onAuthStateChange` listener in _bootstrap()
       // will still automatically catch the new session and emit AuthStatus.authenticated.
+    } on SignInCancelled {
+      // Backing out of the account picker is a choice, not a failure. Drop the
+      // spinner and leave the buttons ready, with no error snackbar.
+      emit(state.copyWith(
+        status: AuthStatus.initial,
+        pendingProvider: AuthProviderKind.none,
+        clearError: true,
+      ));
     } on AuthException catch (error) {
       emit(state.copyWith(
         status: AuthStatus.failure,
