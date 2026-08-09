@@ -1,10 +1,12 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../core/calorie_engine.dart';
 import '../core/unit_converter.dart';
 import '../cubit/onboarding/onboarding_cubit.dart';
 import '../go_router/app_routes.dart';
@@ -63,7 +65,7 @@ class TargetPaceScreen extends StatelessWidget {
             PaceSlider(
               weeklyGainKg: state.weeklyGainKg,
               unitSystem: state.unitSystem,
-              onChanged: cubit.setWeeklyGainKg,
+              onChanged: (value) => _onPaceChanged(state, cubit, value),
               min: minPaceKg,
               max: maxPaceKg,
               divisions: paceDivisions,
@@ -82,6 +84,25 @@ class TargetPaceScreen extends StatelessWidget {
         );
       },
     );
+  }
+
+  /// Ticks once as the slider crosses the lean-bulk ceiling in either
+  /// direction.
+  ///
+  /// The threshold is the single most consequential thing on this screen and
+  /// it's easy to slide straight past while watching the number. A haptic
+  /// marks the boundary without another line of warning text — and it fires
+  /// only on the crossing, not on every step, so it stays meaningful.
+  static void _onPaceChanged(
+    OnboardingState state,
+    OnboardingCubit cubit,
+    double value,
+  ) {
+    final wasLean = !state.exceedsLeanBulkPace;
+    final isLean = value <= CalorieEngine.leanBulkCeilingKgPerWeek;
+    if (wasLean != isLean) HapticFeedback.selectionClick();
+
+    cubit.setWeeklyGainKg(value);
   }
 
   static String _weightValue(double kg, bool isMetric) => isMetric

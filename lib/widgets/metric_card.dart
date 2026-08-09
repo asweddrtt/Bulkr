@@ -4,6 +4,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../styles/app_color.dart';
+import 'animations/press_scale.dart';
 
 /// Big-number input card. Tapping it opens a wheel picker rather than a
 /// keyboard, so the value can never arrive malformed.
@@ -34,7 +35,9 @@ class MetricCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return PressScale(
+      enabled: onTap != null,
+      child: GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Container(
@@ -112,6 +115,7 @@ class MetricCard extends StatelessWidget {
           ],
         ),
       ),
+      ),
     );
   }
 }
@@ -136,7 +140,9 @@ class TargetMassCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return PressScale(
+      enabled: onTap != null,
+      child: GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Container(
@@ -228,6 +234,7 @@ class TargetMassCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
       ),
     );
   }

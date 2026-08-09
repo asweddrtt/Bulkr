@@ -8,7 +8,51 @@ import '../screens/home_screen.dart';
 import '../screens/plan_reveal_screen.dart';
 import '../screens/target_pace_screen.dart';
 import '../screens/welcome_screen.dart';
+import '../widgets/animations/motion.dart';
 import 'app_routes.dart';
+
+/// Directional slide + fade between onboarding steps.
+///
+/// The incoming screen enters from the right while the outgoing one drifts
+/// slightly left, which reads as one continuous flow rather than five
+/// unrelated screens. Going back reverses it, so the gesture and the motion
+/// agree about which way through the flow you're moving.
+///
+/// Built with `animation.drive(...)` rather than CurvedAnimation because
+/// transitionsBuilder runs every frame, and a CurvedAnimation allocated there
+/// would need disposing.
+CustomTransitionPage<void> _stepTransition(GoRouterState state, Widget child) {
+  return CustomTransitionPage<void>(
+    key: state.pageKey,
+    child: child,
+    transitionDuration: Motion.base,
+    reverseTransitionDuration: const Duration(milliseconds: 240),
+    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      if (Motion.reduced(context)) return child;
+
+      final incoming = animation.drive(
+        Tween<Offset>(begin: const Offset(0.06, 0), end: Offset.zero)
+            .chain(CurveTween(curve: Motion.enter)),
+      );
+      final fade = animation.drive(CurveTween(curve: Motion.enter));
+
+      // Small counter-move on the screen being covered — enough to suggest
+      // depth without it looking like two screens racing each other.
+      final outgoing = secondaryAnimation.drive(
+        Tween<Offset>(begin: Offset.zero, end: const Offset(-0.03, 0))
+            .chain(CurveTween(curve: Motion.enter)),
+      );
+
+      return SlideTransition(
+        position: outgoing,
+        child: SlideTransition(
+          position: incoming,
+          child: FadeTransition(opacity: fade, child: child),
+        ),
+      );
+    },
+  );
+}
 
 class AppRouter {
   const AppRouter._();
@@ -37,23 +81,28 @@ class AppRouter {
         ),
         GoRoute(
           path: AppRoutes.biometrics,
-          builder: (context, state) => const BiometricsScreen(),
+          pageBuilder: (context, state) =>
+              _stepTransition(state, const BiometricsScreen()),
         ),
         GoRoute(
           path: AppRoutes.activityLevel,
-          builder: (context, state) => const ActivityLevelScreen(),
+          pageBuilder: (context, state) =>
+              _stepTransition(state, const ActivityLevelScreen()),
         ),
         GoRoute(
           path: AppRoutes.targetPace,
-          builder: (context, state) => const TargetPaceScreen(),
+          pageBuilder: (context, state) =>
+              _stepTransition(state, const TargetPaceScreen()),
         ),
         GoRoute(
           path: AppRoutes.plan,
-          builder: (context, state) => const PlanRevealScreen(),
+          pageBuilder: (context, state) =>
+              _stepTransition(state, const PlanRevealScreen()),
         ),
         GoRoute(
           path: AppRoutes.home,
-          builder: (context, state) => const HomeScreen(),
+          pageBuilder: (context, state) =>
+              _stepTransition(state, const HomeScreen()),
         ),
       ],
 

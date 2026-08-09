@@ -4,6 +4,9 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../styles/app_color.dart';
+import 'animations/entrance.dart';
+import 'animations/motion.dart';
+import 'animations/press_scale.dart';
 import 'onboarding_progress_dots.dart';
 
 /// Shared chrome for onboarding steps 2-5: background, progress dots, heading,
@@ -73,40 +76,50 @@ class OnboardingScaffold extends StatelessWidget {
               OnboardingProgressDots(step: step),
               SizedBox(height: 10.h),
               Expanded(
+                // The heading arrives first, then the content behind it in
+                // sequence — so the eye lands on what the step is asking
+                // before the controls appear.
                 child: ListView(
                   padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 10.h),
                   children: [
                     if (title != null) ...[
-                      Column(
-                        crossAxisAlignment: crossAlign,
-                        children: [
-                          Text(
-                            title!,
-                            textAlign: headerAlign,
-                            style: GoogleFonts.anton(
-                              fontSize: 30.sp,
-                              color: Colors.white,
-                              letterSpacing: 1,
-                            ),
-                          ),
-                          if (subtitle != null) ...[
-                            SizedBox(height: 8.h),
+                      Entrance(
+                        child: Column(
+                          crossAxisAlignment: crossAlign,
+                          children: [
                             Text(
-                              subtitle!,
+                              title!,
                               textAlign: headerAlign,
-                              style: GoogleFonts.inter(
-                                fontSize: 14.sp,
-                                fontWeight: FontWeight.w500,
-                                color: AppColors.offWhiteMuted,
-                                height: 1.4,
+                              style: GoogleFonts.anton(
+                                fontSize: 30.sp,
+                                color: Colors.white,
+                                letterSpacing: 1,
                               ),
                             ),
+                            if (subtitle != null) ...[
+                              SizedBox(height: 8.h),
+                              Text(
+                                subtitle!,
+                                textAlign: headerAlign,
+                                style: GoogleFonts.inter(
+                                  fontSize: 14.sp,
+                                  fontWeight: FontWeight.w500,
+                                  color: AppColors.offWhiteMuted,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
                       SizedBox(height: 20.h),
                     ],
-                    ...children,
+                    ...staggered(
+                      children,
+                      initialDelay: title == null
+                          ? Duration.zero
+                          : const Duration(milliseconds: 80),
+                    ),
                   ],
                 ),
               ),
@@ -115,19 +128,35 @@ class OnboardingScaffold extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (footnote != null) ...[
-                      footnote!,
-                      SizedBox(height: 12.h),
-                    ],
+                    // A validation notice appearing under the form is new
+                    // information, so it slides in rather than blinking into
+                    // existence mid-layout.
+                    AnimatedSize(
+                      duration: Motion.scaled(context, Motion.base),
+                      curve: Motion.enter,
+                      alignment: Alignment.bottomCenter,
+                      child: footnote == null
+                          ? const SizedBox(width: double.infinity)
+                          : Padding(
+                              padding: EdgeInsets.only(bottom: 12.h),
+                              child: Entrance(child: footnote!),
+                            ),
+                    ),
                     if (onBack != null) ...[
-                      _BackButton(onPressed: isBusy ? null : onBack),
+                      PressScale(
+                        enabled: !isBusy && onBack != null,
+                        child: _BackButton(onPressed: isBusy ? null : onBack),
+                      ),
                       SizedBox(height: 12.h),
                     ],
-                    _ContinueButton(
-                      label: continueLabel ?? 'continue_btn'.tr(),
-                      icon: continueIcon,
-                      isBusy: isBusy,
-                      onPressed: isBusy ? null : onContinue,
+                    PressScale(
+                      enabled: !isBusy && onContinue != null,
+                      child: _ContinueButton(
+                        label: continueLabel ?? 'continue_btn'.tr(),
+                        icon: continueIcon,
+                        isBusy: isBusy,
+                        onPressed: isBusy ? null : onContinue,
+                      ),
                     ),
                   ],
                 ),
@@ -203,6 +232,10 @@ class _ContinueButton extends StatelessWidget {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(8.r),
           ),
+          // Material cross-fades its own colours over this, so the button
+          // lighting up as the form becomes valid is a transition rather than
+          // a jump cut.
+          animationDuration: Motion.base,
         ),
         child: isBusy
             ? SizedBox(

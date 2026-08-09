@@ -3,6 +3,8 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../styles/app_color.dart';
+import 'animations/motion.dart';
+import 'animations/press_scale.dart';
 
 class PrimaryIconButton extends StatelessWidget {
   const PrimaryIconButton({
@@ -28,7 +30,9 @@ class PrimaryIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ElevatedButton(
+    return PressScale(
+      enabled: onPressed != null,
+      child: ElevatedButton(
       onPressed: onPressed,
       style: ElevatedButton.styleFrom(
         backgroundColor: AppColors.buttonNeon,
@@ -39,6 +43,7 @@ class PrimaryIconButton extends StatelessWidget {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8.r),
         ),
+        animationDuration: Motion.base,
       ),
       child: isBusy
           ? SizedBox(
@@ -67,6 +72,7 @@ class PrimaryIconButton extends StatelessWidget {
                 ),
               ],
             ),
+      ),
     );
   }
 }

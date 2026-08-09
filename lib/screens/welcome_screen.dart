@@ -9,6 +9,7 @@ import '../cubit/auth/auth_cubit.dart';
 import '../cubit/onboarding/onboarding_cubit.dart';
 import '../go_router/app_routes.dart';
 import '../styles/app_color.dart';
+import '../widgets/animations/entrance.dart';
 import '../widgets/outlined_button.dart';
 import '../widgets/welcome_button.dart';
 
@@ -64,7 +65,11 @@ class WelcomeScreen extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.end,
               crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
+              // First impression: the wordmark lands, then the buttons follow.
+              // Rising from below suits a column anchored to the bottom of the
+              // screen — the content arrives from the direction it lives in.
+              children: staggered(
+                [
                 // --- 1. HEADER ---
                 Text(
                   'welcome_time_to'.tr(),
@@ -160,6 +165,8 @@ class WelcomeScreen extends StatelessWidget {
                   ),
                 ),
               ],
+                step: const Duration(milliseconds: 70),
+              ),
             ),
           ),
         ),

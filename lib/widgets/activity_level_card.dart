@@ -3,6 +3,8 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../styles/app_color.dart';
+import 'animations/motion.dart';
+import 'animations/press_scale.dart';
 
 class ActivityLevelCard extends StatelessWidget {
   const ActivityLevelCard({
@@ -29,11 +31,12 @@ class ActivityLevelCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return PressScale(
+      child: GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
+        duration: Motion.scaled(context, Motion.fast),
         margin: EdgeInsets.only(bottom: 12.h),
         padding: EdgeInsets.all(16.w),
         decoration: BoxDecoration(
@@ -104,6 +107,7 @@ class ActivityLevelCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
       ),
     );
   }

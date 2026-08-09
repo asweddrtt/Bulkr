@@ -9,6 +9,10 @@ import '../cubit/onboarding/onboarding_cubit.dart';
 import '../go_router/app_routes.dart';
 import '../models/nutrition_plan.dart';
 import '../styles/app_color.dart';
+import '../widgets/animations/count_up.dart';
+import '../widgets/animations/entrance.dart';
+import '../widgets/animations/motion.dart';
+import '../widgets/animations/press_scale.dart';
 import '../widgets/macro_bar.dart';
 import '../widgets/onboarding_progress_dots.dart';
 
@@ -91,7 +95,9 @@ class PlanRevealScreen extends StatelessWidget {
                   // --- COMMIT ---
                   Padding(
                     padding: EdgeInsets.fromLTRB(24.w, 8.h, 24.w, 20.h),
-                    child: SizedBox(
+                    child: PressScale(
+                      enabled: plan != null && !isSubmitting,
+                      child: SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
                         onPressed: (plan == null || isSubmitting)
@@ -106,6 +112,7 @@ class PlanRevealScreen extends StatelessWidget {
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8.r),
                           ),
+                          animationDuration: Motion.base,
                         ),
                         child: isSubmitting
                             ? SizedBox(
@@ -135,6 +142,7 @@ class PlanRevealScreen extends StatelessWidget {
                                   Icon(Icons.bolt, size: 24.sp),
                                 ],
                               ),
+                        ),
                       ),
                     ),
                   ),
@@ -168,37 +176,23 @@ class _PlanBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Sequenced deliberately: icon, then the number, then the supporting
+    // detail. The reveal should feel like it's being worked out in front of
+    // the user, not dropped on them fully formed.
     return ListView(
       padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 8.h),
-      children: [
-        Center(
-          child: Container(
-            padding: EdgeInsets.all(16.w),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1A1A1A),
-              borderRadius: BorderRadius.circular(16.r),
-              border: Border.all(color: AppColors.primaryNeon, width: 2),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.primaryNeon.withValues(alpha: 0.15),
-                  blurRadius: 30,
-                  spreadRadius: 5,
-                ),
-              ],
-            ),
-            child: Icon(
-              Icons.local_fire_department,
-              color: AppColors.primaryNeon,
-              size: 34.sp,
-            ),
-          ),
-        ),
+      children: staggered(
+        [
+        const Center(child: _GlowingFireIcon()),
         SizedBox(height: 16.h),
 
-        // The number the whole flow has been building towards.
+        // The number the whole flow has been building towards. It climbs
+        // rather than appearing: the same figure reads as a result being
+        // computed instead of a value being printed.
         Center(
-          child: Text(
-            NumberFormat('#,###').format(plan.calories),
+          child: CountUpText(
+            value: plan.calories,
+            formatter: NumberFormat('#,###').format,
             style: GoogleFonts.anton(
               fontSize: 88.sp,
               height: 1.0,
@@ -258,6 +252,83 @@ class _PlanBody extends StatelessWidget {
           isHighlighted: true,
         ),
       ],
+        step: const Duration(milliseconds: 70),
+      ),
+    );
+  }
+}
+
+/// The fire icon blooms once on arrival — a quick scale-up with its glow
+/// swelling behind it.
+///
+/// One-shot rather than a looping pulse on purpose: a permanent throb is
+/// charming the first time and irritating by the fifth, and this screen gets
+/// revisited every time onboarding is re-run.
+class _GlowingFireIcon extends StatefulWidget {
+  const _GlowingFireIcon();
+
+  @override
+  State<_GlowingFireIcon> createState() => _GlowingFireIconState();
+}
+
+class _GlowingFireIconState extends State<_GlowingFireIcon>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final CurvedAnimation _bloom;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 620),
+    )..forward();
+    _bloom = CurvedAnimation(parent: _controller, curve: Curves.easeOutBack);
+  }
+
+  @override
+  void dispose() {
+    _bloom.dispose();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (Motion.reduced(context)) return _box(0.15);
+
+    return AnimatedBuilder(
+      animation: _bloom,
+      builder: (context, _) {
+        // easeOutBack overshoots past 1, which is what gives the bloom its
+        // snap. Clamp the glow so the shadow doesn't overshoot with it.
+        final scale = 0.8 + 0.2 * _bloom.value;
+        final glow = 0.15 * _controller.value.clamp(0.0, 1.0);
+        return Transform.scale(scale: scale, child: _box(glow));
+      },
+    );
+  }
+
+  Widget _box(double glow) {
+    return Container(
+      padding: EdgeInsets.all(16.w),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A1A),
+        borderRadius: BorderRadius.circular(16.r),
+        border: Border.all(color: AppColors.primaryNeon, width: 2),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primaryNeon.withValues(alpha: glow),
+            blurRadius: 30,
+            spreadRadius: 5,
+          ),
+        ],
+      ),
+      child: Icon(
+        Icons.local_fire_department,
+        color: AppColors.primaryNeon,
+        size: 34.sp,
+      ),
     );
   }
 }

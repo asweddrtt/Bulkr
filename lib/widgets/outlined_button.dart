@@ -3,6 +3,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../styles/app_color.dart';
+import 'animations/press_scale.dart';
 
 class SecondaryOutlinedButton extends StatelessWidget {
   const SecondaryOutlinedButton({
@@ -18,7 +19,9 @@ class SecondaryOutlinedButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return OutlinedButton(
+    return PressScale(
+      enabled: onPressed != null,
+      child: OutlinedButton(
       onPressed: onPressed,
       style: OutlinedButton.styleFrom(
         foregroundColor: Colors.white,
@@ -35,6 +38,7 @@ class SecondaryOutlinedButton extends StatelessWidget {
           fontSize: 18.sp,
           fontWeight: FontWeight.w500,
         ),
+      ),
       ),
     );
   }

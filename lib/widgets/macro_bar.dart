@@ -5,6 +5,8 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../models/nutrition_plan.dart';
 import '../styles/app_color.dart';
+import 'animations/count_up.dart';
+import 'animations/motion.dart';
 
 /// The macro split on the reveal screen: a proportional bar plus the gram
 /// targets that get written to `protein_target_g` / `carbs_target_g` /
@@ -24,13 +26,8 @@ class MacroBreakdown extends StatelessWidget {
     final carbsKcal = plan.carbsG * 4;
     final fatKcal = plan.fatG * 9;
 
-    // Expanded requires a positive int flex, so a zero-calorie macro (possible
-    // only if carbs got clamped) would throw. Floor each at 1.
     final total = plan.macroCalories;
     final hasSplit = total > 0;
-    final proteinFlex = proteinKcal > 0 ? proteinKcal : 1;
-    final carbsFlex = carbsKcal > 0 ? carbsKcal : 1;
-    final fatFlex = fatKcal > 0 ? fatKcal : 1;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -50,23 +47,39 @@ class MacroBreakdown extends StatelessWidget {
           child: SizedBox(
             height: 10.h,
             child: hasSplit
-                ? Row(
-                    children: [
-                      Expanded(
-                        flex: proteinFlex,
-                        child: Container(color: proteinColor),
-                      ),
-                      Expanded(
-                        flex: carbsFlex,
-                        child: Container(color: carbsColor),
-                      ),
-                      Expanded(
-                        flex: fatFlex,
-                        child: Container(color: fatColor),
-                      ),
-                    ],
+                ? LayoutBuilder(
+                    // Explicit widths rather than Expanded flex, because a
+                    // flex has to be a whole number and can't be animated
+                    // partway. Driving pixel widths off a 0..1 factor lets the
+                    // three segments grow out together from the left edge.
+                    builder: (context, constraints) {
+                      final fullWidth = constraints.maxWidth;
+
+                      return TweenAnimationBuilder<double>(
+                        tween: Tween<double>(begin: 0, end: 1),
+                        duration: Motion.scaled(context, Motion.reveal),
+                        curve: Motion.emphasis,
+                        builder: (context, grown, _) => Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _Segment(
+                              width: fullWidth * (proteinKcal / total) * grown,
+                              color: proteinColor,
+                            ),
+                            _Segment(
+                              width: fullWidth * (carbsKcal / total) * grown,
+                              color: carbsColor,
+                            ),
+                            _Segment(
+                              width: fullWidth * (fatKcal / total) * grown,
+                              color: fatColor,
+                            ),
+                          ],
+                        ),
+                      );
+                    },
                   )
-                : Container(color: AppColors.darkBorder),
+                : const ColoredBox(color: AppColors.darkBorder),
           ),
         ),
         SizedBox(height: 14.h),
@@ -96,6 +109,21 @@ class MacroBreakdown extends StatelessWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+class _Segment extends StatelessWidget {
+  const _Segment({required this.width, required this.color});
+
+  final double width;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: width,
+      child: ColoredBox(color: color),
     );
   }
 }
@@ -140,8 +168,9 @@ class _MacroTile extends StatelessWidget {
           ],
         ),
         SizedBox(height: 4.h),
-        Text(
-          '${grams}g',
+        CountUpText(
+          value: grams,
+          formatter: (value) => '${value}g',
           style: GoogleFonts.anton(
             fontSize: 22.sp,
             color: Colors.white,
