@@ -20,11 +20,15 @@ class SupabaseConfig {
     defaultValue: 'sb_publishable_IqsE_HlYpC5xrSplah-9aw_KneTKqrs',
   );
 
-  /// Where the OAuth provider sends the user once they've authenticated.
+  /// Where Supabase sends the user once the provider has authenticated them.
   ///
-  /// This exact string must be allow-listed under
-  /// Authentication -> URL Configuration -> Redirect URLs in the Supabase
-  /// dashboard, and it must match the scheme registered in
-  /// AndroidManifest.xml and ios/Runner/Info.plist.
-  static const String oauthRedirectUrl = 'io.bulkr://login-callback';
+  /// Note this is the *second* hop, and is not the same URL as the one
+  /// configured in Google Cloud or the Apple Developer portal. Those point at
+  /// `<project>.supabase.co/auth/v1/callback` — the provider-to-Supabase hop.
+  /// This one is the Supabase-to-app hop, and it must be allow-listed
+  /// separately under Authentication -> URL Configuration -> Redirect URLs.
+  ///
+  /// The scheme is the app's bundle ID (reverse-DNS, per RFC 8252) and must
+  /// match AndroidManifest.xml and ios/Runner/Info.plist.
+  static const String oauthRedirectUrl = 'com.alimahmoud.bulkr://login-callback';
 }

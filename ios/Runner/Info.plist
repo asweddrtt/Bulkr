@@ -50,10 +50,10 @@
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>CFBundleURLName</key>
-			<string>io.bulkr.oauth</string>
+			<string>com.alimahmoud.bulkr.oauth</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>io.bulkr</string>
+				<string>com.alimahmoud.bulkr</string>
 			</array>
 		</dict>
 	</array>

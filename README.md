@@ -77,26 +77,59 @@ flutter run \
   --dart-define=SUPABASE_KEY=sb_publishable_...
 ```
 
-### OAuth will not work until you do this
+### OAuth: two different redirect URLs
 
-In the Supabase dashboard:
+Sign-in makes two hops, and each needs its own URL configured in a different
+place. Conflating them is the usual reason sign-in finishes in the browser and
+never returns to the app.
 
-1. **Authentication → Providers** — enable **Google** and **Apple**, and fill in
-   each provider's client ID and secret.
-2. **Authentication → URL Configuration → Redirect URLs** — add:
+```
+app ──▶ Google / Apple ──▶ https://<ref>.supabase.co/auth/v1/callback ──▶ app
+        └── hop 1 ──────────────────┘                    └─── hop 2 ───┘
+```
 
-   ```
-   io.bulkr://login-callback
-   ```
+**Hop 1 — provider back to Supabase.** Set in the provider's own console:
 
-That exact string appears in three places and all three must agree:
+- Google Cloud → Credentials → your **Web** OAuth client → *Authorized redirect URIs*
+- Apple Developer → Identifiers → your **Services ID** → *Return URLs*
+
+Both get:
+
+```
+https://<your-project-ref>.supabase.co/auth/v1/callback
+```
+
+**Hop 2 — Supabase back to the app.** Set in the Supabase dashboard under
+**Authentication → URL Configuration → Redirect URLs**:
+
+```
+com.alimahmoud.bulkr://login-callback
+```
+
+That second string appears in three places in this repo and all three must
+agree:
 
 - `SupabaseConfig.oauthRedirectUrl`
 - `android/app/src/main/AndroidManifest.xml` (the `VIEW` intent-filter)
 - `ios/Runner/Info.plist` (`CFBundleURLTypes`)
 
-Without the redirect entry the provider completes sign-in in the browser and
-never hands control back to the app.
+The scheme is the app's bundle ID, per RFC 8252 — an arbitrary short scheme can
+be claimed by any other app on the device.
+
+Also enable both providers under **Authentication → Providers**, with the Google
+client ID/secret and the Apple Services ID, Team ID, Key ID and `.p8` contents.
+
+### Native sign-in (later)
+
+The current flow is browser-based `signInWithOAuth`, so the app bundle carries
+**no provider credentials at all** — everything lives server-side in Supabase.
+
+For App Store submission, Apple expects the native Sign in with Apple sheet
+rather than a browser hand-off. That means adding `sign_in_with_apple` and
+switching to `signInWithIdToken`. Going native for Google likewise needs
+`google_sign_in` plus the Android OAuth client ID (the one tied to your debug
+keystore's SHA-1) and an iOS client ID. Client IDs are public identifiers; the
+client *secret* stays in Supabase either way.
 
 ### Database
 
