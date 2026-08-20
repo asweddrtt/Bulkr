@@ -2,6 +2,7 @@ import 'package:bulkr/screens/baseline_screen.dart';
 import 'package:bulkr/screens/calorie_goal_screen.dart';
 import 'package:bulkr/screens/define_surplus_screen.dart';
 import 'package:bulkr/screens/profile_screen.dart';
+import 'package:bulkr/screens/welcome_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../screens/activity_level.dart';
@@ -9,7 +10,6 @@ import '../state/profile_controller.dart';
 import 'app_routes.dart';
 
 // Import your screens here
-import '../../screens/welcome_screen.dart'; // Adjust import paths
 
 class AppRouter {
   /// Routes are guarded by the signed-in athlete's state: the welcome screen

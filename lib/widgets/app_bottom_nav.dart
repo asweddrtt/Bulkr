@@ -7,7 +7,7 @@ import '../styles/app_color.dart';
 
 /// Main app tabs. Only the profile tab has a destination so far, the other
 /// entries stay inert until their screens land.
-enum AppTab { dashboard, workouts, progress, profile }
+enum AppTab { dashboard, feed, meals, profile }
 
 class AppBottomNav extends StatelessWidget {
   final AppTab currentTab;
@@ -21,16 +21,16 @@ class AppBottomNav extends StatelessWidget {
 
   static const Map<AppTab, IconData> _icons = {
     AppTab.dashboard: Icons.grid_view,
-    AppTab.workouts: Icons.fitness_center,
-    AppTab.progress: Icons.show_chart,
+    AppTab.feed: Icons.view_stream,
+    AppTab.meals: Icons.restaurant,
     AppTab.profile: Icons.person,
   };
 
   static const Map<AppTab, String> _labelKeys = {
-    AppTab.dashboard: 'nav_dashboard',
-    AppTab.workouts: 'nav_workouts',
-    AppTab.progress: 'nav_progress',
-    AppTab.profile: 'nav_profile',
+    AppTab.dashboard: 'Dashboard',
+    AppTab.feed: 'Feed',
+    AppTab.meals: 'meals',
+    AppTab.profile: 'profile',
   };
 
   Widget _buildTab(AppTab tab) {
