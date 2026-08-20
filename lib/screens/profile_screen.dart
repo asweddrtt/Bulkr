@@ -7,6 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../core/progress_stats.dart';
 import '../core/unit_converter.dart';
 import '../cubit/profile/profile_cubit.dart';
+import '../models/insight.dart';
 import '../models/nutrition_plan.dart';
 import '../models/plan_breakdown.dart';
 import '../models/user_profile.dart';
@@ -14,6 +15,7 @@ import '../models/weight_entry.dart';
 import '../styles/app_color.dart';
 import '../widgets/animations/entrance.dart';
 import '../widgets/animations/press_scale.dart';
+import '../widgets/insight_list.dart';
 import '../widgets/recalculate_sheet.dart';
 import '../widgets/weight_chart.dart';
 import '../widgets/wheel_picker_sheet.dart';
@@ -87,6 +89,7 @@ class ProfileScreen extends StatelessWidget {
               weightHistory: state.weightHistory,
               progress: context.read<ProfileCubit>().progress!,
               breakdown: context.read<ProfileCubit>().planBreakdown,
+              insights: context.read<ProfileCubit>().insights,
               isSaving: state.isSaving,
               onRefresh: () => context.read<ProfileCubit>().refresh(),
               onLogWeight: (kg) => context.read<ProfileCubit>().logWeight(kg),
@@ -129,6 +132,7 @@ class _ProfileView extends StatelessWidget {
     required this.weightHistory,
     required this.progress,
     required this.breakdown,
+    required this.insights,
     required this.isSaving,
     required this.onRefresh,
     required this.onLogWeight,
@@ -145,6 +149,9 @@ class _ProfileView extends StatelessWidget {
   /// What the stored calorie target is made of. Null when the row has no
   /// date of birth, without which BMR cannot be computed.
   final PlanBreakdown? breakdown;
+
+  /// Today's advice, ordered most urgent first.
+  final List<Insight> insights;
 
   final bool isSaving;
   final Future<void> Function() onRefresh;
@@ -176,9 +183,11 @@ class _ProfileView extends StatelessWidget {
             child: ListView(
               padding: EdgeInsets.all(16.w),
               children: staggered([
-                _buildWeightProgress(),
+                _buildWeightProgress(context),
                 SizedBox(height: 16.h),
                 _buildWeightCards(context),
+                SizedBox(height: 16.h),
+                _buildFocus(context),
                 SizedBox(height: 16.h),
                 _buildNutritionPlan(context),
                 SizedBox(height: 16.h),
@@ -283,7 +292,7 @@ class _ProfileView extends StatelessWidget {
     );
   }
 
-  Widget _buildWeightProgress() {
+  Widget _buildWeightProgress(BuildContext context) {
     return _buildBorderedCard(
       child: Padding(
         padding: EdgeInsets.all(16.w),
@@ -320,10 +329,96 @@ class _ProfileView extends StatelessWidget {
             _buildTargetProgressBar(),
             SizedBox(height: 20.h),
             _buildTrendStats(),
+            SizedBox(height: 20.h),
+            _buildLogWeightButton(context),
           ],
         ),
       ),
     );
+  }
+
+  /// The primary action on this screen. The pencils on the cards do the same
+  /// thing, but a weigh-in is the one thing the user comes back to do, so it
+  /// gets a button of its own rather than hiding behind an icon.
+  Widget _buildLogWeightButton(BuildContext context) {
+    return PressScale(
+      child: SizedBox(
+        width: double.infinity,
+        height: 46.h,
+        child: ElevatedButton.icon(
+          onPressed: isSaving
+              ? null
+              : () => _pickWeight(
+                    context,
+                    title: 'log_weight_title'.tr(),
+                    currentKg: profile.currentWeightKg,
+                    onPicked: onLogWeight,
+                  ),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: ProfileScreen.accentColor,
+            foregroundColor: Colors.black,
+            disabledBackgroundColor: ProfileScreen.borderColor,
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(4.r),
+            ),
+          ),
+          icon: Icon(Icons.monitor_weight_outlined, size: 18.sp),
+          label: Text(
+            'log_weight_btn'.tr().toUpperCase(),
+            style: GoogleFonts.inter(
+              fontSize: 13.sp,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.5,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Dynamic focus section: what to do today, from the user's own numbers.
+  Widget _buildFocus(BuildContext context) {
+    if (insights.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: EdgeInsets.only(left: 2.w, bottom: 10.h),
+          child: Text(
+            'focus_title'.tr().toUpperCase(),
+            style: GoogleFonts.anton(
+              color: Colors.white,
+              fontSize: 14.sp,
+              letterSpacing: 1.5,
+            ),
+          ),
+        ),
+        InsightList(
+          insights: insights,
+          onAction: (action) => _runInsightAction(context, action),
+        ),
+      ],
+    );
+  }
+
+  void _runInsightAction(BuildContext context, InsightAction action) {
+    if (isSaving) return;
+
+    switch (action) {
+      case InsightAction.logWeight:
+        _pickWeight(
+          context,
+          title: 'log_weight_title'.tr(),
+          currentKg: profile.currentWeightKg,
+          onPicked: onLogWeight,
+        );
+      case InsightAction.recalculate:
+        onRecalculate();
+      case InsightAction.none:
+        break;
+    }
   }
 
   /// The headline trend: change over the last 30 days. Stays quiet rather than

@@ -2,9 +2,11 @@ import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../core/calorie_engine.dart';
+import '../../core/insight_engine.dart';
 import '../../core/progress_stats.dart';
 import '../../data/user_repository.dart';
 import '../../models/gender.dart';
+import '../../models/insight.dart';
 import '../../models/nutrition_plan.dart';
 import '../../models/plan_breakdown.dart';
 import '../../models/user_profile.dart';
@@ -15,11 +17,15 @@ part 'profile_state.dart';
 /// Loads the signed-in user's row and weigh-in history for the post-onboarding
 /// screens.
 class ProfileCubit extends Cubit<ProfileState> {
-  ProfileCubit({required UserRepository userRepository})
-      : _userRepository = userRepository,
+  ProfileCubit({
+    required UserRepository userRepository,
+    InsightEngine insightEngine = const InsightEngine(),
+  })  : _userRepository = userRepository,
+        _insightEngine = insightEngine,
         super(const ProfileState());
 
   final UserRepository _userRepository;
+  final InsightEngine _insightEngine;
 
   /// Translation key surfaced when any of the writes below fail.
   static const String _saveFailedKey = 'save_failed';
@@ -135,6 +141,20 @@ class ProfileCubit extends Cubit<ProfileState> {
       age: age,
       activityLevel: profile.activityLevel,
       weeklyGainKg: weeklyGainKg,
+    );
+  }
+
+  /// What the user should act on today, derived from the same data the rest of
+  /// the screen displays.
+  List<Insight> get insights {
+    final profile = state.profile;
+    final stats = progress;
+    if (profile == null || stats == null) return const [];
+
+    return _insightEngine.build(
+      profile: profile,
+      progress: stats,
+      breakdown: planBreakdown,
     );
   }
 
