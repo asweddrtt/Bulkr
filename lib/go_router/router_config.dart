@@ -1,13 +1,13 @@
 import 'package:bulkr/screens/baseline_screen.dart';
 import 'package:bulkr/screens/calorie_goal_screen.dart';
 import 'package:bulkr/screens/define_surplus_screen.dart';
+import 'package:bulkr/screens/welcome_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../screens/activity_level.dart';
 import 'app_routes.dart';
 
 // Import your screens here
-import '../../screens/welcome_screen.dart'; // Adjust import paths
 
 class AppRouter {
   static final GoRouter router = GoRouter(
