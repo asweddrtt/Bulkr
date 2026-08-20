@@ -5,13 +5,12 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../go_router/app_routes.dart';
+import '../services/nutrition_calculator.dart';
+import '../state/profile_scope.dart';
 import '../styles/app_color.dart';
 
 class CalorieGoalScreen extends StatelessWidget {
-  final int dailyCalories;
-
-  // Defaults to 3200 for UI testing, but you'll pass the real calculation here
-  const CalorieGoalScreen({super.key, this.dailyCalories = 3200});
+  const CalorieGoalScreen({super.key});
 
   Widget _buildProgressIndicator() {
     Widget dot(bool isActive) {
@@ -34,6 +33,10 @@ class CalorieGoalScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final controller = ProfileScope.of(context);
+    // Calculated from the athlete's own baseline, activity level and surplus.
+    final NutritionPlan? plan = controller.nutritionPlan;
+
     return Scaffold(
       extendBodyBehindAppBar: true,
       body: Container(
@@ -102,7 +105,9 @@ class CalorieGoalScreen extends StatelessWidget {
 
                       // Massive Calorie Number with Drop Shadow
                       Text(
-                        NumberFormat('#,###').format(dailyCalories),
+                        plan == null
+                            ? '--'
+                            : NumberFormat('#,###').format(plan.dailyGoalKcal),
                         style: GoogleFonts.anton(
                           fontSize: 110.sp,
                           height: 1.0, // Tightens the vertical space
@@ -150,9 +155,9 @@ class CalorieGoalScreen extends StatelessWidget {
                 child: SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: () {
-                      // TODO: persist the onboarding result before leaving.
-                      context.go(AppRoutes.profile);
+                    onPressed: () async {
+                      await controller.completeOnboarding();
+                      if (context.mounted) context.go(AppRoutes.profile);
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primaryNeon,

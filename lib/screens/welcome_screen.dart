@@ -1,10 +1,10 @@
-import 'package:bulkr/go_router/app_routes.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../models/auth_user.dart';
+import '../state/profile_scope.dart';
 import '../widgets/outlined_button.dart';
 import '../widgets/welcome_button.dart';
 
@@ -16,6 +16,22 @@ class WelcomeScreen extends StatefulWidget {
 }
 
 class _WelcomeScreenState extends State<WelcomeScreen> {
+  bool _isSigningIn = false;
+
+  /// Signing in seeds the athlete's profile; the router guard then sends them
+  /// on to onboarding, or straight to their profile if they already finished.
+  Future<void> _signIn(AuthProvider provider) async {
+    if (_isSigningIn) return;
+    setState(() => _isSigningIn = true);
+
+    final controller = ProfileScope.read(context);
+    try {
+      await controller.signIn(provider, fallbackName: 'default_athlete_name'.tr());
+    } finally {
+      if (mounted) setState(() => _isSigningIn = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -72,7 +88,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
               PrimaryIconButton(
                 label: 'continue_apple'.tr(),
                 icon: Icons.apple,
-                onPressed: () {},
+                onPressed: () => _signIn(AuthProvider.apple),
               ),
               SizedBox(height: 16.h),
                 
@@ -80,16 +96,14 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
               PrimaryIconButton(
                 label: 'continue_google'.tr(),
                 customIcon: Image.asset("assets/images/google.png", height: 28.sp),
-                onPressed: () {
-                  context.push(AppRoutes.baseline);
-                },
+                onPressed: () => _signIn(AuthProvider.google),
               ),
               SizedBox(height: 16.h),
                 
                 // Other Options Button
               SecondaryOutlinedButton(
                 label: 'other_options'.tr(),
-                onPressed: () {},
+                onPressed: () => _signIn(AuthProvider.email),
               ),
               SizedBox(height: 40.h),
                 

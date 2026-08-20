@@ -53,7 +53,6 @@
   "target_weight_label": "TARGET WEIGHT",
   "edit_current_weight": "Edit current weight",
   "edit_target_weight": "Edit target weight",
-  "weight_range_error": "Enter a weight between 30 and 300 kg.",
   "save_btn": "Save",
   "cancel_btn": "Cancel",
   "nutrition_plan_label": "NUTRITION PLAN",
@@ -71,5 +70,16 @@
   "nav_workouts": "Workouts",
   "nav_progress": "Progress",
   "nav_profile": "Profile",
-  "coming_soon": "Coming soon."
+  "coming_soon": "Coming soon.",
+  "default_athlete_name": "Athlete",
+  "metric_range_error": "Enter a value between {min} and {max} {unit}.",
+  "chart_needs_more_data": "Log another weigh-in to see your progress curve.",
+  "delta_unavailable": "No trend yet",
+  "account_title": "Account",
+  "signed_in_with": "Signed in with {provider}",
+  "provider_apple": "Apple",
+  "provider_google": "Google",
+  "provider_email": "Email",
+  "display_name_label": "Display name",
+  "sign_out_btn": "Sign out"
 }

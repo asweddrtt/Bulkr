@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../models/user_profile.dart';
+import '../state/profile_scope.dart';
 
 import '../styles/app_color.dart';
 import '../widgets/surplus_card.dart';
@@ -16,7 +18,25 @@ class DefineSurplusScreen extends StatefulWidget {
 }
 
 class _DefineSurplusScreenState extends State<DefineSurplusScreen> {
-  int _selectedIndex = 1; // Defaults to "Standard Bulk"
+  int _selectedIndex = BulkPlan.standard.index;
+  bool _seededFromProfile = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_seededFromProfile) return;
+
+    final profile = ProfileScope.read(context).profile;
+    if (profile != null) _selectedIndex = profile.bulkPlan.index;
+    _seededFromProfile = true;
+  }
+
+  Future<void> _continue() async {
+    await ProfileScope.read(context)
+        .setBulkPlan(BulkPlan.values[_selectedIndex]);
+    if (!mounted) return;
+    context.push(AppRoutes.calorieGoal);
+  }
 
   Widget _buildProgressIndicator() {
     Widget dot(bool isActive) {
@@ -95,9 +115,9 @@ class _DefineSurplusScreenState extends State<DefineSurplusScreen> {
                       badgeTextColor: Colors.white,
                       title: 'lean_bulk_title'.tr(),
                       description: 'lean_bulk_desc'.tr(),
-                      calories: '+300',
-                      isSelected: _selectedIndex == 0,
-                      onTap: () => setState(() => _selectedIndex = 0),
+                      calories: '+${BulkPlan.lean.dailySurplusKcal}',
+                      isSelected: _selectedIndex == BulkPlan.lean.index,
+                      onTap: () => setState(() => _selectedIndex = BulkPlan.lean.index),
                     ),
                     SurplusCard(
                       badgeText: 'badge_recommended'.tr(),
@@ -105,9 +125,9 @@ class _DefineSurplusScreenState extends State<DefineSurplusScreen> {
                       badgeTextColor: Colors.white,
                       title: 'standard_bulk_title'.tr(),
                       description: 'standard_bulk_desc'.tr(),
-                      calories: '+500',
-                      isSelected: _selectedIndex == 1,
-                      onTap: () => setState(() => _selectedIndex = 1),
+                      calories: '+${BulkPlan.standard.dailySurplusKcal}',
+                      isSelected: _selectedIndex == BulkPlan.standard.index,
+                      onTap: () => setState(() => _selectedIndex = BulkPlan.standard.index),
                     ),
                     SurplusCard(
                       badgeText: 'badge_max_mass'.tr(),
@@ -116,10 +136,10 @@ class _DefineSurplusScreenState extends State<DefineSurplusScreen> {
                       badgeIcon: Icons.local_fire_department, // Small fire icon
                       title: 'aggressive_bulk_title'.tr(),
                       description: 'aggressive_bulk_desc'.tr(),
-                      calories: '+700',
+                      calories: '+${BulkPlan.aggressive.dailySurplusKcal}',
                       caloriesColor: AppColors.primaryNeon, // Highlighting the 700
-                      isSelected: _selectedIndex == 2,
-                      onTap: () => setState(() => _selectedIndex = 2),
+                      isSelected: _selectedIndex == BulkPlan.aggressive.index,
+                      onTap: () => setState(() => _selectedIndex = BulkPlan.aggressive.index),
                     ),
                   ],
                 ),
@@ -163,9 +183,7 @@ class _DefineSurplusScreenState extends State<DefineSurplusScreen> {
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: () {
-                          context.push(AppRoutes.calorieGoal);
-                        },
+                        onPressed: _continue,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.primaryNeon,
                           foregroundColor: Colors.black,

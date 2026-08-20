@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../go_router/app_routes.dart';
+import '../models/user_profile.dart';
+import '../state/profile_scope.dart';
 import '../styles/app_color.dart';
 import '../widgets/activity_level_card.dart';
 
@@ -16,7 +18,25 @@ class ActivityLevelScreen extends StatefulWidget {
 }
 
 class _ActivityLevelScreenState extends State<ActivityLevelScreen> {
-  int _selectedIndex = 2; // Defaults to "Moderately Active"
+  int _selectedIndex = ActivityLevel.moderatelyActive.index;
+  bool _seededFromProfile = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_seededFromProfile) return;
+
+    final profile = ProfileScope.read(context).profile;
+    if (profile != null) _selectedIndex = profile.activityLevel.index;
+    _seededFromProfile = true;
+  }
+
+  Future<void> _continue() async {
+    await ProfileScope.read(context)
+        .setActivityLevel(ActivityLevel.values[_selectedIndex]);
+    if (!mounted) return;
+    context.push(AppRoutes.surplus);
+  }
 
 
   Widget _buildProgressIndicator() {
@@ -37,7 +57,7 @@ class _ActivityLevelScreenState extends State<ActivityLevelScreen> {
       children: [
         dot(false),
         dot(false),
-        dot(true), // 3rd step active
+        dot(true), // 3rd step: activity level
         dot(false),
         dot(false),
       ],
@@ -164,9 +184,7 @@ class _ActivityLevelScreenState extends State<ActivityLevelScreen> {
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: () {
-                          context.push(AppRoutes.surplus);
-                        },
+                        onPressed: _continue,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.primaryNeon,
                           foregroundColor: Colors.black,

@@ -6,39 +6,57 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../styles/app_color.dart';
 
-/// Bottom sheet used by the pencil affordance on the weight cards.
-/// Returns the new value in kg, or null when dismissed.
-class WeightEditSheet extends StatefulWidget {
+/// Bottom sheet used by the pencil affordance on the metric cards.
+/// Returns the new value, or null when dismissed.
+class MetricEditSheet extends StatefulWidget {
   final String title;
   final double initialValue;
+  final String unitLabel;
+  final double min;
+  final double max;
 
-  const WeightEditSheet({
+  /// 0 for whole numbers (age, height), 1 for weights.
+  final int decimals;
+
+  const MetricEditSheet({
     super.key,
     required this.title,
     required this.initialValue,
+    required this.unitLabel,
+    required this.min,
+    required this.max,
+    this.decimals = 1,
   });
 
   static Future<double?> show(
     BuildContext context, {
     required String title,
     required double initialValue,
+    required String unitLabel,
+    required double min,
+    required double max,
+    int decimals = 1,
   }) {
     return showModalBottomSheet<double>(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (_) => WeightEditSheet(
+      builder: (_) => MetricEditSheet(
         title: title,
         initialValue: initialValue,
+        unitLabel: unitLabel,
+        min: min,
+        max: max,
+        decimals: decimals,
       ),
     );
   }
 
   @override
-  State<WeightEditSheet> createState() => _WeightEditSheetState();
+  State<MetricEditSheet> createState() => _MetricEditSheetState();
 }
 
-class _WeightEditSheetState extends State<WeightEditSheet> {
+class _MetricEditSheetState extends State<MetricEditSheet> {
   late final TextEditingController _controller;
   String? _error;
 
@@ -46,7 +64,7 @@ class _WeightEditSheetState extends State<WeightEditSheet> {
   void initState() {
     super.initState();
     _controller = TextEditingController(
-      text: widget.initialValue.toStringAsFixed(1),
+      text: widget.initialValue.toStringAsFixed(widget.decimals),
     );
   }
 
@@ -58,9 +76,16 @@ class _WeightEditSheetState extends State<WeightEditSheet> {
 
   void _submit() {
     final double? parsed = double.tryParse(_controller.text.replaceAll(',', '.'));
-    // Guard rails wide enough for any athlete, tight enough to catch typos.
-    if (parsed == null || parsed < 30 || parsed > 300) {
-      setState(() => _error = 'weight_range_error'.tr());
+    if (parsed == null || parsed < widget.min || parsed > widget.max) {
+      setState(() {
+        _error = 'metric_range_error'.tr(
+          namedArgs: {
+            'min': widget.min.toStringAsFixed(widget.decimals),
+            'max': widget.max.toStringAsFixed(widget.decimals),
+            'unit': widget.unitLabel.toUpperCase(),
+          },
+        );
+      });
       return;
     }
     Navigator.of(context).pop(parsed);
@@ -99,11 +124,13 @@ class _WeightEditSheetState extends State<WeightEditSheet> {
               TextField(
                 controller: _controller,
                 autofocus: true,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
+                keyboardType: TextInputType.numberWithOptions(
+                  decimal: widget.decimals > 0,
                 ),
                 inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                  FilteringTextInputFormatter.allow(
+                    widget.decimals == 0 ? RegExp(r'[0-9]') : RegExp(r'[0-9.,]'),
+                  ),
                 ],
                 onSubmitted: (_) => _submit(),
                 style: GoogleFonts.anton(
@@ -112,7 +139,7 @@ class _WeightEditSheetState extends State<WeightEditSheet> {
                 ),
                 cursorColor: AppColors.primaryNeon,
                 decoration: InputDecoration(
-                  suffixText: 'kg_unit'.tr().toUpperCase(),
+                  suffixText: widget.unitLabel.toUpperCase(),
                   suffixStyle: GoogleFonts.inter(
                     fontSize: 12.sp,
                     color: AppColors.offWhiteMuted,

@@ -3,20 +3,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../models/user_profile.dart';
 import '../styles/app_color.dart';
 
-/// Neon area chart showing the last N weigh-ins, with the axis captions
+/// Neon area chart of the athlete's logged weigh-ins, with the axis captions
 /// rendered underneath it ("30 DAYS AGO / 15 DAYS AGO / TODAY").
 class WeightProgressChart extends StatelessWidget {
-  /// Weigh-ins in chronological order (oldest first, today last).
-  final List<double> weights;
+  /// Weigh-ins in chronological order, oldest first.
+  final List<WeighIn> entries;
 
-  /// How far back the first entry reaches, used for the axis captions.
+  /// How far back the chart reaches.
   final int spanInDays;
 
   const WeightProgressChart({
     super.key,
-    required this.weights,
+    required this.entries,
     this.spanInDays = 30,
   });
 
@@ -28,6 +29,24 @@ class WeightProgressChart extends StatelessWidget {
         fontWeight: FontWeight.w600,
         color: AppColors.textGray,
         letterSpacing: 1.5,
+      ),
+    );
+  }
+
+  /// Shown until there are two points to draw a curve between.
+  Widget _emptyState() {
+    return Center(
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: 24.w),
+        child: Text(
+          'chart_needs_more_data'.tr(),
+          textAlign: TextAlign.center,
+          style: GoogleFonts.inter(
+            fontSize: 12.sp,
+            color: AppColors.textGray,
+            height: 1.4,
+          ),
+        ),
       ),
     );
   }
@@ -47,13 +66,16 @@ class WeightProgressChart extends StatelessWidget {
           SizedBox(
             height: 118.h,
             width: double.infinity,
-            child: CustomPaint(
-              painter: _WeightChartPainter(
-                weights: weights,
-                lineWidth: 3.w,
-                dotRadius: 3.5.r,
-              ),
-            ),
+            child: entries.length < 2
+                ? _emptyState()
+                : CustomPaint(
+                    painter: _WeightChartPainter(
+                      entries: entries,
+                      spanInDays: spanInDays,
+                      lineWidth: 3.w,
+                      dotRadius: 3.5.r,
+                    ),
+                  ),
           ),
           SizedBox(height: 8.h),
           Row(
@@ -77,20 +99,23 @@ class WeightProgressChart extends StatelessWidget {
 }
 
 class _WeightChartPainter extends CustomPainter {
-  final List<double> weights;
+  final List<WeighIn> entries;
+  final int spanInDays;
   final double lineWidth;
   final double dotRadius;
 
   _WeightChartPainter({
-    required this.weights,
+    required this.entries,
+    required this.spanInDays,
     required this.lineWidth,
     required this.dotRadius,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (weights.length < 2 || size.width <= 0 || size.height <= 0) return;
+    if (entries.length < 2 || size.width <= 0 || size.height <= 0) return;
 
+    final List<double> weights = entries.map((e) => e.kg).toList();
     final double lowest = weights.reduce((a, b) => a < b ? a : b);
     final double highest = weights.reduce((a, b) => a > b ? a : b);
     // Pad the range so a flat series still renders mid-card instead of clipped,
@@ -99,13 +124,25 @@ class _WeightChartPainter extends CustomPainter {
         (highest - lowest).abs() < 0.01 ? 1.0 : (highest - lowest);
     final double minWeight = lowest - spread * 0.15;
     final double range = spread * 1.25;
+
     final double top = lineWidth;
     final double usableHeight = size.height - top - lineWidth;
 
+    // Points are placed by date, so a gap between weigh-ins reads as a gap.
+    final DateTime last = entries.last.date;
+    final DateTime first = entries.first.date;
+    final double windowMs =
+        Duration(days: spanInDays).inMilliseconds.toDouble();
+    final double spannedMs =
+        last.difference(first).inMilliseconds.toDouble().clamp(1, windowMs);
+    final double leadingMs = (windowMs - spannedMs).clamp(0, windowMs);
+
     final List<Offset> points = <Offset>[];
-    for (int i = 0; i < weights.length; i++) {
-      final double dx = size.width * i / (weights.length - 1);
-      final double normalized = (weights[i] - minWeight) / range;
+    for (final WeighIn entry in entries) {
+      final double offsetMs =
+          leadingMs + entry.date.difference(first).inMilliseconds.toDouble();
+      final double dx = size.width * (offsetMs / windowMs).clamp(0.0, 1.0);
+      final double normalized = (entry.kg - minWeight) / range;
       final double dy = top + usableHeight * (1 - normalized);
       points.add(Offset(dx, dy));
     }
@@ -124,8 +161,8 @@ class _WeightChartPainter extends CustomPainter {
     line.lineTo(points.last.dx, points.last.dy);
 
     final Path fill = Path.from(line)
-      ..lineTo(size.width, size.height)
-      ..lineTo(0, size.height)
+      ..lineTo(points.last.dx, size.height)
+      ..lineTo(points.first.dx, size.height)
       ..close();
 
     canvas.drawPath(
@@ -151,23 +188,23 @@ class _WeightChartPainter extends CustomPainter {
         ..strokeJoin = StrokeJoin.round,
     );
 
-    // Weekly markers plus today's weigh-in.
+    // One marker per weigh-in, with today's reading emphasised.
     final Paint dotPaint = Paint()..color = Colors.white;
     final Paint dotBorder = Paint()
       ..color = AppColors.primaryNeon
       ..style = PaintingStyle.stroke
       ..strokeWidth = lineWidth / 2;
-    for (int i = 7; i < points.length; i += 7) {
-      canvas.drawCircle(points[i], dotRadius, dotPaint);
-      canvas.drawCircle(points[i], dotRadius, dotBorder);
+    for (int i = 0; i < points.length; i++) {
+      final double radius = i == points.length - 1 ? dotRadius * 1.2 : dotRadius;
+      canvas.drawCircle(points[i], radius, dotPaint);
+      canvas.drawCircle(points[i], radius, dotBorder);
     }
-    canvas.drawCircle(points.last, dotRadius * 1.2, dotPaint);
-    canvas.drawCircle(points.last, dotRadius * 1.2, dotBorder);
   }
 
   @override
   bool shouldRepaint(_WeightChartPainter oldDelegate) {
-    return oldDelegate.weights != weights ||
+    return oldDelegate.entries != entries ||
+        oldDelegate.spanInDays != spanInDays ||
         oldDelegate.lineWidth != lineWidth ||
         oldDelegate.dotRadius != dotRadius;
   }

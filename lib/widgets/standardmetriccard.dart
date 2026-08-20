@@ -10,16 +10,22 @@ class StandardMetricCard extends StatelessWidget {
   final String value;
   final String unit;
 
+  /// When set, the card shows a pencil and taps open the editor.
+  final VoidCallback? onEdit;
+
   const StandardMetricCard({
     super.key,
     required this.label,
     required this.value,
     required this.unit,
+    this.onEdit,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return GestureDetector(
+      onTap: onEdit,
+      child: Container(
       width: double.infinity,
       padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 12.h),
       margin: EdgeInsets.only(bottom: 12.h),
@@ -30,14 +36,22 @@ class StandardMetricCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label.toUpperCase(),
-            style: GoogleFonts.inter(
-              fontSize: 10.sp,
-              fontWeight: FontWeight.w600,
-              color: AppColors.offWhiteMuted,
-              letterSpacing: 2,
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label.toUpperCase(),
+                  style: GoogleFonts.inter(
+                    fontSize: 10.sp,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.offWhiteMuted,
+                    letterSpacing: 2,
+                  ),
+                ),
+              ),
+              if (onEdit != null)
+                Icon(Icons.edit, color: AppColors.offWhiteMuted, size: 14.sp),
+            ],
           ),
           SizedBox(height: 6.h),
           Row(
@@ -68,6 +82,7 @@ class StandardMetricCard extends StatelessWidget {
           Divider(color: const Color(0xFF333333), thickness: 2.h, height: 2.h),
         ],
       ),
+      ),
     );
   }
 }
@@ -77,17 +92,21 @@ class InlineMetricCard extends StatelessWidget {
   final String label;
   final String value;
   final String unit;
+  final VoidCallback? onEdit;
 
   const InlineMetricCard({
     super.key,
     required this.label,
     required this.value,
     required this.unit,
+    this.onEdit,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return GestureDetector(
+      onTap: onEdit,
+      child: Container(
       width: double.infinity,
       padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 16.h),
       margin: EdgeInsets.only(bottom: 16.h),
@@ -126,9 +145,14 @@ class InlineMetricCard extends StatelessWidget {
                   color: AppColors.offWhiteMuted,
                 ),
               ),
+              if (onEdit != null) ...[
+                SizedBox(width: 8.w),
+                Icon(Icons.edit, color: AppColors.offWhiteMuted, size: 14.sp),
+              ],
             ],
           ),
         ],
+      ),
       ),
     );
   }
@@ -138,17 +162,21 @@ class TargetMassCard extends StatelessWidget {
     final String targetValue;
     final String deltaValue;
     final bool isGain;
+    final VoidCallback? onEdit;
 
   const TargetMassCard({
         super.key,
                 required this.targetValue,
                 required this.deltaValue,
                 this.isGain = true,
+                this.onEdit,
     });
 
     @override
     Widget build(BuildContext context) {
-        return Container(
+        return GestureDetector(
+                onTap: onEdit,
+                child: Container(
                 width: double.infinity,
                 padding: EdgeInsets.all(16.w),
                 decoration: BoxDecoration(
@@ -172,6 +200,10 @@ class TargetMassCard extends StatelessWidget {
                 letterSpacing: 2,
                 ),
               ),
+        if (onEdit != null) ...[
+        const Spacer(),
+        Icon(Icons.edit, color: AppColors.primaryNeon, size: 14.sp),
+              ],
             ],
           ),
         SizedBox(height: 16.h),
@@ -236,6 +268,7 @@ class TargetMassCard extends StatelessWidget {
           ),
         ],
       ),
+        ),
     );
     }
 }

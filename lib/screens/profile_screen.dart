@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -7,76 +5,73 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../go_router/app_routes.dart';
+import '../models/user_profile.dart';
+import '../services/nutrition_calculator.dart';
+import '../state/profile_controller.dart';
+import '../state/profile_scope.dart';
 import '../styles/app_color.dart';
+import '../widgets/account_sheet.dart';
 import '../widgets/app_bottom_nav.dart';
 import '../widgets/editable_metric_card.dart';
 import '../widgets/focus_area_tile.dart';
+import '../widgets/metric_edit_sheet.dart';
 import '../widgets/nutrition_plan_card.dart';
 import '../widgets/profile_header.dart';
-import '../widgets/weight_edit_sheet.dart';
 import '../widgets/weight_progress_chart.dart';
 
-class ProfileScreen extends StatefulWidget {
+class ProfileScreen extends StatelessWidget {
+  /// Window the weight chart and the monthly delta are measured over.
+  static const int progressSpanInDays = 30;
+
   const ProfileScreen({super.key});
 
-  @override
-  State<ProfileScreen> createState() => _ProfileScreenState();
-}
-
-class _ProfileScreenState extends State<ProfileScreen> {
-  // TODO: hydrate from the onboarding data / backend instead of these stubs.
-  static const int _progressSpanInDays = 30;
-
-  final String _athleteName = 'Max Gains';
-  final int _dailyCalories = 3400;
-  final double _weeklyGainKg = 0.5;
-  double _currentWeight = 88.5;
-  double _targetWeight = 95.0;
-
-  /// Daily weigh-ins for the last [_progressSpanInDays] days, oldest first.
-  late List<double> _weightHistory = _buildWeightHistory();
-
-  final List<FocusArea> _focusAreas = const [
-    FocusArea(nameKey: 'muscle_quadriceps', intensity: FocusIntensity.heavy),
-    FocusArea(nameKey: 'muscle_back', intensity: FocusIntensity.volume),
-    FocusArea(nameKey: 'muscle_delts', intensity: FocusIntensity.resting),
-  ];
-
-  /// Stand-in series ending on the current weight, gently trending upwards.
-  List<double> _buildWeightHistory() {
-    const double gainedOverSpan = 4.2;
-    final double start = _currentWeight - gainedOverSpan;
-    return List<double>.generate(_progressSpanInDays + 1, (int day) {
-      final double progress = day / _progressSpanInDays;
-      // Sine wobble keeps the line from looking like a straight ramp.
-      final double wobble = math.sin(day / 3.2) * 0.25;
-      return start + gainedOverSpan * progress + wobble;
-    });
-  }
-
-  double get _monthlyDelta => _weightHistory.last - _weightHistory.first;
-
-  Future<void> _editWeight({required bool isTarget}) async {
-    final double? updated = await WeightEditSheet.show(
+  Future<void> _editCurrentWeight(
+    BuildContext context,
+    ProfileController controller,
+    UserProfile profile,
+  ) async {
+    final double? updated = await MetricEditSheet.show(
       context,
-      title: isTarget
-          ? 'edit_target_weight'.tr()
-          : 'edit_current_weight'.tr(),
-      initialValue: isTarget ? _targetWeight : _currentWeight,
+      title: 'edit_current_weight'.tr(),
+      initialValue: profile.currentWeightKg ?? profile.targetWeightKg,
+      unitLabel: 'kg_unit'.tr(),
+      min: 30,
+      max: 300,
     );
-    if (updated == null || !mounted) return;
-
-    setState(() {
-      if (isTarget) {
-        _targetWeight = updated;
-      } else {
-        _currentWeight = updated;
-        _weightHistory = _buildWeightHistory();
-      }
-    });
+    // Logs today's weigh-in, which also feeds the chart and the calorie goal.
+    if (updated != null) await controller.logWeighIn(updated);
   }
 
-  void _onTabSelected(AppTab tab) {
+  Future<void> _editTargetWeight(
+    BuildContext context,
+    ProfileController controller,
+    UserProfile profile,
+  ) async {
+    final double? updated = await MetricEditSheet.show(
+      context,
+      title: 'edit_target_weight'.tr(),
+      initialValue: profile.targetWeightKg,
+      unitLabel: 'kg_unit'.tr(),
+      min: 30,
+      max: 300,
+    );
+    if (updated != null) await controller.setTargetWeight(updated);
+  }
+
+  Future<void> _openAccountSheet(
+    BuildContext context,
+    ProfileController controller,
+    UserProfile profile,
+  ) async {
+    final String? name = await AccountSheet.show(
+      context,
+      profile: profile,
+      onSignOut: controller.signOut,
+    );
+    if (name != null) await controller.setDisplayName(name);
+  }
+
+  void _onTabSelected(BuildContext context, AppTab tab) {
     if (tab == AppTab.profile) return;
     // TODO: route to the dashboard / workouts / progress screens once they exist.
     ScaffoldMessenger.of(context).showSnackBar(
@@ -112,15 +107,54 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  /// "+4.2KG THIS MONTH", or a prompt to log again when there is no trend yet.
+  Widget _buildDeltaLabel(double? delta) {
+    final bool hasDelta = delta != null;
+    final String text = hasDelta
+        ? 'delta_this_month'.tr(
+            namedArgs: {
+              'delta': '${delta >= 0 ? '+' : '-'}'
+                  '${delta.abs().toStringAsFixed(1)}',
+            },
+          )
+        : 'delta_unavailable'.tr();
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: 2.h),
+      child: Text(
+        text.toUpperCase(),
+        style: GoogleFonts.inter(
+          fontSize: 11.sp,
+          fontWeight: FontWeight.w700,
+          color: hasDelta ? AppColors.primaryNeon : AppColors.textGray,
+          letterSpacing: 0.5,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final String deltaSign = _monthlyDelta >= 0 ? '+' : '-';
+    final ProfileController controller = ProfileScope.of(context);
+    final UserProfile? profile = controller.profile;
+
+    // The router guard keeps signed-out users off this screen; this only
+    // covers the frame between signing out and the redirect landing.
+    if (profile == null) {
+      return const Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    final NutritionPlan? plan = controller.nutritionPlan;
+    final double? currentWeight = profile.currentWeightKg;
 
     return Scaffold(
       backgroundColor: Colors.black,
       bottomNavigationBar: AppBottomNav(
         currentTab: AppTab.profile,
-        onTabSelected: _onTabSelected,
+        onTabSelected: (tab) => _onTabSelected(context, tab),
       ),
       body: Container(
         width: double.infinity,
@@ -139,37 +173,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 ProfileHeader(
-                  name: _athleteName,
-                  onSettingsTap: () {
-                    // TODO: open the settings screen once it exists.
-                  },
+                  name: profile.displayName,
+                  onSettingsTap: () =>
+                      _openAccountSheet(context, controller, profile),
                 ),
                 SizedBox(height: 16.h),
 
                 // --- WEIGHT PROGRESS ---
                 _buildSectionTitle(
                   'weight_progress_title'.tr(),
-                  trailing: Padding(
-                    padding: EdgeInsets.only(bottom: 2.h),
-                    child: Text(
-                      'delta_this_month'.tr(
-                        namedArgs: {
-                          'delta':
-                              '$deltaSign${_monthlyDelta.abs().toStringAsFixed(1)}',
-                        },
-                      ).toUpperCase(),
-                      style: GoogleFonts.inter(
-                        fontSize: 11.sp,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.primaryNeon,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ),
+                  trailing:
+                      _buildDeltaLabel(profile.weightDelta(progressSpanInDays)),
                 ),
                 WeightProgressChart(
-                  weights: _weightHistory,
-                  spanInDays: _progressSpanInDays,
+                  entries: profile.recentWeighIns(progressSpanInDays),
+                  spanInDays: progressSpanInDays,
                 ),
                 SizedBox(height: 12.h),
 
@@ -181,18 +199,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       Expanded(
                         child: EditableMetricCard(
                           label: 'current_weight_label'.tr(),
-                          value: _currentWeight.toStringAsFixed(1),
+                          value: currentWeight?.toStringAsFixed(1) ?? '--',
                           unit: 'kg_unit'.tr(),
-                          onEdit: () => _editWeight(isTarget: false),
+                          onEdit: () =>
+                              _editCurrentWeight(context, controller, profile),
                         ),
                       ),
                       SizedBox(width: 12.w),
                       Expanded(
                         child: EditableMetricCard(
                           label: 'target_weight_label'.tr(),
-                          value: _targetWeight.toStringAsFixed(1),
+                          value: profile.targetWeightKg.toStringAsFixed(1),
                           unit: 'kg_unit'.tr(),
-                          onEdit: () => _editWeight(isTarget: true),
+                          onEdit: () =>
+                              _editTargetWeight(context, controller, profile),
                         ),
                       ),
                     ],
@@ -202,15 +222,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                 // --- NUTRITION PLAN ---
                 NutritionPlanCard(
-                  dailyCalories: _dailyCalories,
-                  weeklyGainKg: _weeklyGainKg,
+                  dailyCalories: plan?.dailyGoalKcal,
+                  weeklyGainKg: profile.bulkPlan.weeklyGainKg,
                   onRecalculate: () => context.push(AppRoutes.surplus),
                 ),
                 SizedBox(height: 20.h),
 
                 // --- FOCUS AREAS ---
                 _buildSectionTitle('focus_areas_title'.tr()),
-                ..._focusAreas.map((area) => FocusAreaTile(area: area)),
+                ...profile.focusAreas.map((area) => FocusAreaTile(area: area)),
               ],
             ),
           ),

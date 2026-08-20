@@ -3,10 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../models/user_profile.dart';
 import '../styles/app_color.dart';
-
-/// Training intensity currently programmed for a muscle group.
-enum FocusIntensity { heavy, volume, resting }
 
 extension FocusIntensityDisplay on FocusIntensity {
   String get label {
@@ -22,13 +20,6 @@ extension FocusIntensityDisplay on FocusIntensity {
 
   /// Resting groups are dimmed so the active blocks read first.
   bool get isActive => this != FocusIntensity.resting;
-}
-
-class FocusArea {
-  final String nameKey;
-  final FocusIntensity intensity;
-
-  const FocusArea({required this.nameKey, required this.intensity});
 }
 
 class FocusAreaTile extends StatelessWidget {

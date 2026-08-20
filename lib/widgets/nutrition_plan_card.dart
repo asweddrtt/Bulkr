@@ -8,7 +8,8 @@ import '../styles/app_color.dart';
 /// Summary of the active calorie target with a shortcut back into the
 /// surplus calculation.
 class NutritionPlanCard extends StatelessWidget {
-  final int dailyCalories;
+  /// Null until the athlete has logged a weight to calculate from.
+  final int? dailyCalories;
   final double weeklyGainKg;
   final VoidCallback onRecalculate;
 
@@ -58,7 +59,9 @@ class NutritionPlanCard extends StatelessWidget {
             'current_daily_goal'
                 .tr(
                   namedArgs: {
-                    'kcal': NumberFormat('#,###').format(dailyCalories),
+                    'kcal': dailyCalories == null
+                        ? '--'
+                        : NumberFormat('#,###').format(dailyCalories),
                   },
                 )
                 .toUpperCase(),
