@@ -11,4 +11,9 @@ class AppColors {
 
   // Borders & Dark Accents
   static const Color darkBorder = Color(0xFF333333);       // Outlined button border
+
+  // Surfaces
+  static const Color cardDark = Color(0xFF1A1A1A);         // Standard card background
+  static const Color cardDeep = Color(0xFF151515);         // Nested / inner boxes
+  static const Color navBar = Color(0xFF0D0D0D);           // Bottom navigation bar
 }

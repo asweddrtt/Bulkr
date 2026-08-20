@@ -6,7 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../styles/app_color.dart';
-import '../widgets/StandardMetricCard.dart';
+import '../widgets/standardmetriccard.dart';
 
 class BaselineScreen extends StatefulWidget {
   const BaselineScreen({super.key});

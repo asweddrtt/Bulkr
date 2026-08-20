@@ -4,6 +4,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../go_router/app_routes.dart';
 import '../styles/app_color.dart';
 
 class CalorieGoalScreen extends StatelessWidget {
@@ -150,7 +151,8 @@ class CalorieGoalScreen extends StatelessWidget {
                   width: double.infinity,
                   child: ElevatedButton(
                     onPressed: () {
-                      // TODO: Complete onboarding and navigate to Home Dashboard
+                      // TODO: persist the onboarding result before leaving.
+                      context.go(AppRoutes.profile);
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primaryNeon,

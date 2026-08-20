@@ -1,6 +1,7 @@
 import 'package:bulkr/screens/baseline_screen.dart';
 import 'package:bulkr/screens/calorie_goal_screen.dart';
 import 'package:bulkr/screens/define_surplus_screen.dart';
+import 'package:bulkr/screens/profile_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../screens/activity_level.dart';
@@ -30,7 +31,10 @@ class AppRouter {
       builder : (context, state) => const DefineSurplusScreen()
       ),
       GoRoute(path: AppRoutes.calorieGoal,
-      builder : (context, state) => const CalorieGoalScreen())
+      builder : (context, state) => const CalorieGoalScreen()
+      ),
+      GoRoute(path: AppRoutes.profile,
+      builder : (context, state) => const ProfileScreen())
 
     ],
 
