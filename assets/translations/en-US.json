@@ -9,7 +9,6 @@
   "auth_error_cancelled": "Sign-in was cancelled.",
   "agree_prefix": "BY CONTINUING YOU AGREE TO THE ",
   "policy": "Policy",
-
   "baseline_title": "DEFINE YOUR BASELINE",
   "baseline_subtitle": "Accurate metrics ensure precise\nprogression tracking.",
   "baseline_footnote": "Your body composition drives every number that follows. Tap any field to adjust it.",
@@ -32,7 +31,6 @@
   "kg_unit": "KG",
   "lb_unit": "LB",
   "done_btn": "Done",
-
   "activity_level_title": "ACTIVITY LEVEL",
   "activity_level_subtitle": "Be honest here. Most people overestimate,\nand an inflated burn rate means a target\nyou never actually hit.",
   "sedentary_title": "SEDENTARY",
@@ -45,7 +43,6 @@
   "very_active_desc": "Hard exercise 6-7 days/week.",
   "extra_active_title": "EXTRA ACTIVE",
   "extra_active_desc": "Physical job and hard daily training.",
-
   "target_pace_title": "TARGET & PACE",
   "target_pace_subtitle": "Set the weight you're chasing and how fast you intend to get there.",
   "target_mass_goal": "TARGET MASS GOAL",
@@ -59,7 +56,6 @@
   "eta_label": "Estimated time to target",
   "eta_weeks": "{weeks} wks",
   "continue_to_goal": "CONTINUE TO GOAL",
-
   "calorie_goal_title": "Your Daily Calorie Goal",
   "calorie_goal_desc": "Fuel for maximum growth. Hit this target daily to ensure constant surplus and brutal strength gains.",
   "macros_title": "Daily Macro Split",
@@ -73,16 +69,13 @@
   "kcal_day": "KCAL / DAY",
   "start_bulking_btn": "Start Bulking",
   "onboarding_error_incomplete": "Some details are missing. Go back and complete the previous steps.",
-
   "home_welcome": "Let's go, {name}.",
   "home_placeholder_body": "Your plan is saved. The dashboard, food logging and progress tracking land here next.",
-
   "dashboard": "Dashboard",
   "workouts": "Workouts",
   "progress": "Progress",
   "profile": "Profile",
   "section_coming_soon": "This section is on the way.",
-
   "weight_progress": "WEIGHT PROGRESS",
   "to_target": "to target",
   "today": "Today",
@@ -93,11 +86,36 @@
   "current_daily_goal": "{calories} kcal per day",
   "nutrition_plan_desc": "Calculated from your metrics at a {activity} lifestyle. Hit this daily to keep the surplus consistent.",
   "recalculate": "RECALCULATE",
-  "recalculate_coming_soon": "Editing your metrics is coming soon.",
   "profile_missing": "We couldn't find your profile. Finish onboarding to create it.",
   "profile_load_failed": "Couldn't load your profile.",
   "retry": "Retry",
-
   "continue_btn": "CONTINUE",
-  "back_btn": "BACK"
+  "back_btn": "BACK",
+  "change_this_month": "{delta} {unit} this month",
+  "no_trend_yet": "NO TREND YET",
+  "progress_to_target": "PROGRESS TO TARGET",
+  "target_reached": "TARGET REACHED",
+  "stat_total_change": "Total change",
+  "stat_weekly_rate": "Weekly rate",
+  "per_week_short": "/wk",
+  "stat_projected_date": "On track for",
+  "log_weight_title": "Log weigh-in",
+  "edit_target_title": "Target weight",
+  "logged_today": "Logged today",
+  "logged_yesterday": "Logged yesterday",
+  "logged_days_ago": "Logged {days} days ago",
+  "nutrition_plan_desc_pace": "Calculated from your metrics at a {activity} lifestyle, targeting +{pace} {unit} per week.",
+  "plan_bmr": "BMR",
+  "plan_maintenance": "Maintenance",
+  "plan_surplus": "Surplus",
+  "plan_stale_notice": "Your weight has caught up with this target, so it no longer buys a surplus. Recalculate to keep gaining.",
+  "recalculate_desc": "Recomputed against your current weight. Nothing is saved until you confirm.",
+  "recalculate_from_current": "Current target {calories} kcal",
+  "save_plan_btn": "Save plan",
+  "save_failed": "Couldn't save that. Check your connection and try again.",
+  "body_stats_title": "Body stats",
+  "stat_age": "Age",
+  "stat_years_short": "yrs",
+  "stat_bmi": "BMI",
+  "stat_activity": "Activity"
 }

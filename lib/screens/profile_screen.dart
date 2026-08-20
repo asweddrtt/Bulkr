@@ -4,14 +4,19 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../core/progress_stats.dart';
 import '../core/unit_converter.dart';
 import '../cubit/profile/profile_cubit.dart';
+import '../models/nutrition_plan.dart';
+import '../models/plan_breakdown.dart';
 import '../models/user_profile.dart';
 import '../models/weight_entry.dart';
 import '../styles/app_color.dart';
 import '../widgets/animations/entrance.dart';
 import '../widgets/animations/press_scale.dart';
+import '../widgets/recalculate_sheet.dart';
 import '../widgets/weight_chart.dart';
+import '../widgets/wheel_picker_sheet.dart';
 
 /// Reads the signed-in user's row and renders it.
 ///
@@ -31,7 +36,27 @@ class ProfileScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<ProfileCubit, ProfileState>(
+    // A failed write leaves the loaded screen intact, so the only way the user
+    // hears about it is here.
+    return BlocListener<ProfileCubit, ProfileState>(
+      listenWhen: (previous, current) =>
+          current.actionErrorKey != null &&
+          previous.actionErrorKey != current.actionErrorKey,
+      listener: (context, state) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(
+              backgroundColor: const Color(0xFF2A2A2A),
+              content: Text(
+                state.actionErrorKey!.tr(),
+                style: GoogleFonts.inter(color: Colors.white, fontSize: 13.sp),
+              ),
+            ),
+          );
+        context.read<ProfileCubit>().clearActionError();
+      },
+      child: BlocBuilder<ProfileCubit, ProfileState>(
       builder: (context, state) {
         switch (state.status) {
           case ProfileStatus.initial:
@@ -60,11 +85,41 @@ class ProfileScreen extends StatelessWidget {
             return _ProfileView(
               profile: state.profile!,
               weightHistory: state.weightHistory,
+              progress: context.read<ProfileCubit>().progress!,
+              breakdown: context.read<ProfileCubit>().planBreakdown,
+              isSaving: state.isSaving,
               onRefresh: () => context.read<ProfileCubit>().refresh(),
+              onLogWeight: (kg) => context.read<ProfileCubit>().logWeight(kg),
+              onEditTarget: (kg) =>
+                  context.read<ProfileCubit>().updateTargetWeight(kg),
+              onRecalculate: () => _openRecalculateSheet(context),
             );
         }
       },
+      ),
     );
+  }
+
+  /// Opens the recalculation sheet and saves whatever it resolves with.
+  ///
+  /// The sheet is handed the cubit's calculator rather than a finished plan, so
+  /// the numbers track the pace slider without a round trip.
+  Future<void> _openRecalculateSheet(BuildContext context) async {
+    final ProfileCubit cubit = context.read<ProfileCubit>();
+    final UserProfile? profile = cubit.state.profile;
+    if (profile == null) return;
+
+    final NutritionPlan? plan = await RecalculateSheet.show(
+      context,
+      initialWeeklyGainKg: cubit.suggestedWeeklyGainKg,
+      currentCalories: profile.dailyCalorieTarget,
+      units: profile.units,
+      planForPace: cubit.planForPace,
+      minWeeklyGainKg: ProfileCubit.minWeeklyGainKg,
+      maxWeeklyGainKg: ProfileCubit.maxWeeklyGainKg,
+    );
+
+    if (plan != null) await cubit.applyPlan(plan);
   }
 }
 
@@ -72,12 +127,30 @@ class _ProfileView extends StatelessWidget {
   const _ProfileView({
     required this.profile,
     required this.weightHistory,
+    required this.progress,
+    required this.breakdown,
+    required this.isSaving,
     required this.onRefresh,
+    required this.onLogWeight,
+    required this.onEditTarget,
+    required this.onRecalculate,
   });
 
   final UserProfile profile;
   final List<WeightEntry> weightHistory;
+
+  /// Trend figures over [weightHistory], calculated by the cubit.
+  final ProgressStats progress;
+
+  /// What the stored calorie target is made of. Null when the row has no
+  /// date of birth, without which BMR cannot be computed.
+  final PlanBreakdown? breakdown;
+
+  final bool isSaving;
   final Future<void> Function() onRefresh;
+  final ValueChanged<double> onLogWeight;
+  final ValueChanged<double> onEditTarget;
+  final Future<void> Function() onRecalculate;
 
   bool get _isMetric => profile.units.isMetric;
 
@@ -105,11 +178,13 @@ class _ProfileView extends StatelessWidget {
               children: staggered([
                 _buildWeightProgress(),
                 SizedBox(height: 16.h),
-                _buildWeightCards(),
+                _buildWeightCards(context),
                 SizedBox(height: 16.h),
                 _buildNutritionPlan(context),
                 SizedBox(height: 16.h),
                 _buildMacroTargets(),
+                SizedBox(height: 16.h),
+                _buildBodyStats(),
                 SizedBox(height: 32.h),
               ]),
             ),
@@ -209,9 +284,6 @@ class _ProfileView extends StatelessWidget {
   }
 
   Widget _buildWeightProgress() {
-    final remaining = profile.remainingKg;
-    final prefix = remaining >= 0 ? '+' : '';
-
     return _buildBorderedCard(
       child: Padding(
         padding: EdgeInsets.all(16.w),
@@ -229,16 +301,7 @@ class _ProfileView extends StatelessWidget {
                     letterSpacing: 1.5,
                   ),
                 ),
-                Text(
-                  '$prefix${_weight(remaining)} $_unitLabel '
-                  '${'to_target'.tr()}',
-                  style: GoogleFonts.inter(
-                    color: ProfileScreen.accentColor,
-                    fontSize: 10.sp,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.0,
-                  ),
-                ),
+                _buildMonthlyChange(),
               ],
             ),
             SizedBox(height: 24.h),
@@ -253,9 +316,200 @@ class _ProfileView extends StatelessWidget {
                   Text('today'.tr(), style: _chartLabelStyle),
                 ],
               ),
+            SizedBox(height: 20.h),
+            _buildTargetProgressBar(),
+            SizedBox(height: 20.h),
+            _buildTrendStats(),
           ],
         ),
       ),
+    );
+  }
+
+  /// The headline trend: change over the last 30 days. Stays quiet rather than
+  /// printing 0.0 when there is only one weigh-in to go on.
+  Widget _buildMonthlyChange() {
+    final monthly = progress.monthlyChangeKg;
+    if (monthly == null) {
+      return Text(
+        'no_trend_yet'.tr(),
+        style: GoogleFonts.inter(
+          color: ProfileScreen.textMuted,
+          fontSize: 10.sp,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 1.0,
+        ),
+      );
+    }
+
+    return Text(
+      'change_this_month'.tr(
+        namedArgs: {
+          'delta': '${monthly >= 0 ? '+' : '-'}${_weight(monthly.abs())}',
+          'unit': _unitLabel,
+        },
+      ),
+      style: GoogleFonts.inter(
+        color: monthly >= 0
+            ? ProfileScreen.accentColor
+            : const Color(0xFFFF9E3D),
+        fontSize: 10.sp,
+        fontWeight: FontWeight.bold,
+        letterSpacing: 1.0,
+      ),
+    );
+  }
+
+  /// How far along the run from the starting weigh-in to the target.
+  Widget _buildTargetProgressBar() {
+    final fraction = progress.fractionToTarget;
+    final reached = progress.isTargetReached;
+    final percent = fraction == null ? null : (fraction * 100).round();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              reached ? 'target_reached'.tr() : 'progress_to_target'.tr(),
+              style: GoogleFonts.inter(
+                color: ProfileScreen.textMuted,
+                fontSize: 10.sp,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.2,
+              ),
+            ),
+            Text(
+              percent == null ? '--' : '$percent%',
+              style: GoogleFonts.anton(
+                color: Colors.white,
+                fontSize: 13.sp,
+                letterSpacing: 1.0,
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: 8.h),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(3.r),
+          child: Container(
+            height: 6.h,
+            color: ProfileScreen.borderColor,
+            child: FractionallySizedBox(
+              alignment: Alignment.centerLeft,
+              widthFactor: fraction ?? 0,
+              child: Container(color: ProfileScreen.accentColor),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Four figures the raw chart can't state outright.
+  Widget _buildTrendStats() {
+    final rate = progress.weeklyRateKg;
+    final total = progress.totalChangeKg;
+    final remaining = progress.remainingKg;
+    final eta = progress.projectedTargetDate;
+
+    return Column(
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: _buildStatTile(
+                'stat_total_change'.tr(),
+                total == null
+                    ? null
+                    : '${total >= 0 ? '+' : '-'}${_weight(total.abs())}',
+                total == null ? null : _unitLabel,
+              ),
+            ),
+            Expanded(
+              child: _buildStatTile(
+                'stat_weekly_rate'.tr(),
+                rate == null
+                    ? null
+                    : '${rate >= 0 ? '+' : '-'}${_weight(rate.abs())}',
+                rate == null ? null : '$_unitLabel${'per_week_short'.tr()}',
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: 16.h),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: _buildStatTile(
+                'to_target'.tr(),
+                remaining == null || progress.isTargetReached
+                    ? null
+                    : _weight(remaining.abs()),
+                remaining == null || progress.isTargetReached
+                    ? null
+                    : _unitLabel,
+              ),
+            ),
+            Expanded(
+              child: _buildStatTile(
+                'stat_projected_date'.tr(),
+                eta == null ? null : DateFormat.MMMd().format(eta),
+                eta == null ? null : DateFormat.y().format(eta),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// A single figure. [value] of null renders a dash — the honest answer when
+  /// there isn't enough history to compute it yet.
+  Widget _buildStatTile(String label, String? value, String? unit) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label.toUpperCase(),
+          style: GoogleFonts.inter(
+            color: ProfileScreen.textMuted,
+            fontSize: 9.sp,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.2,
+          ),
+        ),
+        SizedBox(height: 4.h),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            Text(
+              value ?? '--',
+              style: GoogleFonts.anton(
+                color: value == null ? ProfileScreen.textMuted : Colors.white,
+                fontSize: 18.sp,
+                letterSpacing: 0.5,
+              ),
+            ),
+            if (unit != null) ...[
+              SizedBox(width: 4.w),
+              Text(
+                unit,
+                style: GoogleFonts.inter(
+                  color: ProfileScreen.textMuted,
+                  fontSize: 10.sp,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ],
     );
   }
 
@@ -268,7 +522,7 @@ class _ProfileView extends StatelessWidget {
         letterSpacing: 1.2,
       );
 
-  Widget _buildWeightCards() {
+  Widget _buildWeightCards(BuildContext context) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -277,6 +531,13 @@ class _ProfileView extends StatelessWidget {
             child: _buildSingleWeightCard(
               'current_weight'.tr(),
               _weight(profile.currentWeightKg),
+              caption: _lastLoggedCaption(),
+              onEdit: () => _pickWeight(
+                context,
+                title: 'log_weight_title'.tr(),
+                currentKg: profile.currentWeightKg,
+                onPicked: onLogWeight,
+              ),
             ),
           ),
         ),
@@ -286,6 +547,12 @@ class _ProfileView extends StatelessWidget {
             child: _buildSingleWeightCard(
               'target_weight'.tr(),
               _weight(profile.targetWeightKg),
+              onEdit: () => _pickWeight(
+                context,
+                title: 'edit_target_title'.tr(),
+                currentKg: profile.targetWeightKg,
+                onPicked: onEditTarget,
+              ),
             ),
           ),
         ),
@@ -293,21 +560,87 @@ class _ProfileView extends StatelessWidget {
     );
   }
 
-  Widget _buildSingleWeightCard(String label, String value) {
+  /// When the last weigh-in was, so a stale headline number says so itself.
+  String? _lastLoggedCaption() {
+    final days = progress.daysSinceLastWeighIn;
+    if (days == null) return null;
+    if (days <= 0) return 'logged_today'.tr();
+    if (days == 1) return 'logged_yesterday'.tr();
+    return 'logged_days_ago'.tr(namedArgs: {'days': '$days'});
+  }
+
+  /// Wheel picker over the user's display unit, resolved back to kilograms —
+  /// the only unit the database stores.
+  Future<void> _pickWeight(
+    BuildContext context, {
+    required String title,
+    required double currentKg,
+    required ValueChanged<double> onPicked,
+  }) async {
+    final bool metric = _isMetric;
+    final double initial =
+        metric ? currentKg : UnitConverter.kgToLb(currentKg);
+
+    final double? picked = await WheelPickerSheet.showValue(
+      context: context,
+      title: title,
+      initialValue: initial,
+      min: metric ? 35 : UnitConverter.kgToLb(35).roundToDouble(),
+      max: metric ? 250 : UnitConverter.kgToLb(250).roundToDouble(),
+      step: metric ? 0.1 : 0.2,
+      unitLabel: _unitLabel,
+      decimals: 1,
+    );
+    if (picked == null) return;
+
+    onPicked(metric ? picked : UnitConverter.lbToKg(picked));
+  }
+
+  Widget _buildSingleWeightCard(
+    String label,
+    String value, {
+    String? caption,
+    VoidCallback? onEdit,
+  }) {
+    return PressScale(
+      child: GestureDetector(
+        onTap: isSaving ? null : onEdit,
+        behavior: HitTestBehavior.opaque,
+        child: _buildWeightCardBody(label, value, caption, onEdit != null),
+      ),
+    );
+  }
+
+  Widget _buildWeightCardBody(
+    String label,
+    String value,
+    String? caption,
+    bool isEditable,
+  ) {
     return Padding(
       padding: EdgeInsets.all(16.w),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: GoogleFonts.inter(
-              color: ProfileScreen.textMuted,
-              fontSize: 10.sp,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1.5,
-              height: 1.4,
-            ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: GoogleFonts.inter(
+                    color: ProfileScreen.textMuted,
+                    fontSize: 10.sp,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.5,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+              if (isEditable)
+                Icon(Icons.edit,
+                    color: ProfileScreen.textMuted, size: 14.sp),
+            ],
           ),
           SizedBox(height: 12.h),
           Row(
@@ -337,6 +670,19 @@ class _ProfileView extends StatelessWidget {
               ),
             ],
           ),
+          if (caption != null) ...[
+            SizedBox(height: 6.h),
+            Text(
+              caption,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.inter(
+                color: ProfileScreen.textMuted,
+                fontSize: 9.sp,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -374,22 +720,24 @@ class _ProfileView extends StatelessWidget {
             ),
             SizedBox(height: 12.h),
             Text(
-              'nutrition_plan_desc'.tr(
-                namedArgs: {'activity': profile.activityLevel.titleKey.tr()},
-              ),
+              _planDescription(),
               style: GoogleFonts.inter(
                 color: const Color(0xFFD1D5DB),
                 fontSize: 13.sp,
                 height: 1.5,
               ),
             ),
+            if (breakdown != null) ...[
+              SizedBox(height: 16.h),
+              _buildPlanBreakdown(breakdown!),
+            ],
             SizedBox(height: 20.h),
             PressScale(
               child: SizedBox(
                 width: double.infinity,
                 height: 48.h,
                 child: OutlinedButton(
-                  onPressed: () => _showRecalculateNotice(context),
+                  onPressed: isSaving ? null : () => onRecalculate(),
                   style: OutlinedButton.styleFrom(
                     side: BorderSide(
                         color: ProfileScreen.accentColor, width: 2.w),
@@ -415,20 +763,103 @@ class _ProfileView extends StatelessWidget {
     );
   }
 
-  /// Recalculation needs an edit flow that doesn't exist yet. Saying so beats
-  /// a button that appears to work and silently does nothing.
-  void _showRecalculateNotice(BuildContext context) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          backgroundColor: const Color(0xFF2A2A2A),
-          content: Text(
-            'recalculate_coming_soon'.tr(),
-            style: GoogleFonts.inter(color: Colors.white, fontSize: 13.sp),
+  /// States the pace the stored target actually buys, recovered from the
+  /// target itself since the pace is never persisted. Falls back to the
+  /// activity-only wording when there is no date of birth to compute BMR from.
+  String _planDescription() {
+    final PlanBreakdown? plan = breakdown;
+    if (plan == null || plan.surplus <= 0) {
+      return 'nutrition_plan_desc'.tr(
+        namedArgs: {'activity': profile.activityLevel.titleKey.tr()},
+      );
+    }
+
+    return 'nutrition_plan_desc_pace'.tr(
+      namedArgs: {
+        'activity': profile.activityLevel.titleKey.tr(),
+        'pace': _weight(plan.impliedWeeklyGainKg),
+        'unit': _unitLabel,
+      },
+    );
+  }
+
+  /// Splits the stored target into BMR, maintenance and the surplus on top, so
+  /// the number on the card stops being a figure the user has to take on trust.
+  Widget _buildPlanBreakdown(PlanBreakdown plan) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildBreakdownRow('plan_bmr'.tr(), plan.bmr),
+        SizedBox(height: 8.h),
+        _buildBreakdownRow('plan_maintenance'.tr(), plan.maintenance),
+        SizedBox(height: 8.h),
+        _buildBreakdownRow(
+          'plan_surplus'.tr(),
+          plan.surplus,
+          signed: true,
+          accent: plan.isStale
+              ? const Color(0xFFFF5722)
+              : ProfileScreen.accentColor,
+        ),
+        if (plan.isStale) ...[
+          SizedBox(height: 12.h),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.warning_amber_rounded,
+                  color: const Color(0xFFFF5722), size: 14.sp),
+              SizedBox(width: 8.w),
+              Expanded(
+                child: Text(
+                  'plan_stale_notice'.tr(),
+                  style: GoogleFonts.inter(
+                    color: const Color(0xFFFF5722),
+                    fontSize: 11.sp,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildBreakdownRow(
+    String label,
+    int kcal, {
+    bool signed = false,
+    Color? accent,
+  }) {
+    final String prefix = signed && kcal > 0 ? '+' : '';
+
+    return Row(
+      children: [
+        Text(
+          label.toUpperCase(),
+          style: GoogleFonts.inter(
+            color: ProfileScreen.textMuted,
+            fontSize: 10.sp,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.2,
           ),
         ),
-      );
+        SizedBox(width: 8.w),
+        Expanded(
+          child: Container(height: 1.h, color: ProfileScreen.borderColor),
+        ),
+        SizedBox(width: 8.w),
+        Text(
+          '$prefix${NumberFormat('#,###').format(kcal)}',
+          style: GoogleFonts.anton(
+            color: accent ?? Colors.white,
+            fontSize: 13.sp,
+            letterSpacing: 0.5,
+          ),
+        ),
+      ],
+    );
   }
 
   /// Replaces the mocked "focus areas" list. Those values were invented —
@@ -494,6 +925,87 @@ class _ProfileView extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  /// Everything else already on the user's row that had nowhere to be seen:
+  /// height, age, gender, the multiplier behind their target, and BMI.
+  Widget _buildBodyStats() {
+    final int? age = profile.age;
+    final double? bmi = progress.bmi(profile.heightCm);
+
+    return _buildBorderedCard(
+      child: Padding(
+        padding: EdgeInsets.all(16.w),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'body_stats_title'.tr().toUpperCase(),
+              style: GoogleFonts.anton(
+                color: Colors.white,
+                fontSize: 14.sp,
+                letterSpacing: 1.5,
+              ),
+            ),
+            SizedBox(height: 16.h),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: _buildStatTile(
+                    'height_label'.tr(),
+                    _heightValue(),
+                    _isMetric ? 'cm_unit'.tr().toLowerCase() : null,
+                  ),
+                ),
+                Expanded(
+                  child: _buildStatTile(
+                    'stat_age'.tr(),
+                    age?.toString(),
+                    age == null ? null : 'stat_years_short'.tr(),
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 16.h),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: _buildStatTile(
+                    'gender_label'.tr(),
+                    profile.gender?.labelKey.tr(),
+                    null,
+                  ),
+                ),
+                Expanded(
+                  child: _buildStatTile(
+                    'stat_bmi'.tr(),
+                    bmi?.toStringAsFixed(1),
+                    null,
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 16.h),
+            _buildStatTile(
+              'stat_activity'.tr(),
+              profile.activityLevel.titleKey.tr(),
+              '${profile.activityLevel.multiplier}x',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Height in the user's own units: centimetres, or feet and inches.
+  String _heightValue() {
+    if (profile.heightCm <= 0) return '--';
+    if (_isMetric) return profile.heightCm.round().toString();
+
+    final feetInches = UnitConverter.cmToFeetInches(profile.heightCm);
+    return "${feetInches.feet}'${feetInches.inches}\"";
   }
 }
 

@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import '../models/activity_level.dart';
 import '../models/gender.dart';
 import '../models/nutrition_plan.dart';
+import '../models/plan_breakdown.dart';
 
 /// Pure calorie math. Deliberately free of Flutter imports so it can be unit
 /// tested without a widget binding.
@@ -69,6 +70,42 @@ class CalorieEngine {
 
   /// Daily calories above maintenance needed to gain [weeklyGainKg] per week.
   static double dailySurplus(double weeklyGainKg) => weeklyGainKg * kcalPerKg / 7;
+
+  /// The inverse of [dailySurplus]: the weekly rate a given daily surplus buys.
+  static double weeklyGainForSurplus(double dailySurplusKcal) =>
+      dailySurplusKcal * 7 / kcalPerKg;
+
+  /// Decomposes an already-stored calorie target against the user's current
+  /// numbers, recovering the pace it represents.
+  ///
+  /// Used by the profile screen to explain the target it displays, and to seed
+  /// a recalculation with the pace the user originally chose instead of asking
+  /// them for it again.
+  static PlanBreakdown breakdown({
+    required Gender gender,
+    required double weightKg,
+    required double heightCm,
+    required int age,
+    required ActivityLevel activityLevel,
+    required int storedCalories,
+  }) {
+    final basal = bmr(
+      gender: gender,
+      weightKg: weightKg,
+      heightCm: heightCm,
+      age: age,
+    );
+    final maintenance = tdee(bmr: basal, activityLevel: activityLevel);
+    final surplus = storedCalories - maintenance;
+
+    return PlanBreakdown(
+      bmr: basal.round(),
+      maintenance: maintenance.round(),
+      surplus: surplus.round(),
+      calories: storedCalories,
+      impliedWeeklyGainKg: weeklyGainForSurplus(surplus),
+    );
+  }
 
   /// Runs the whole chain and splits the result into macros.
   ///

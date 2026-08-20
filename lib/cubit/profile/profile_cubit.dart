@@ -1,7 +1,12 @@
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../core/calorie_engine.dart';
+import '../../core/progress_stats.dart';
 import '../../data/user_repository.dart';
+import '../../models/gender.dart';
+import '../../models/nutrition_plan.dart';
+import '../../models/plan_breakdown.dart';
 import '../../models/user_profile.dart';
 import '../../models/weight_entry.dart';
 
@@ -15,6 +20,17 @@ class ProfileCubit extends Cubit<ProfileState> {
         super(const ProfileState());
 
   final UserRepository _userRepository;
+
+  /// Translation key surfaced when any of the writes below fail.
+  static const String _saveFailedKey = 'save_failed';
+
+  /// Pace bounds for a recalculation, matching the target-pace screen.
+  static const double minWeeklyGainKg = 0.1;
+  static const double maxWeeklyGainKg = 1.0;
+
+  /// Fallback pace when the stored target no longer buys any gain, so a
+  /// recalculation has no positive pace to preserve.
+  static const double fallbackWeeklyGainKg = 0.25;
 
   /// Fetches profile and weight history together.
   ///
@@ -60,4 +76,104 @@ class ProfileCubit extends Cubit<ProfileState> {
   }
 
   Future<void> refresh() => load(silent: true);
+
+  /// Trend figures over the loaded history.
+  ProgressStats? get progress {
+    final profile = state.profile;
+    if (profile == null) return null;
+    return ProgressStats(
+      history: state.weightHistory,
+      targetWeightKg: profile.targetWeightKg,
+    );
+  }
+
+  /// What the stored calorie target is made of, recovering the pace it
+  /// represents. Null when the row lacks the biometrics the formula needs —
+  /// `date_of_birth` is nullable and BMR cannot be computed without an age.
+  PlanBreakdown? get planBreakdown {
+    final profile = state.profile;
+    if (profile == null) return null;
+
+    final age = profile.age;
+    if (age == null ||
+        profile.heightCm <= 0 ||
+        profile.currentWeightKg <= 0 ||
+        profile.dailyCalorieTarget <= 0) {
+      return null;
+    }
+
+    return CalorieEngine.breakdown(
+      gender: profile.gender ?? Gender.other,
+      weightKg: profile.currentWeightKg,
+      heightCm: profile.heightCm,
+      age: age,
+      activityLevel: profile.activityLevel,
+      storedCalories: profile.dailyCalorieTarget,
+    );
+  }
+
+  /// The pace a recalculation starts from: the one the stored target implies,
+  /// or the conservative default when that target has gone stale.
+  double get suggestedWeeklyGainKg {
+    final implied = planBreakdown?.impliedWeeklyGainKg;
+    if (implied == null || implied <= 0) return fallbackWeeklyGainKg;
+    return implied.clamp(minWeeklyGainKg, maxWeeklyGainKg);
+  }
+
+  /// The plan that would be written at [weeklyGainKg], recomputed against the
+  /// user's *current* weight. Returned rather than saved so the confirmation
+  /// sheet can show the numbers before anything is committed.
+  NutritionPlan? planForPace(double weeklyGainKg) {
+    final profile = state.profile;
+    final age = profile?.age;
+    if (profile == null || age == null || profile.heightCm <= 0) return null;
+
+    return CalorieEngine.buildPlan(
+      gender: profile.gender ?? Gender.other,
+      weightKg: profile.currentWeightKg,
+      heightCm: profile.heightCm,
+      age: age,
+      activityLevel: profile.activityLevel,
+      weeklyGainKg: weeklyGainKg,
+    );
+  }
+
+  /// Records a weigh-in, then reloads so the chart and headline move together.
+  Future<void> logWeight(double weightKg) {
+    return _write(() => _userRepository.logWeight(weightKg: weightKg));
+  }
+
+  Future<void> updateTargetWeight(double targetWeightKg) {
+    return _write(
+      () => _userRepository.updateTargetWeight(targetWeightKg: targetWeightKg),
+    );
+  }
+
+  Future<void> applyPlan(NutritionPlan plan) {
+    return _write(() => _userRepository.applyPlan(plan: plan));
+  }
+
+  /// One write path: flag saving, run it, reload on success, and surface a
+  /// message on failure without tearing down what is already on screen.
+  Future<void> _write(Future<void> Function() write) async {
+    if (state.profile == null) return;
+    emit(state.copyWith(isSaving: true, clearActionError: true));
+
+    try {
+      await write();
+      if (isClosed) return;
+      await load(silent: true);
+      if (isClosed) return;
+      emit(state.copyWith(isSaving: false));
+    } catch (_) {
+      if (isClosed) return;
+      emit(state.copyWith(isSaving: false, actionErrorKey: _saveFailedKey));
+    }
+  }
+
+  /// Called once the failure has been shown, so it isn't repeated on rebuild.
+  void clearActionError() {
+    if (state.actionErrorKey == null) return;
+    emit(state.copyWith(clearActionError: true));
+  }
 }

@@ -96,6 +96,52 @@ class UserRepository {
         .toList();
   }
 
+  /// Records a new weigh-in and moves the profile's current weight with it.
+  ///
+  /// Two writes, deliberately in this order: the log row is the historical
+  /// record and the one the chart reads, so it lands first. If the profile
+  /// update then fails, the user sees a stale headline number over a correct
+  /// chart, which is recoverable — the reverse would silently lose the
+  /// measurement.
+  Future<void> logWeight({required double weightKg}) async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) return;
+
+    await _client.from('weight_logs').insert({
+      'user_id': userId,
+      'weight_kg': weightKg,
+    });
+
+    await _client.from('users').update({
+      'current_weight_kg': weightKg,
+      'last_active_at': DateTime.now().toUtc().toIso8601String(),
+    }).eq('id', userId);
+  }
+
+  /// Moves the goalpost. Does not touch the calorie target: the target follows
+  /// from the pace, not from how far away the goal is.
+  Future<void> updateTargetWeight({required double targetWeightKg}) async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) return;
+
+    await _client.from('users').update({
+      'target_weight_kg': targetWeightKg,
+    }).eq('id', userId);
+  }
+
+  /// Writes a freshly calculated plan over the stored targets.
+  Future<void> applyPlan({required NutritionPlan plan}) async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) return;
+
+    await _client.from('users').update({
+      'daily_calorie_target': plan.calories,
+      'protein_target_g': plan.proteinG,
+      'carbs_target_g': plan.carbsG,
+      'fat_target_g': plan.fatG,
+    }).eq('id', userId);
+  }
+
   /// Commits every field gathered across screens 1-5 as a single row, flags
   /// `onboarding_completed`, and seeds the first weight log so the progress
   /// chart has a day-one anchor instead of being empty.

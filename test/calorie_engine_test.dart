@@ -1,6 +1,7 @@
 import 'package:bulkr/core/calorie_engine.dart';
 import 'package:bulkr/models/activity_level.dart';
 import 'package:bulkr/models/gender.dart';
+import 'package:bulkr/models/plan_breakdown.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -225,6 +226,57 @@ void main() {
           }
         }
       }
+    });
+  });
+
+  group('weeklyGainForSurplus', () {
+    test('inverts dailySurplus', () {
+      expect(CalorieEngine.weeklyGainForSurplus(550), closeTo(0.5, 0.0001));
+      expect(
+        CalorieEngine.weeklyGainForSurplus(CalorieEngine.dailySurplus(0.35)),
+        closeTo(0.35, 0.0001),
+      );
+    });
+  });
+
+  group('breakdown', () {
+    // BMR 10*88.5 + 6.25*180 - 5*30 + 5 = 1865, x1.55 = 2890.75 maintenance.
+    PlanBreakdown subject(int storedCalories) => CalorieEngine.breakdown(
+          gender: Gender.male,
+          weightKg: 88.5,
+          heightCm: 180,
+          age: 30,
+          activityLevel: ActivityLevel.moderatelyActive,
+          storedCalories: storedCalories,
+        );
+
+    test('splits a stored target into BMR, maintenance and surplus', () {
+      final plan = subject(3400);
+
+      expect(plan.bmr, 1865);
+      expect(plan.maintenance, 2891);
+      expect(plan.surplus, 509);
+      expect(plan.calories, 3400);
+    });
+
+    test('recovers the weekly pace the target buys', () {
+      // 509.25 kcal/day * 7 / 7700 kcal per kg
+      expect(subject(3400).impliedWeeklyGainKg, closeTo(0.463, 0.001));
+    });
+
+    test('flags a target that maintenance has caught up with', () {
+      final plan = subject(2500);
+
+      expect(plan.surplus, -391);
+      expect(plan.isStale, isTrue);
+      expect(plan.impliedWeeklyGainKg, lessThan(0));
+    });
+
+    test('a target level with maintenance buys nothing', () {
+      // Maintenance is 2890.75, so a target at 2891 rounds to a zero surplus.
+      expect(subject(2950).isStale, isFalse);
+      expect(subject(2891).isStale, isTrue);
+      expect(subject(2891).surplus, 0);
     });
   });
 }
