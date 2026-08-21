@@ -12,6 +12,7 @@ import '../cubit/profile/profile_cubit.dart';
 import '../go_router/app_routes.dart';
 import '../models/insight.dart';
 import '../models/nutrition_plan.dart';
+import '../models/plan_breakdown.dart';
 import '../models/user_profile.dart';
 import '../models/weight_entry.dart';
 import '../styles/app_color.dart';
@@ -92,6 +93,7 @@ class ProfileScreen extends StatelessWidget {
               weightHistory: state.weightHistory,
               progress: context.read<ProfileCubit>().progress!,
               insights: context.read<ProfileCubit>().insights,
+              breakdown: context.read<ProfileCubit>().planBreakdown,
               historyErrorDetail: state.historyErrorDetail,
               isSaving: state.isSaving,
               onRefresh: () => context.read<ProfileCubit>().refresh(),
@@ -175,6 +177,7 @@ class _ProfileView extends StatelessWidget {
     required this.weightHistory,
     required this.progress,
     required this.insights,
+    required this.breakdown,
     required this.historyErrorDetail,
     required this.isSaving,
     required this.onRefresh,
@@ -192,6 +195,10 @@ class _ProfileView extends StatelessWidget {
 
   /// Today's advice, ordered most urgent first.
   final List<Insight> insights;
+
+  /// What the stored calorie target is made of. Null when the row has no date
+  /// of birth, without which BMR cannot be computed.
+  final PlanBreakdown? breakdown;
 
   /// Set when the weigh-in history could not be read at all.
   final String? historyErrorDetail;
@@ -231,9 +238,13 @@ class _ProfileView extends StatelessWidget {
                 SizedBox(height: 16.h),
                 _buildWeightCards(context),
                 SizedBox(height: 16.h),
+                _buildProgressStats(),
+                SizedBox(height: 16.h),
                 _buildNutritionPlan(context),
                 SizedBox(height: 16.h),
                 _buildMacroTargets(),
+                SizedBox(height: 16.h),
+                _buildBodyStats(),
                 SizedBox(height: 16.h),
                 _buildFocus(context),
                 SizedBox(height: 32.h),
@@ -350,24 +361,37 @@ class _ProfileView extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // Both halves are flexible: the title is wide in Anton and the
+            // figure grows with the unit and the number, and a fixed Row
+            // overflows the moment they add up past the card.
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text(
-                  'weight_progress'.tr(),
-                  style: GoogleFonts.anton(
-                    color: Colors.white,
-                    fontSize: 14.sp,
-                    letterSpacing: 1.5,
+                Expanded(
+                  child: Text(
+                    'weight_progress'.tr(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.anton(
+                      color: Colors.white,
+                      fontSize: 14.sp,
+                      letterSpacing: 1.5,
+                    ),
                   ),
                 ),
-                Text(
-                  _progressFigure(),
-                  style: GoogleFonts.inter(
-                    color: ProfileScreen.accentColor,
-                    fontSize: 10.sp,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.0,
+                SizedBox(width: 8.w),
+                Flexible(
+                  child: Text(
+                    _progressFigure(),
+                    textAlign: TextAlign.end,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                      color: ProfileScreen.accentColor,
+                      fontSize: 10.sp,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.0,
+                    ),
                   ),
                 ),
               ],
@@ -396,6 +420,197 @@ class _ProfileView extends StatelessWidget {
     );
   }
 
+  /// The numbers behind the chart. Its own card rather than more rows stacked
+  /// under the graph: a card tall enough to fill the screen pushes everything
+  /// after it out of sight.
+  Widget _buildProgressStats() {
+    return _buildBorderedCard(
+      child: Padding(
+        padding: EdgeInsets.all(16.w),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'progress_stats_title'.tr().toUpperCase(),
+              style: GoogleFonts.anton(
+                color: Colors.white,
+                fontSize: 14.sp,
+                letterSpacing: 1.5,
+              ),
+            ),
+            SizedBox(height: 16.h),
+            _buildTargetProgressBar(),
+            SizedBox(height: 20.h),
+            _buildTrendStats(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// How far along the run from the starting weigh-in to the target.
+  Widget _buildTargetProgressBar() {
+    final fraction = progress.fractionToTarget;
+    final reached = progress.isTargetReached;
+    final percent = fraction == null ? null : (fraction * 100).round();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              reached ? 'target_reached'.tr() : 'progress_to_target'.tr(),
+              style: GoogleFonts.inter(
+                color: ProfileScreen.textMuted,
+                fontSize: 10.sp,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.2,
+              ),
+            ),
+            Text(
+              percent == null ? '--' : '$percent%',
+              style: GoogleFonts.anton(
+                color: Colors.white,
+                fontSize: 13.sp,
+                letterSpacing: 1.0,
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: 8.h),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(3.r),
+          child: Container(
+            height: 6.h,
+            color: ProfileScreen.borderColor,
+            child: FractionallySizedBox(
+              alignment: Alignment.centerLeft,
+              widthFactor: fraction ?? 0,
+              child: Container(color: ProfileScreen.accentColor),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Four figures the raw chart can't state outright.
+  Widget _buildTrendStats() {
+    final rate = progress.weeklyRateKg;
+    final total = progress.totalChangeKg;
+    final remaining = progress.remainingKg;
+    final eta = progress.projectedTargetDate;
+
+    return Column(
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: _buildStatTile(
+                'stat_total_change'.tr(),
+                total == null
+                    ? null
+                    : '${total >= 0 ? '+' : '-'}${_weight(total.abs())}',
+                total == null ? null : _unitLabel,
+              ),
+            ),
+            Expanded(
+              child: _buildStatTile(
+                'stat_weekly_rate'.tr(),
+                rate == null
+                    ? null
+                    : '${rate >= 0 ? '+' : '-'}${_weight(rate.abs())}',
+                rate == null ? null : '$_unitLabel${'per_week_short'.tr()}',
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: 16.h),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: _buildStatTile(
+                'to_target'.tr(),
+                remaining == null || progress.isTargetReached
+                    ? null
+                    : _weight(remaining.abs()),
+                remaining == null || progress.isTargetReached
+                    ? null
+                    : _unitLabel,
+              ),
+            ),
+            Expanded(
+              child: _buildStatTile(
+                'stat_projected_date'.tr(),
+                eta == null ? null : DateFormat.MMMd().format(eta),
+                eta == null ? null : DateFormat.y().format(eta),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// A single figure. [value] of null renders a dash — the honest answer when
+  /// there isn't enough history to compute it yet.
+  Widget _buildStatTile(String label, String? value, String? unit) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label.toUpperCase(),
+          style: GoogleFonts.inter(
+            color: ProfileScreen.textMuted,
+            fontSize: 9.sp,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.2,
+          ),
+        ),
+        SizedBox(height: 4.h),
+        // A tile is half a card wide, and values run from "88.5" to
+        // "Moderately Active" — both halves have to be able to give way.
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            Flexible(
+              child: Text(
+                value ?? '--',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.anton(
+                  color: value == null ? ProfileScreen.textMuted : Colors.white,
+                  fontSize: 18.sp,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ),
+            if (unit != null) ...[
+              SizedBox(width: 4.w),
+              Flexible(
+                child: Text(
+                  unit,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    color: ProfileScreen.textMuted,
+                    fontSize: 10.sp,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ],
+    );
+  }
+
   /// What the card reports next to its title: the change over the last month
   /// once there are two weigh-ins to compare, and how far there is left to go
   /// until then — "no trend yet" tells a new user nothing they can use.
@@ -413,6 +628,105 @@ class _ProfileView extends StatelessWidget {
     final remaining = profile.remainingKg;
     final prefix = remaining >= 0 ? '+' : '';
     return '$prefix${_weight(remaining)} $_unitLabel ${'to_target'.tr()}';
+  }
+
+  /// States the pace the stored target actually buys, recovered from the
+  /// target itself since the pace is never persisted. Falls back to the
+  /// activity-only wording when there is no date of birth to compute BMR from.
+  String _planDescription() {
+    final PlanBreakdown? plan = breakdown;
+    if (plan == null || plan.surplus <= 0) {
+      return 'nutrition_plan_desc'.tr(
+        namedArgs: {'activity': profile.activityLevel.titleKey.tr()},
+      );
+    }
+
+    return 'nutrition_plan_desc_pace'.tr(
+      namedArgs: {
+        'activity': profile.activityLevel.titleKey.tr(),
+        'pace': _weight(plan.impliedWeeklyGainKg),
+        'unit': _unitLabel,
+      },
+    );
+  }
+
+  /// Splits the stored target into BMR, maintenance and the surplus on top, so
+  /// the number on the card stops being a figure the user has to take on trust.
+  Widget _buildPlanBreakdown(PlanBreakdown plan) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildBreakdownRow('plan_bmr'.tr(), plan.bmr),
+        SizedBox(height: 8.h),
+        _buildBreakdownRow('plan_maintenance'.tr(), plan.maintenance),
+        SizedBox(height: 8.h),
+        _buildBreakdownRow(
+          'plan_surplus'.tr(),
+          plan.surplus,
+          signed: true,
+          accent: plan.isStale
+              ? const Color(0xFFFF5722)
+              : ProfileScreen.accentColor,
+        ),
+        if (plan.isStale) ...[
+          SizedBox(height: 12.h),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.warning_amber_rounded,
+                  color: const Color(0xFFFF5722), size: 14.sp),
+              SizedBox(width: 8.w),
+              Expanded(
+                child: Text(
+                  'plan_stale_notice'.tr(),
+                  style: GoogleFonts.inter(
+                    color: const Color(0xFFFF5722),
+                    fontSize: 11.sp,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildBreakdownRow(
+    String label,
+    int kcal, {
+    bool signed = false,
+    Color? accent,
+  }) {
+    final String prefix = signed && kcal > 0 ? '+' : '';
+
+    return Row(
+      children: [
+        Text(
+          label.toUpperCase(),
+          style: GoogleFonts.inter(
+            color: ProfileScreen.textMuted,
+            fontSize: 10.sp,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.2,
+          ),
+        ),
+        SizedBox(width: 8.w),
+        Expanded(
+          child: Container(height: 1.h, color: ProfileScreen.borderColor),
+        ),
+        SizedBox(width: 8.w),
+        Text(
+          '$prefix${NumberFormat('#,###').format(kcal)}',
+          style: GoogleFonts.anton(
+            color: accent ?? Colors.white,
+            fontSize: 13.sp,
+            letterSpacing: 0.5,
+          ),
+        ),
+      ],
+    );
   }
 
   /// An empty chart because the table refused to be read is a different thing
@@ -552,7 +866,16 @@ class _ProfileView extends StatelessWidget {
         letterSpacing: 1.2,
       );
 
+  /// IntrinsicHeight bounds the row before it stretches. Inside a ListView the
+  /// height is unbounded, and CrossAxisAlignment.stretch then demands an
+  /// infinite height from its children, which throws during layout — and a
+  /// throw there aborts the whole sliver, so every section below this one
+  /// silently stopped rendering.
   Widget _buildWeightCards(BuildContext context) {
+    return IntrinsicHeight(child: _buildWeightCardsRow(context));
+  }
+
+  Widget _buildWeightCardsRow(BuildContext context) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -750,15 +1073,17 @@ class _ProfileView extends StatelessWidget {
             ),
             SizedBox(height: 12.h),
             Text(
-              'nutrition_plan_desc'.tr(
-                namedArgs: {'activity': profile.activityLevel.titleKey.tr()},
-              ),
+              _planDescription(),
               style: GoogleFonts.inter(
                 color: const Color(0xFFD1D5DB),
                 fontSize: 13.sp,
                 height: 1.5,
               ),
             ),
+            if (breakdown != null) ...[
+              SizedBox(height: 16.h),
+              _buildPlanBreakdown(breakdown!),
+            ],
             SizedBox(height: 20.h),
             PressScale(
               child: SizedBox(
@@ -823,6 +1148,87 @@ class _ProfileView extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  /// Everything else already on the user's row that had nowhere to be seen:
+  /// height, age, gender, the multiplier behind their target, and BMI.
+  Widget _buildBodyStats() {
+    final int? age = profile.age;
+    final double? bmi = progress.bmi(profile.heightCm);
+
+    return _buildBorderedCard(
+      child: Padding(
+        padding: EdgeInsets.all(16.w),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'body_stats_title'.tr().toUpperCase(),
+              style: GoogleFonts.anton(
+                color: Colors.white,
+                fontSize: 14.sp,
+                letterSpacing: 1.5,
+              ),
+            ),
+            SizedBox(height: 16.h),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: _buildStatTile(
+                    'height_label'.tr(),
+                    _heightValue(),
+                    _isMetric ? 'cm_unit'.tr().toLowerCase() : null,
+                  ),
+                ),
+                Expanded(
+                  child: _buildStatTile(
+                    'stat_age'.tr(),
+                    age?.toString(),
+                    age == null ? null : 'stat_years_short'.tr(),
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 16.h),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: _buildStatTile(
+                    'gender_label'.tr(),
+                    profile.gender?.labelKey.tr(),
+                    null,
+                  ),
+                ),
+                Expanded(
+                  child: _buildStatTile(
+                    'stat_bmi'.tr(),
+                    bmi?.toStringAsFixed(1),
+                    null,
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 16.h),
+            _buildStatTile(
+              'stat_activity'.tr(),
+              profile.activityLevel.titleKey.tr(),
+              '${profile.activityLevel.multiplier}x',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Height in the user's own units: centimetres, or feet and inches.
+  String _heightValue() {
+    if (profile.heightCm <= 0) return '--';
+    if (_isMetric) return profile.heightCm.round().toString();
+
+    final feetInches = UnitConverter.cmToFeetInches(profile.heightCm);
+    return "${feetInches.feet}'${feetInches.inches}\"";
   }
 
   Widget _buildMacroRow(String label, int grams, Color accent) {
