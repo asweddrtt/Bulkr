@@ -149,5 +149,8 @@
   "insight_eat_consistently_title": "Same target, every day",
   "insight_eat_consistently_body": "Weekends included. A surplus you hit five days out of seven is not the surplus you planned for.",
   "insight_water_title_oz": "Drink {ounces} oz today",
-  "insight_water_body_oz": "About {glasses} glasses at your bodyweight, and more on training days. Being under makes you feel flat and hungry."
+  "insight_water_body_oz": "About {glasses} glasses at your bodyweight, and more on training days. Being under makes you feel flat and hungry.",
+  "account_title": "Account",
+  "account_no_email": "No email on this session",
+  "sign_out_btn": "Sign out"
 }

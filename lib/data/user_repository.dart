@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/activity_level.dart';
@@ -225,7 +226,13 @@ class UserRepository {
         'user_id': userId,
         'weight_kg': weightKg,
       });
-    } on PostgrestException {
+    } on PostgrestException catch (error) {
+      // Still non-fatal, but no longer invisible: a rejected seed row is the
+      // difference between "no weigh-ins yet" and "weight_logs cannot be
+      // written to", and those look identical on the chart.
+      debugPrint(
+        'Bulkr: weight_logs seed rejected — ${error.code} · ${error.message}',
+      );
       return;
     }
   }

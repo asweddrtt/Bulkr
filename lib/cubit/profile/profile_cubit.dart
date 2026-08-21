@@ -1,5 +1,7 @@
 import 'package:equatable/equatable.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/calorie_engine.dart';
 import '../../core/insight_engine.dart';
@@ -185,9 +187,23 @@ class ProfileCubit extends Cubit<ProfileState> {
       await load(silent: true);
       if (isClosed) return;
       emit(state.copyWith(isSaving: false));
-    } catch (_) {
+    } catch (error) {
       if (isClosed) return;
-      emit(state.copyWith(isSaving: false, actionErrorKey: _saveFailedKey));
+
+      // Surfaced verbatim as well as prettily: the writes here are the first
+      // in the app to UPDATE `users` and to INSERT into `weight_logs` outside
+      // onboarding, so a missing RLS policy shows up as a real Postgres error
+      // that is worth reading rather than hiding behind "try again".
+      final String detail = error is PostgrestException
+          ? [error.code, error.message].whereType<String>().join(' · ')
+          : error.toString();
+      debugPrint('Bulkr: profile write failed — $detail');
+
+      emit(state.copyWith(
+        isSaving: false,
+        actionErrorKey: _saveFailedKey,
+        actionErrorDetail: detail,
+      ));
     }
   }
 

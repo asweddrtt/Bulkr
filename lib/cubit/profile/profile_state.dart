@@ -21,6 +21,7 @@ class ProfileState extends Equatable {
     this.errorMessage,
     this.isSaving = false,
     this.actionErrorKey,
+    this.actionErrorDetail,
   });
 
   final ProfileStatus status;
@@ -35,6 +36,10 @@ class ProfileState extends Equatable {
   /// Translation key for a write that failed, cleared once shown.
   final String? actionErrorKey;
 
+  /// The underlying failure, verbatim — a Postgres error code and message says
+  /// "row-level security policy" where a friendly string just says "try again".
+  final String? actionErrorDetail;
+
   bool get isLoading => status == ProfileStatus.loading;
 
   /// A line needs two points. One weigh-in is a dot, not a trend.
@@ -48,6 +53,7 @@ class ProfileState extends Equatable {
     bool clearError = false,
     bool? isSaving,
     String? actionErrorKey,
+    String? actionErrorDetail,
     bool clearActionError = false,
   }) {
     return ProfileState(
@@ -58,6 +64,9 @@ class ProfileState extends Equatable {
       isSaving: isSaving ?? this.isSaving,
       actionErrorKey:
           clearActionError ? null : (actionErrorKey ?? this.actionErrorKey),
+      actionErrorDetail: clearActionError
+          ? null
+          : (actionErrorDetail ?? this.actionErrorDetail),
     );
   }
 
@@ -69,5 +78,6 @@ class ProfileState extends Equatable {
         errorMessage,
         isSaving,
         actionErrorKey,
+        actionErrorDetail,
       ];
 }
