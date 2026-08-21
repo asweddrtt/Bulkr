@@ -231,11 +231,11 @@ class _ProfileView extends StatelessWidget {
                 SizedBox(height: 16.h),
                 _buildWeightCards(context),
                 SizedBox(height: 16.h),
-                _buildFocus(context),
-                SizedBox(height: 16.h),
                 _buildNutritionPlan(context),
                 SizedBox(height: 16.h),
                 _buildMacroTargets(),
+                SizedBox(height: 16.h),
+                _buildFocus(context),
                 SizedBox(height: 32.h),
               ]),
             ),
@@ -344,9 +344,6 @@ class _ProfileView extends StatelessWidget {
   }
 
   Widget _buildWeightProgress(BuildContext context) {
-    final remaining = profile.remainingKg;
-    final prefix = remaining >= 0 ? '+' : '';
-
     return _buildBorderedCard(
       child: Padding(
         padding: EdgeInsets.all(16.w),
@@ -365,8 +362,7 @@ class _ProfileView extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '$prefix${_weight(remaining)} $_unitLabel '
-                  '${'to_target'.tr()}',
+                  _progressFigure(),
                   style: GoogleFonts.inter(
                     color: ProfileScreen.accentColor,
                     fontSize: 10.sp,
@@ -398,6 +394,25 @@ class _ProfileView extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// What the card reports next to its title: the change over the last month
+  /// once there are two weigh-ins to compare, and how far there is left to go
+  /// until then — "no trend yet" tells a new user nothing they can use.
+  String _progressFigure() {
+    final monthly = progress.monthlyChangeKg;
+    if (monthly != null) {
+      return 'change_this_month'.tr(
+        namedArgs: {
+          'delta': '${monthly >= 0 ? '+' : '-'}${_weight(monthly.abs())}',
+          'unit': _unitLabel,
+        },
+      );
+    }
+
+    final remaining = profile.remainingKg;
+    final prefix = remaining >= 0 ? '+' : '';
+    return '$prefix${_weight(remaining)} $_unitLabel ${'to_target'.tr()}';
   }
 
   /// An empty chart because the table refused to be read is a different thing

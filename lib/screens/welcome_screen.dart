@@ -7,6 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../cubit/auth/auth_cubit.dart';
 import '../cubit/onboarding/onboarding_cubit.dart';
+import '../cubit/profile/profile_cubit.dart';
 import '../go_router/app_routes.dart';
 import '../styles/app_color.dart';
 import '../widgets/animations/entrance.dart';
@@ -27,12 +28,19 @@ class WelcomeScreen extends StatelessWidget {
       listenWhen: (previous, current) =>
           previous.status != current.status ||
           previous.errorMessage != current.errorMessage,
-      listener: (context, state) {
+      listener: (context, state) async {
         if (state.isAuthenticated) {
           // Hand the provider's identity to the onboarding flow, which uses it
           // for display_name, avatar_url and the suggested username.
           context.read<OnboardingCubit>().adoptIdentity(state.user!);
-          context.go(AppRoutes.biometrics);
+
+          // Returning users go straight in. Without this check every sign-in
+          // replays onboarding and its final upsert overwrites the profile
+          // that already exists, which reads as a brand new account.
+          final router = GoRouter.of(context);
+          final completed =
+              await context.read<ProfileCubit>().hasCompletedOnboarding();
+          router.go(completed ? AppRoutes.home : AppRoutes.biometrics);
           return;
         }
 

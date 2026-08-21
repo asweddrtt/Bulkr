@@ -170,6 +170,20 @@ class UserRepository {
     final activeUserId = _client.auth.currentUser?.id ?? userId;
     var candidate = username;
 
+    // If a row already exists and the user did not type a handle themselves,
+    // keep the one they already have: re-running this flow should update an
+    // account, never rename it.
+    if (!usernameWasEdited) {
+      try {
+        final existing = await fetchProfile();
+        if (existing != null && existing.username.isNotEmpty) {
+          candidate = existing.username;
+        }
+      } catch (_) {
+        // Best effort — a failed read just means the generated handle stands.
+      }
+    }
+
     for (var attempt = 0; attempt < _maxUsernameAttempts; attempt++) {
       try {
         await _client.from('users').upsert({

@@ -90,6 +90,25 @@ class ProfileCubit extends Cubit<ProfileState> {
 
   Future<void> refresh() => load(silent: true);
 
+  /// Whether this account already finished onboarding.
+  ///
+  /// Screen 1 asks this before routing: `onboarding_completed` was written by
+  /// the final onboarding step but never read, so every sign-in walked a
+  /// returning user back through the flow, and the upsert at the end
+  /// overwrote their row — including re-rolling their generated username.
+  ///
+  /// A failure answers false: unfinished onboarding is the safe assumption,
+  /// since finishing it again writes the same row rather than a second one.
+  Future<bool> hasCompletedOnboarding() async {
+    try {
+      final profile = await _userRepository.fetchProfile();
+      return profile?.onboardingCompleted ?? false;
+    } catch (error) {
+      debugPrint('Bulkr: could not read onboarding state — ${_describe(error)}');
+      return false;
+    }
+  }
+
   /// Trend figures over the loaded history.
   ProgressStats? get progress {
     final profile = state.profile;
