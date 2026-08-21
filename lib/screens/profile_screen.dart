@@ -92,6 +92,7 @@ class ProfileScreen extends StatelessWidget {
               weightHistory: state.weightHistory,
               progress: context.read<ProfileCubit>().progress!,
               insights: context.read<ProfileCubit>().insights,
+              historyErrorDetail: state.historyErrorDetail,
               isSaving: state.isSaving,
               onRefresh: () => context.read<ProfileCubit>().refresh(),
               onLogWeight: (kg) => context.read<ProfileCubit>().logWeight(kg),
@@ -137,6 +138,23 @@ class ProfileScreen extends StatelessWidget {
     final UserProfile? profile = cubit.state.profile;
     if (profile == null) return;
 
+    // BMR needs an age, and `date_of_birth` is nullable. Without it the sheet
+    // could only offer a disabled button, so say what is missing instead.
+    if (cubit.planForPace(cubit.suggestedWeeklyGainKg) == null) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            backgroundColor: const Color(0xFF2A2A2A),
+            content: Text(
+              'recalculate_needs_biometrics'.tr(),
+              style: GoogleFonts.inter(color: Colors.white, fontSize: 13.sp),
+            ),
+          ),
+        );
+      return;
+    }
+
     final NutritionPlan? plan = await RecalculateSheet.show(
       context,
       initialWeeklyGainKg: cubit.suggestedWeeklyGainKg,
@@ -157,6 +175,7 @@ class _ProfileView extends StatelessWidget {
     required this.weightHistory,
     required this.progress,
     required this.insights,
+    required this.historyErrorDetail,
     required this.isSaving,
     required this.onRefresh,
     required this.onLogWeight,
@@ -173,6 +192,9 @@ class _ProfileView extends StatelessWidget {
 
   /// Today's advice, ordered most urgent first.
   final List<Insight> insights;
+
+  /// Set when the weigh-in history could not be read at all.
+  final String? historyErrorDetail;
 
   final bool isSaving;
   final Future<void> Function() onRefresh;
@@ -366,10 +388,58 @@ class _ProfileView extends StatelessWidget {
                   Text('today'.tr(), style: _chartLabelStyle),
                 ],
               ),
+            if (historyErrorDetail != null) ...[
+              SizedBox(height: 12.h),
+              _buildHistoryError(historyErrorDetail!),
+            ],
             SizedBox(height: 20.h),
             _buildLogWeightButton(context),
           ],
         ),
+      ),
+    );
+  }
+
+  /// An empty chart because the table refused to be read is a different thing
+  /// from an empty chart because nothing has been logged. Say which.
+  Widget _buildHistoryError(String detail) {
+    return Container(
+      padding: EdgeInsets.all(10.w),
+      decoration: BoxDecoration(
+        color: const Color(0xFF2A1A0A),
+        borderRadius: BorderRadius.circular(4.r),
+        border: Border.all(color: const Color(0xFFFF9E3D)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.warning_amber_rounded,
+              color: const Color(0xFFFF9E3D), size: 16.sp),
+          SizedBox(width: 8.w),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'history_unavailable'.tr(),
+                  style: GoogleFonts.inter(
+                    color: const Color(0xFFFF9E3D),
+                    fontSize: 11.sp,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                SizedBox(height: 2.h),
+                Text(
+                  detail,
+                  style: GoogleFonts.robotoMono(
+                    color: const Color(0xFFFF9E3D),
+                    fontSize: 10.sp,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

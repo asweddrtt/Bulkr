@@ -152,5 +152,7 @@
   "insight_water_body_oz": "About {glasses} glasses at your bodyweight, and more on training days. Being under makes you feel flat and hungry.",
   "account_title": "Account",
   "account_no_email": "No email on this session",
-  "sign_out_btn": "Sign out"
+  "sign_out_btn": "Sign out",
+  "history_unavailable": "Couldn't read your weigh-ins",
+  "recalculate_needs_biometrics": "Recalculating needs your date of birth, which is missing from your profile."
 }

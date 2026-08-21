@@ -22,6 +22,7 @@ class ProfileState extends Equatable {
     this.isSaving = false,
     this.actionErrorKey,
     this.actionErrorDetail,
+    this.historyErrorDetail,
   });
 
   final ProfileStatus status;
@@ -35,6 +36,11 @@ class ProfileState extends Equatable {
 
   /// Translation key for a write that failed, cleared once shown.
   final String? actionErrorKey;
+
+  /// Why the weigh-in history could not be read, if it could not. The profile
+  /// still loads without it — but an empty chart and a forbidden table are not
+  /// the same thing and must not look the same.
+  final String? historyErrorDetail;
 
   /// The underlying failure, verbatim — a Postgres error code and message says
   /// "row-level security policy" where a friendly string just says "try again".
@@ -54,6 +60,8 @@ class ProfileState extends Equatable {
     bool? isSaving,
     String? actionErrorKey,
     String? actionErrorDetail,
+    String? historyErrorDetail,
+    bool clearHistoryError = false,
     bool clearActionError = false,
   }) {
     return ProfileState(
@@ -67,6 +75,9 @@ class ProfileState extends Equatable {
       actionErrorDetail: clearActionError
           ? null
           : (actionErrorDetail ?? this.actionErrorDetail),
+      historyErrorDetail: clearHistoryError
+          ? null
+          : (historyErrorDetail ?? this.historyErrorDetail),
     );
   }
 
@@ -79,5 +90,6 @@ class ProfileState extends Equatable {
         isSaving,
         actionErrorKey,
         actionErrorDetail,
+        historyErrorDetail,
       ];
 }

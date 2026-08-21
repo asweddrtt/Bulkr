@@ -61,10 +61,13 @@ class ProfileCubit extends Cubit<ProfileState> {
       // missing GRANT on that table — shouldn't take the whole profile down
       // with it.
       List<WeightEntry> history;
+      String? historyError;
       try {
         history = await _userRepository.fetchWeightHistory();
-      } catch (_) {
+      } catch (error) {
         history = state.weightHistory;
+        historyError = _describe(error);
+        debugPrint('Bulkr: weight history unavailable — $historyError');
       }
 
       if (isClosed) return;
@@ -72,6 +75,8 @@ class ProfileCubit extends Cubit<ProfileState> {
         status: ProfileStatus.ready,
         profile: profile,
         weightHistory: history,
+        historyErrorDetail: historyError,
+        clearHistoryError: historyError == null,
         clearError: true,
       ));
     } catch (error) {
@@ -194,9 +199,7 @@ class ProfileCubit extends Cubit<ProfileState> {
       // in the app to UPDATE `users` and to INSERT into `weight_logs` outside
       // onboarding, so a missing RLS policy shows up as a real Postgres error
       // that is worth reading rather than hiding behind "try again".
-      final String detail = error is PostgrestException
-          ? [error.code, error.message].whereType<String>().join(' · ')
-          : error.toString();
+      final String detail = _describe(error);
       debugPrint('Bulkr: profile write failed — $detail');
 
       emit(state.copyWith(
@@ -205,6 +208,16 @@ class ProfileCubit extends Cubit<ProfileState> {
         actionErrorDetail: detail,
       ));
     }
+  }
+
+  /// Postgres errors carry the useful part in [PostgrestException.code] —
+  /// 42501 is a row-level security refusal, which reads nothing like a network
+  /// problem and should never be reported as one.
+  static String _describe(Object error) {
+    if (error is PostgrestException) {
+      return [error.code, error.message].whereType<String>().join(' · ');
+    }
+    return error.toString();
   }
 
   /// Called once the failure has been shown, so it isn't repeated on rebuild.
