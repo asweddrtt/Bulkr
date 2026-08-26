@@ -6,26 +6,40 @@ import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../core/food_search_ranking.dart';
+import '../core/rate_limiter.dart';
 import '../models/food_item.dart';
 import '../models/macros.dart';
 
-/// Finds foods to put in a meal, and keeps the ones that get used.
+/// Finds foods to put in a meal.
 ///
-/// Three sources, in the order of how much the data behind them can be trusted:
+/// Three tiers, tried in order and stopping at the first that answers well:
 ///
-/// 1. `public.system_foods` — the curated list of whole foods. One round trip
-///    to our own database, and the reason typing "egg" offers an egg rather
-///    than a chocolate one.
-/// 2. `public.cached_off_foods` — anything anyone here has used before.
-/// 3. Open Food Facts — the long tail, roughly three million products.
+///   1. **Our own database** — `system_foods` (curated whole foods) and
+///      `cached_off_foods` (everything anyone here has used before). One round
+///      trip, no third party, and it gets better the more the app is used.
+///   2. **FatSecret**, through the `food-search` edge function. Good coverage of
+///      both generic and branded food. It runs server-side because its client
+///      secret cannot ship in an app, and the function writes what it finds
+///      straight into tier 1.
+///   3. **Open Food Facts** — the long tail and anything international.
 ///
-/// Whatever the three return is then re-ranked against the query by
-/// [FoodSearchRanking], because Open Food Facts' own ordering is not relevance:
-/// it matches loosely and sorts by how completely a product is documented, so
-/// "boiled eggs" comes back led by Kinder Eggs. That ordering never reaches the
-/// user.
+/// The tiers are sequential rather than parallel, and that is the point: Open
+/// Food Facts allows ten searches a minute per IP, so the cheapest way to stay
+/// under it is not to make the call. A query the cache can already answer well
+/// costs zero API calls, and tier 1 answers more queries as it fills.
 ///
-/// Product **images** from Open Food Facts are deliberately never read. A meal's
+/// Open Food Facts is called from the device rather than from the function on
+/// purpose. Its limit is per IP: routed through a function every user in the app
+/// would share one address and one budget of ten a minute between them. Spread
+/// across devices it is ten a minute *each*, and [_offLimiter] keeps each device
+/// under its own.
+///
+/// Whatever a tier returns is re-ranked by [FoodSearchRanking] before the user
+/// sees it. Open Food Facts in particular matches loosely and sorts by how
+/// completely a product is documented rather than by relevance, which is how
+/// "boiled eggs" comes back led by Kinder Eggs.
+///
+/// Product **images** from either provider are deliberately never read. A meal's
 /// photo is the user's own.
 class FoodRepository {
   FoodRepository({SupabaseClient? client, http.Client? httpClient})
@@ -77,36 +91,90 @@ class FoodRepository {
   /// Below this a query matches half the database and none of it usefully.
   static const int minQueryLength = 2;
 
+  /// The edge function holding the FatSecret credentials.
+  static const String _fatSecretFunction = 'food-search';
+
+  static const Duration _functionTimeout = Duration(seconds: 8);
+
+  /// What tier 1 has to produce to end the search there: a result matching
+  /// every word typed, and enough alternatives beside it that the user is
+  /// choosing rather than taking what they are given.
+  static const int _cacheIsEnoughCount = 5;
+
+  /// Eight rather than Open Food Facts' ten, so a retry or a stray call still
+  /// fits inside the minute.
+  static const int _offCallsPerMinute = 8;
+
+  /// One per device — see the note on tier 3 above.
+  final RateLimiter _offLimiter = RateLimiter(
+    maxCalls: _offCallsPerMinute,
+    window: const Duration(minutes: 1),
+  );
+
   /// Foods matching [query], best answer first.
   ///
-  /// Never throws: a failing Open Food Facts call still returns whatever the
-  /// two local tables found. A food search that goes blank when a third party
-  /// is down is broken, not degraded.
+  /// Walks the tiers until one answers well enough, so a query the cache
+  /// already covers never reaches a third party. Never throws: a tier that
+  /// fails is an empty tier, and the search moves on. A food search that goes
+  /// blank because someone else's service is down is broken, not degraded.
   Future<List<FoodItem>> search(String query) async {
     final String trimmed = query.trim();
     if (trimmed.length < minQueryLength) return const [];
 
-    final List<List<ScoredFood>> batches = await Future.wait([
+    final Map<String, ScoredFood> found = <String, ScoredFood>{};
+
+    // Tier 1 — our own tables. Run together: they are the same database, and
+    // neither is rate limited, so there is nothing to gain by serialising them.
+    final List<List<ScoredFood>> local = await Future.wait([
       _searchSystemFoods(trimmed),
       _searchCachedFoods(trimmed),
-      _searchOpenFoodFacts(trimmed),
     ]);
-
-    // Deduplicated by barcode before ranking, keeping the most trusted copy —
-    // otherwise a food we curated and the same barcode from Open Food Facts
-    // would both take up a row.
-    final Map<String, ScoredFood> byBarcode = <String, ScoredFood>{};
-    for (final List<ScoredFood> batch in batches) {
-      for (final ScoredFood candidate in batch) {
-        byBarcode.putIfAbsent(candidate.food.barcode, () => candidate);
-      }
+    for (final List<ScoredFood> batch in local) {
+      _collect(found, batch);
     }
 
-    return FoodSearchRanking.rank(
-      byBarcode.values,
-      trimmed,
-      limit: _resultLimit,
-    );
+    List<ScoredFood> ranked = _rank(found, trimmed);
+    if (_isEnough(ranked)) return _asFoods(ranked);
+
+    // Tier 2 — FatSecret, which caches into tier 1 as a side effect.
+    _collect(found, await _searchFatSecret(trimmed));
+
+    ranked = _rank(found, trimmed);
+    if (_isEnough(ranked)) return _asFoods(ranked);
+
+    // Tier 3 — Open Food Facts, for the long tail.
+    _collect(found, await _searchOpenFoodFacts(trimmed));
+
+    return _asFoods(_rank(found, trimmed));
+  }
+
+  /// Adds candidates the query has not already found.
+  ///
+  /// First tier to claim a barcode keeps it, so a curated food is never
+  /// shadowed by a scrappier copy of itself from further down.
+  static void _collect(
+    Map<String, ScoredFood> found,
+    List<ScoredFood> candidates,
+  ) {
+    for (final ScoredFood candidate in candidates) {
+      found.putIfAbsent(candidate.food.barcode, () => candidate);
+    }
+  }
+
+  List<ScoredFood> _rank(Map<String, ScoredFood> found, String query) =>
+      FoodSearchRanking.rankScored(found.values, query, limit: _resultLimit);
+
+  static List<FoodItem> _asFoods(List<ScoredFood> ranked) =>
+      ranked.map((c) => c.food).toList();
+
+  /// Whether to stop here rather than call the next tier.
+  ///
+  /// Both halves matter. A strong top result on its own is not enough — one
+  /// cached hit for "rice" would end every future search for rice at that one
+  /// row, and the cache would never grow past whatever landed in it first.
+  static bool _isEnough(List<ScoredFood> ranked) {
+    if (ranked.length < _cacheIsEnoughCount) return false;
+    return ranked.first.score >= FoodSearchRanking.strongMatchScore;
   }
 
   /// Ensures [food] exists in `cached_off_foods` and returns it carrying the row
@@ -146,6 +214,50 @@ class FoodRepository {
   /// Caches every food in [foods] concurrently, preserving order.
   Future<List<FoodItem>> ensureAllCached(Iterable<FoodItem> foods) {
     return Future.wait(foods.map(ensureCached));
+  }
+
+  /// Tier 2 — FatSecret, through the edge function that holds its secret.
+  ///
+  /// The function returns the rows it wrote to `cached_off_foods`, so results
+  /// arrive already carrying their cache id and can be referenced by a meal
+  /// without the app needing write access to that table.
+  Future<List<ScoredFood>> _searchFatSecret(String query) async {
+    try {
+      final FunctionResponse response = await _client.functions
+          .invoke(_fatSecretFunction, body: {'query': query})
+          .timeout(_functionTimeout);
+
+      final Object? data = response.data;
+      if (data is! Map) return const [];
+
+      // The function reports its own trouble in the body and still answers 200,
+      // so the cascade keeps moving instead of stopping on someone else's
+      // outage. Worth a line in the log: a missing secret looks exactly like a
+      // provider with no results for that word.
+      final Object? error = data['error'];
+      if (error != null) {
+        debugPrint('Bulkr: food-search reported "$error"');
+      }
+
+      final Object? foods = data['foods'];
+      if (foods is! List) return const [];
+
+      return foods
+          .whereType<Map<String, dynamic>>()
+          .map(FoodItem.fromCacheRow)
+          .map((food) => ScoredFood(
+                food: food,
+                source: FoodSource.fatSecret,
+                score: 0,
+              ))
+          .toList();
+    } on TimeoutException {
+      debugPrint('Bulkr: food-search timed out');
+      return const [];
+    } catch (error) {
+      debugPrint('Bulkr: food-search failed — $error');
+      return const [];
+    }
   }
 
   Future<List<ScoredFood>> _searchSystemFoods(String query) async {
@@ -198,6 +310,17 @@ class FoodRepository {
   /// that has moved or changed its response shape degrades to the old endpoint
   /// rather than to nothing.
   Future<List<ScoredFood>> _searchOpenFoodFacts(String query) async {
+    // Ten searches a minute per IP, and the eleventh fails for the rest of the
+    // minute — so the budget is spent deliberately here rather than discovered
+    // from a 429 after the user is already waiting.
+    if (!_offLimiter.tryCall()) {
+      debugPrint(
+        'Bulkr: Open Food Facts budget spent, '
+        '${_offLimiter.retryAfter.inSeconds}s until the window rolls over',
+      );
+      return const [];
+    }
+
     final List<FoodItem> primary = await _searchViaSearchService(query);
     if (primary.isNotEmpty) return _asCandidates(primary);
 

@@ -122,18 +122,40 @@ void main() {
   });
 
   group('source', () {
-    test('breaks a tie towards the list we curated', () {
+    test('breaks a tie towards the source we trust most', () {
       final ranked = FoodSearchRanking.rank([
         candidate('Olive oil', barcode: 'off', source: FoodSource.openFoodFacts),
         candidate('Olive oil', barcode: 'system', source: FoodSource.system),
+        candidate('Olive oil', barcode: 'fatsecret',
+            source: FoodSource.fatSecret),
         candidate('Olive oil', barcode: 'cached', source: FoodSource.cached),
       ], 'olive oil');
 
       // Identical text, identical names — only the source separates them.
       expect(
         ranked.map((f) => f.barcode).toList(),
-        ['system', 'cached', 'off'],
+        ['system', 'cached', 'fatsecret', 'off'],
       );
+    });
+
+    test('a full-coverage match clears the bar for stopping the cascade', () {
+      // strongMatchScore is what lets a search end at the local cache and make
+      // no API call at all, so it has to be reachable by a real result.
+      final ranked = FoodSearchRanking.rankScored([
+        candidate('Rice, white, cooked', source: FoodSource.cached),
+      ], 'rice');
+
+      expect(ranked.first.score,
+          greaterThanOrEqualTo(FoodSearchRanking.strongMatchScore));
+    });
+
+    test('a partial match does not clear it', () {
+      final ranked = FoodSearchRanking.rankScored([
+        candidate('Rice Krispies Squares', brand: 'Kelloggs'),
+      ], 'brown rice');
+
+      expect(ranked.first.score,
+          lessThan(FoodSearchRanking.strongMatchScore));
     });
   });
 

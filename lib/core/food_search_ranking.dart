@@ -3,9 +3,10 @@ import '../models/food_item.dart';
 /// Where a search result came from, which is the tie-breaker when two foods
 /// score the same on the text.
 ///
-/// Our own curated list beats the shared cache, which beats a cold hit from
-/// Open Food Facts — the order of how much we trust the data behind it.
-enum FoodSource { system, cached, openFoodFacts }
+/// Our own curated list beats the shared cache, which beats FatSecret, which
+/// beats a cold hit from Open Food Facts — the order of how much the data
+/// behind each can be trusted. Declaration order is also the tie-break order.
+enum FoodSource { system, cached, fatSecret, openFoodFacts }
 
 /// A candidate result, before it has earned its place in the list.
 class ScoredFood {
@@ -48,12 +49,27 @@ class FoodSearchRanking {
     'and', 'the', 'with', 'of', 'in', 'a', 'an', 'or', 'for',
   };
 
-  /// Ranks [candidates] against [query] and drops what does not belong.
+  /// The score a result reaches when every word typed appears in its name:
+  /// full coverage (300) plus the all-words bonus (200).
   ///
-  /// Ties are broken by source, then by the shorter name, so the result is
+  /// Used as the bar for "we already have a good answer for this" — the thing
+  /// that lets a search stop at the local cache and make no API call at all.
+  static const double strongMatchScore = 500;
+
+  /// Ranks [candidates] against [query] and drops what does not belong.
+  static List<FoodItem> rank(
+    Iterable<ScoredFood> candidates,
+    String query, {
+    int limit = 15,
+  }) =>
+      rankScored(candidates, query, limit: limit).map((c) => c.food).toList();
+
+  /// As [rank], but keeping each result's final score.
+  ///
+  /// Ties are broken by source, then by the shorter name, so the order is
   /// stable rather than dependent on which network call happened to finish
   /// first.
-  static List<FoodItem> rank(
+  static List<ScoredFood> rankScored(
     Iterable<ScoredFood> candidates,
     String query, {
     int limit = 15,
@@ -86,7 +102,7 @@ class FoodSearchRanking {
       return a.food.name.length.compareTo(b.food.name.length);
     });
 
-    return scored.take(limit).map((c) => c.food).toList();
+    return scored.take(limit).toList();
   }
 
   /// How well [food] answers [queryTokens], or [_rejected].
@@ -160,6 +176,7 @@ class FoodSearchRanking {
   static double _sourceBonus(FoodSource source) => switch (source) {
         FoodSource.system => 120,
         FoodSource.cached => 60,
+        FoodSource.fatSecret => 40,
         FoodSource.openFoodFacts => 0,
       };
 
