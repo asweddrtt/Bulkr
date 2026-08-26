@@ -7,9 +7,12 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/config/supabase_config.dart';
 import 'cubit/auth/auth_cubit.dart';
+import 'cubit/meals/meals_cubit.dart';
 import 'cubit/onboarding/onboarding_cubit.dart';
 import 'cubit/profile/profile_cubit.dart';
 import 'data/auth_repository.dart';
+import 'data/food_repository.dart';
+import 'data/meal_repository.dart';
 import 'data/user_repository.dart';
 import 'go_router/router_config.dart';
 import 'styles/app_color.dart';
@@ -43,6 +46,8 @@ class BulkrApp extends StatefulWidget {
 class _BulkrAppState extends State<BulkrApp> {
   late final AuthRepository _authRepository;
   late final UserRepository _userRepository;
+  late final FoodRepository _foodRepository;
+  late final MealRepository _mealRepository;
   late final GoRouter _router;
 
   @override
@@ -50,13 +55,31 @@ class _BulkrAppState extends State<BulkrApp> {
     super.initState();
     _authRepository = AuthRepository();
     _userRepository = UserRepository();
+    // One food repository for the whole app: it owns an HTTP client that is
+    // kept alive across searches rather than reopened per query.
+    _foodRepository = FoodRepository();
+    _mealRepository = MealRepository(foodRepository: _foodRepository);
     // Built once: rebuilding a GoRouter throws away the navigation stack.
     _router = AppRouter.build(authRepository: _authRepository);
   }
 
   @override
+  void dispose() {
+    _foodRepository.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return MultiBlocProvider(
+    return MultiRepositoryProvider(
+      // The create-meal screen builds its own cubit and needs both of these,
+      // so they are reachable from anywhere under the router rather than
+      // threaded down through the shell.
+      providers: [
+        RepositoryProvider.value(value: _mealRepository),
+        RepositoryProvider.value(value: _foodRepository),
+      ],
+      child: MultiBlocProvider(
       // Above the router on purpose — onboarding answers have to survive
       // navigation between the five steps.
       providers: [
@@ -68,6 +91,9 @@ class _BulkrAppState extends State<BulkrApp> {
         ),
         BlocProvider(
           create: (_) => ProfileCubit(userRepository: _userRepository),
+        ),
+        BlocProvider(
+          create: (_) => MealsCubit(mealRepository: _mealRepository),
         ),
       ],
       child: ScreenUtilInit(
@@ -94,6 +120,7 @@ class _BulkrAppState extends State<BulkrApp> {
             ),
           );
         },
+      ),
       ),
     );
   }

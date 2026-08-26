@@ -1,0 +1,178 @@
+import 'package:equatable/equatable.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../../data/meal_repository.dart';
+import '../../models/meal.dart';
+
+part 'meals_state.dart';
+
+/// Drives the Meals tab: the library, the two views over it, and the three
+/// things a card can do — favourite, log, open.
+class MealsCubit extends Cubit<MealsState> {
+  MealsCubit({required MealRepository mealRepository})
+      : _meals = mealRepository,
+        super(const MealsState());
+
+  final MealRepository _meals;
+
+  /// Translation key for a failed write.
+  static const String _actionFailedKey = 'meal_action_failed';
+
+  /// Loads the library.
+  ///
+  /// [silent] refreshes underneath what is on screen, so pull-to-refresh and
+  /// the reload after creating a meal don't blank the list out.
+  Future<void> load({bool silent = false}) async {
+    if (!silent) {
+      emit(state.copyWith(status: MealsStatus.loading, errorMessage: null));
+    }
+
+    try {
+      final List<Meal> library = await _meals.fetchLibrary();
+      if (isClosed) return;
+
+      emit(state.copyWith(
+        status: MealsStatus.ready,
+        library: library,
+        errorMessage: null,
+      ));
+    } catch (error) {
+      if (isClosed) return;
+
+      final String detail = _describe(error);
+      debugPrint('Bulkr: meal library failed to load — $detail');
+
+      // A silent refresh that fails leaves the list alone: the user asked for
+      // fresher data, not for what they were reading to be replaced by an error.
+      if (silent && state.status == MealsStatus.ready) {
+        emit(state.copyWith(
+          actionErrorKey: _actionFailedKey,
+          actionErrorDetail: detail,
+        ));
+        return;
+      }
+
+      emit(state.copyWith(
+        status: MealsStatus.failure,
+        errorMessage: detail,
+      ));
+    }
+  }
+
+  Future<void> refresh() => load(silent: true);
+
+  void selectTab(MealsTab tab) {
+    if (state.tab == tab) return;
+    emit(state.copyWith(tab: tab, clearLogged: true));
+  }
+
+  void search(String query) {
+    if (state.query == query) return;
+    emit(state.copyWith(query: query));
+  }
+
+  void clearSearch() => search('');
+
+  /// Flips a meal's favourite mark, updating the card before the write lands.
+  ///
+  /// Optimistic because a star that waits on the network feels broken, and the
+  /// only cost of being wrong is putting the mark back.
+  Future<void> toggleFavorite(Meal meal) async {
+    final bool next = !meal.isFavorite;
+
+    emit(state.copyWith(
+      library: _replace(meal.copyWith(isFavorite: next, isSaved: true)),
+      clearActionError: true,
+    ));
+
+    try {
+      await _meals.setFavorite(mealId: meal.id, isFavorite: next);
+    } catch (error) {
+      if (isClosed) return;
+
+      final String detail = _describe(error);
+      debugPrint('Bulkr: favourite write failed — $detail');
+
+      emit(state.copyWith(
+        library: _replace(meal),
+        actionErrorKey: _actionFailedKey,
+        actionErrorDetail: detail,
+      ));
+    }
+  }
+
+  /// Adds one serving of [meal] to today's log.
+  ///
+  /// Not optimistic, unlike favouriting: a calorie total the user believes was
+  /// recorded and was not is worth the half-second of waiting.
+  Future<void> logMealToday(Meal meal) async {
+    if (state.busyMealId != null) return;
+
+    emit(state.copyWith(
+      busyMealId: meal.id,
+      clearLogged: true,
+      clearActionError: true,
+    ));
+
+    try {
+      await _meals.logMealToday(meal);
+      if (isClosed) return;
+
+      emit(state.copyWith(clearBusy: true, loggedMealId: meal.id));
+    } catch (error) {
+      if (isClosed) return;
+
+      final String detail = _describe(error);
+      debugPrint('Bulkr: meal log failed — $detail');
+
+      emit(state.copyWith(
+        clearBusy: true,
+        actionErrorKey: _actionFailedKey,
+        actionErrorDetail: detail,
+      ));
+    }
+  }
+
+  /// Called once the confirmation tick has been shown.
+  void clearLoggedMark() {
+    if (state.loggedMealId == null) return;
+    emit(state.copyWith(clearLogged: true));
+  }
+
+  /// Called once a failure has been surfaced, so it isn't repeated on rebuild.
+  void clearActionError() {
+    if (state.actionErrorKey == null) return;
+    emit(state.copyWith(clearActionError: true));
+  }
+
+  /// Drops a freshly created meal straight into the library, so the list is
+  /// correct before the refetch that follows returns.
+  void adopt(Meal meal) {
+    emit(state.copyWith(
+      library: [meal, ...state.library.where((m) => m.id != meal.id)],
+      tab: MealsTab.mine,
+      query: '',
+    ));
+  }
+
+  List<Meal> _replace(Meal updated) {
+    return state.library
+        .map((meal) => meal.id == updated.id ? updated : meal)
+        .toList();
+  }
+
+  /// Postgres carries the useful part in the code — 42501 is a row-level
+  /// security refusal, which reads nothing like a network problem and should
+  /// never be reported as one.
+  static String _describe(Object error) {
+    if (error is PostgrestException) {
+      return [error.code, error.message].whereType<String>().join(' · ');
+    }
+    if (error is StorageException) {
+      return [error.statusCode, error.message].whereType<String>().join(' · ');
+    }
+    return error.toString();
+  }
+}

@@ -2,6 +2,13 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- image_picker: shown when the user attaches a photo to a meal. iOS
+	     rejects the app at review time without these, and crashes the picker at
+	     runtime with no message the user can act on. -->
+	<key>NSCameraUsageDescription</key>
+	<string>Bulkr uses the camera so you can photograph a meal you are adding.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Bulkr needs your photo library so you can pick an existing photo for a meal.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

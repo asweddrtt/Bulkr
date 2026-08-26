@@ -4,10 +4,12 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../cubit/meals/meals_cubit.dart';
 import '../cubit/profile/profile_cubit.dart';
 import '../styles/app_color.dart';
 import '../widgets/animations/motion.dart';
 import '../widgets/animations/press_scale.dart';
+import 'meals_screen.dart';
 import 'profile_screen.dart';
 
 const Color _textMuted = Color(0xFF9CA3AF);
@@ -36,6 +38,7 @@ class _MainScreenState extends State<MainScreen> {
     // Fetched once when the shell mounts rather than on each tab switch, so
     // moving between tabs doesn't re-hit the network.
     context.read<ProfileCubit>().load();
+    context.read<MealsCubit>().load();
   }
 
   @override
@@ -50,7 +53,7 @@ class _MainScreenState extends State<MainScreen> {
           index: _currentIndex,
           children: const [
             _ComingSoon(labelKey: 'dashboard'),
-            _ComingSoon(labelKey: 'workouts'),
+            MealsScreen(),
             _ComingSoon(labelKey: 'progress'),
             ProfileScreen(),
           ],

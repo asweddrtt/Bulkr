@@ -47,6 +47,14 @@ dependencies:
   equatable: ^2.0.7
   google_sign_in: ^7.2.0
   flutter_launcher_icons: ^0.14.4
+
+  # Meal photos: the user's own camera or library. Open Food Facts product
+  # images are deliberately never used.
+  image_picker: ^1.1.2
+
+  # Open Food Facts lookups. supabase_flutter already depends on http, but the
+  # food repository calls it directly, so it is declared rather than inherited.
+  http: ^1.2.2
   # NOTE: `intl` (DateFormat/NumberFormat) is not listed here on purpose —
   # easy_localization re-exports it, which is how NumberFormat is already used
   # in the reveal screen. Adding it explicitly risks a resolution conflict with
