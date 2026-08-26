@@ -280,6 +280,70 @@ class MealRepository {
     }
   }
 
+  /// Deletes a meal the user created, and its photo.
+  ///
+  /// The database handles everything pointing at it: ingredients and other
+  /// people's `saved_meals` rows go with it, while `daily_logs` and `posts`
+  /// keep their rows and lose only the link. A past day's log is a record of
+  /// what someone ate and is not the meal's to erase — which is why the log
+  /// row carries its own copy of the calories in the first place.
+  ///
+  /// The photo is removed after the row, and only best-effort: an orphaned file
+  /// in the bucket costs a few kilobytes, whereas failing here after the row is
+  /// already gone would report a delete that plainly did happen as an error.
+  Future<void> deleteMeal(Meal meal) async {
+    final String? userId = _userId;
+    if (userId == null) return;
+
+    if (meal.creatorId != userId) {
+      throw StateError('Only the creator of a meal can delete it');
+    }
+
+    await _client.from('meals').delete().eq('id', meal.id);
+
+    final String? path = storagePathFor(meal.imageUrl);
+    if (path == null) return;
+
+    try {
+      await _client.storage.from(imageBucket).remove([path]);
+    } catch (error) {
+      debugPrint('Bulkr: meal deleted, its photo was not — $error');
+    }
+  }
+
+  /// Drops someone else's meal out of this user's library.
+  ///
+  /// Only the `saved_meals` row goes. The meal belongs to whoever wrote it and
+  /// stays exactly where it was, in their library and in the feed.
+  Future<void> removeFromLibrary(Meal meal) async {
+    final String? userId = _userId;
+    if (userId == null) return;
+
+    await _client
+        .from('saved_meals')
+        .delete()
+        .eq('user_id', userId)
+        .eq('meal_id', meal.id);
+  }
+
+  /// The object path inside [imageBucket] that a public URL points at.
+  ///
+  /// Returns null for a meal with no photo, and for a URL that does not belong
+  /// to this bucket — an image hosted anywhere else is not ours to delete.
+  @visibleForTesting
+  static String? storagePathFor(String? publicUrl) {
+    if (publicUrl == null || publicUrl.isEmpty) return null;
+
+    const String marker = '/public/$imageBucket/';
+    final int start = publicUrl.indexOf(marker);
+    if (start < 0) return null;
+
+    // Query strings appear on signed and transformed URLs, never on the object
+    // path itself.
+    final String path = publicUrl.substring(start + marker.length).split('?').first;
+    return path.isEmpty ? null : Uri.decodeComponent(path);
+  }
+
   /// Marks a meal as a favourite, or clears the mark.
   ///
   /// Favouriting is recorded on `saved_meals`, which means favouriting a meal

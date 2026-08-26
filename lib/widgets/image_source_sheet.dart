@@ -1,11 +1,9 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 
-import '../styles/app_color.dart';
-import 'animations/press_scale.dart';
+import 'sheet_action_row.dart';
 
 /// Asks whether the photo is being taken now or already exists.
 ///
@@ -34,56 +32,30 @@ class ImageSourceSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.fromLTRB(20.w, 16.h, 20.w, 12.h),
-      decoration: BoxDecoration(
-        color: const Color(0xFF151515),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(14.r)),
-        border: Border(top: BorderSide(color: AppColors.darkBorder)),
-      ),
-      child: SafeArea(
-        top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'meal_photo_title'.tr().toUpperCase(),
-              style: GoogleFonts.anton(
-                fontSize: 16.sp,
-                color: Colors.white,
-                letterSpacing: 1,
-              ),
-            ),
-            SizedBox(height: 16.h),
-            _SourceRow(
-              icon: Icons.photo_camera_rounded,
-              label: 'meal_photo_camera'.tr(),
-              onTap: () =>
-                  Navigator.of(context).pop(ImageSourceChoice.camera),
-            ),
-            SizedBox(height: 10.h),
-            _SourceRow(
-              icon: Icons.photo_library_rounded,
-              label: 'meal_photo_library'.tr(),
-              onTap: () =>
-                  Navigator.of(context).pop(ImageSourceChoice.library),
-            ),
-            if (canRemove) ...[
-              SizedBox(height: 10.h),
-              _SourceRow(
-                icon: Icons.delete_outline_rounded,
-                label: 'meal_photo_remove'.tr(),
-                isDestructive: true,
-                onTap: () =>
-                    Navigator.of(context).pop(ImageSourceChoice.remove),
-              ),
-            ],
-            SizedBox(height: 8.h),
-          ],
+    return SheetShell(
+      title: 'meal_photo_title'.tr(),
+      children: [
+        SheetActionRow(
+          icon: Icons.photo_camera_rounded,
+          label: 'meal_photo_camera'.tr(),
+          onTap: () => Navigator.of(context).pop(ImageSourceChoice.camera),
         ),
-      ),
+        SizedBox(height: 10.h),
+        SheetActionRow(
+          icon: Icons.photo_library_rounded,
+          label: 'meal_photo_library'.tr(),
+          onTap: () => Navigator.of(context).pop(ImageSourceChoice.library),
+        ),
+        if (canRemove) ...[
+          SizedBox(height: 10.h),
+          SheetActionRow(
+            icon: Icons.delete_outline_rounded,
+            label: 'meal_photo_remove'.tr(),
+            isDestructive: true,
+            onTap: () => Navigator.of(context).pop(ImageSourceChoice.remove),
+          ),
+        ],
+      ],
     );
   }
 }
@@ -100,55 +72,4 @@ enum ImageSourceChoice {
         ImageSourceChoice.library => ImageSource.gallery,
         ImageSourceChoice.remove => null,
       };
-}
-
-class _SourceRow extends StatelessWidget {
-  const _SourceRow({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-    this.isDestructive = false,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  final bool isDestructive;
-
-  static const Color _destructive = Color(0xFFFF5722);
-
-  @override
-  Widget build(BuildContext context) {
-    final Color tint = isDestructive ? _destructive : AppColors.primaryNeon;
-
-    return PressScale(
-      child: GestureDetector(
-        onTap: onTap,
-        behavior: HitTestBehavior.opaque,
-        child: Container(
-          padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 14.h),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1C1C1C),
-            borderRadius: BorderRadius.circular(5.r),
-            border: Border.all(color: AppColors.darkBorder),
-          ),
-          child: Row(
-            children: [
-              Icon(icon, color: tint, size: 20.sp),
-              SizedBox(width: 12.w),
-              Text(
-                label.toUpperCase(),
-                style: GoogleFonts.inter(
-                  fontSize: 12.sp,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
-                  letterSpacing: 1.2,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }

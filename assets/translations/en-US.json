@@ -208,5 +208,17 @@
   "food_search_prompt": "Type at least two letters to search for a food.",
   "food_search_empty": "Nothing found. Try a shorter or more common name.",
   "food_per_100g": "Per 100g · {kcal} kcal · P{protein} C{carbs} F{fat}",
-  "gram_short": "g"
+  "gram_short": "g",
+  "meal_delete": "Delete meal",
+  "meal_delete_helper": "Gone for good. Past days you logged it keep their calories.",
+  "meal_delete_public_helper": "Gone for good, and out of the library of anyone who saved it. Past days you logged it keep their calories.",
+  "meal_remove": "Remove from my meals",
+  "meal_remove_helper": "The meal stays with whoever made it. You can save it again later.",
+  "meal_delete_confirm_title": "Delete this meal?",
+  "meal_delete_confirm_body": "\"{meal}\" will be gone for good.",
+  "meal_delete_confirm_public_body": "\"{meal}\" will be gone for good, and will disappear from the meals of anyone who saved it.",
+  "meal_delete_confirm": "Delete",
+  "meal_delete_cancel": "Keep it",
+  "meal_deleted": "{meal} deleted",
+  "meal_removed": "{meal} removed from your meals"
 }

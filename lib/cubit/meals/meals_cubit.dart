@@ -135,6 +135,45 @@ class MealsCubit extends Cubit<MealsState> {
     }
   }
 
+  /// Takes a meal out of the library.
+  ///
+  /// Which write that is depends on whose meal it is — the user's own is
+  /// deleted outright, someone else's is only unsaved — and [Meal.isMine] is the
+  /// single place that decides.
+  ///
+  /// Optimistic: the card goes immediately and comes back if the write fails.
+  /// Restoring the whole previous list rather than re-inserting at an index
+  /// keeps the order right even if something else changed the library while the
+  /// delete was in flight.
+  Future<void> removeMeal(Meal meal) async {
+    final List<Meal> before = state.library;
+
+    emit(state.copyWith(
+      library: before.where((m) => m.id != meal.id).toList(),
+      clearLogged: true,
+      clearActionError: true,
+    ));
+
+    try {
+      if (meal.isMine) {
+        await _meals.deleteMeal(meal);
+      } else {
+        await _meals.removeFromLibrary(meal);
+      }
+    } catch (error) {
+      if (isClosed) return;
+
+      final String detail = _describe(error);
+      debugPrint('Bulkr: meal removal failed — $detail');
+
+      emit(state.copyWith(
+        library: before,
+        actionErrorKey: _actionFailedKey,
+        actionErrorDetail: detail,
+      ));
+    }
+  }
+
   /// Called once the confirmation tick has been shown.
   void clearLoggedMark() {
     if (state.loggedMealId == null) return;
