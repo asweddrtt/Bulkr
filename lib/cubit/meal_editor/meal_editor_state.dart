@@ -16,6 +16,7 @@ class MealEditorState extends Equatable {
     this.searchStatus = FoodSearchStatus.idle,
     this.searchResults = const [],
     this.savedMeal,
+    this.savedWithoutIngredients = false,
     this.errorKey,
     this.errorDetail,
   });
@@ -34,6 +35,11 @@ class MealEditorState extends Equatable {
 
   /// Set once the write lands, so the screen can hand it back to the library.
   final Meal? savedMeal;
+
+  /// The meal saved with the right calories but without its ingredient rows —
+  /// almost always `cached_off_foods` refusing the write. Worth telling the
+  /// user about, and not worth failing the save over.
+  final bool savedWithoutIngredients;
 
   final String? errorKey;
   final String? errorDetail;
@@ -58,6 +64,7 @@ class MealEditorState extends Equatable {
     FoodSearchStatus? searchStatus,
     List<FoodItem>? searchResults,
     Meal? savedMeal,
+    bool? savedWithoutIngredients,
     String? errorKey,
     String? errorDetail,
     bool clearError = false,
@@ -71,6 +78,8 @@ class MealEditorState extends Equatable {
       searchStatus: searchStatus ?? this.searchStatus,
       searchResults: searchResults ?? this.searchResults,
       savedMeal: savedMeal ?? this.savedMeal,
+      savedWithoutIngredients:
+          savedWithoutIngredients ?? this.savedWithoutIngredients,
       errorKey: clearError ? null : (errorKey ?? this.errorKey),
       errorDetail: clearError ? null : (errorDetail ?? this.errorDetail),
     );
@@ -86,6 +95,7 @@ class MealEditorState extends Equatable {
         searchStatus,
         searchResults,
         savedMeal,
+        savedWithoutIngredients,
         errorKey,
         errorDetail,
       ];

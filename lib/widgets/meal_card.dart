@@ -19,6 +19,7 @@ class MealCard extends StatelessWidget {
     required this.meal,
     required this.onLog,
     required this.onToggleFavorite,
+    required this.onShowActions,
     this.onOpen,
     this.isLogging = false,
     this.wasJustLogged = false,
@@ -30,6 +31,9 @@ class MealCard extends StatelessWidget {
   final VoidCallback onLog;
 
   final VoidCallback onToggleFavorite;
+
+  /// Opens the overflow menu, which is where removing this meal lives.
+  final VoidCallback onShowActions;
 
   /// Opens the detail view. Null until there is one to open.
   final VoidCallback? onOpen;
@@ -111,7 +115,16 @@ class MealCard extends StatelessWidget {
                     ),
             ),
             Positioned(top: 10.h, left: 10.w, child: _buildEmphasisChip()),
-            Positioned(top: 6.h, right: 6.w, child: _buildFavoriteButton()),
+            Positioned(
+              top: 6.h,
+              right: 6.w,
+              child: Row(
+                children: [
+                  _buildFavoriteButton(),
+                  _buildOverflowButton(),
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -167,6 +180,24 @@ class MealCard extends StatelessWidget {
             meal.isFavorite ? Icons.star_rounded : Icons.star_border_rounded,
             size: 24.sp,
             color: meal.isFavorite ? AppColors.primaryNeon : Colors.white,
+            shadows: const [Shadow(color: Colors.black54, blurRadius: 6)],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOverflowButton() {
+    return PressScale(
+      child: GestureDetector(
+        onTap: onShowActions,
+        behavior: HitTestBehavior.opaque,
+        child: Padding(
+          padding: EdgeInsets.all(8.w),
+          child: Icon(
+            Icons.more_vert_rounded,
+            size: 22.sp,
+            color: Colors.white,
             shadows: const [Shadow(color: Colors.black54, blurRadius: 6)],
           ),
         ),

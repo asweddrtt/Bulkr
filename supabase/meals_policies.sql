@@ -1,3 +1,8 @@
+-- RUN THIS FIRST. Without it the app reports
+--   42501 · new row violates row-level security policy for table "..."
+-- on the first meal you try to save, because RLS is on and the tables have no
+-- policies at all — the same state weight_logs was in.
+--
 -- Meals tab: the one additive column it needs, row-level security for every
 -- table it touches, the storage bucket for meal photos, and the indexes the
 -- queries assume.
@@ -192,6 +197,55 @@ create index if not exists system_foods_product_name_trgm_idx
   on public.system_foods using gin (product_name gin_trgm_ops);
 
 -- ---------------------------------------------------------------------------
+-- 5. What happens to everything else when a meal is deleted
+-- ---------------------------------------------------------------------------
+-- Four tables point at `meals`, and the default (NO ACTION) means deleting a
+-- meal that has ever been used simply fails. Each one wants a different answer,
+-- and the difference matters:
+--
+--   meal_ingredients  cascade   the ingredients ARE the meal; nothing survives it
+--   saved_meals       cascade   a library entry for a meal that no longer exists
+--                               is a blank card, so the row goes with it
+--   daily_logs        set null  NEVER cascade. A log row records what someone ate
+--                               on a day that has already happened, and it carries
+--                               its own copy of the calories and macros precisely
+--                               so deleting the meal cannot rewrite history. It
+--                               loses the link, not the meal.
+--   posts             set null  the post is the author's writing and stays; only
+--                               the attachment goes
+--
+-- Cascades run as the table owner, so they reach other users' saved_meals rows
+-- that RLS would never let the deleting user touch directly. That is intended:
+-- deleting a public meal has to be able to clean up after itself.
+--
+-- Drop-then-add rather than a bare add, so this section is re-runnable like the
+-- rest of the file.
+
+alter table public.meal_ingredients
+  drop constraint if exists meal_ingredients_meal_id_fkey;
+alter table public.meal_ingredients
+  add constraint meal_ingredients_meal_id_fkey
+  foreign key (meal_id) references public.meals(id) on delete cascade;
+
+alter table public.saved_meals
+  drop constraint if exists saved_meals_meal_id_fkey;
+alter table public.saved_meals
+  add constraint saved_meals_meal_id_fkey
+  foreign key (meal_id) references public.meals(id) on delete cascade;
+
+alter table public.daily_logs
+  drop constraint if exists daily_logs_meal_id_fkey;
+alter table public.daily_logs
+  add constraint daily_logs_meal_id_fkey
+  foreign key (meal_id) references public.meals(id) on delete set null;
+
+alter table public.posts
+  drop constraint if exists posts_attached_meal_id_fkey;
+alter table public.posts
+  add constraint posts_attached_meal_id_fkey
+  foreign key (attached_meal_id) references public.meals(id) on delete set null;
+
+-- ---------------------------------------------------------------------------
 -- Verify
 -- ---------------------------------------------------------------------------
 --   select tablename, policyname, cmd from pg_policies
@@ -200,6 +254,13 @@ create index if not exists system_foods_product_name_trgm_idx
 --    order by tablename, cmd;
 --
 --   select id, public from storage.buckets where id = 'meal-images';
+--
+-- And that a deleted meal takes the right things with it:
+--   select tc.table_name, tc.constraint_name, rc.delete_rule
+--     from information_schema.referential_constraints rc
+--     join information_schema.table_constraints tc
+--       on tc.constraint_name = rc.constraint_name
+--    where rc.unique_constraint_name = 'meals_pkey';
 --
 -- And to confirm no table has RLS on with no policy at all:
 --   select c.relname,

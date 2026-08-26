@@ -9,6 +9,7 @@ import '../models/meal.dart';
 import '../styles/app_color.dart';
 import '../widgets/animations/entrance.dart';
 import '../widgets/animations/press_scale.dart';
+import '../widgets/meal_actions_sheet.dart';
 import '../widgets/meal_card.dart';
 import 'create_meal_screen.dart';
 
@@ -301,6 +302,7 @@ class _MealsList extends StatelessWidget {
             onLog: () => _logMeal(context, meal),
             onToggleFavorite: () =>
                 context.read<MealsCubit>().toggleFavorite(meal),
+            onShowActions: () => _showActions(context, meal),
           );
         },
       ),
@@ -330,6 +332,43 @@ class _MealsList extends StatelessWidget {
               fontSize: 12.sp,
               fontWeight: FontWeight.w700,
             ),
+          ),
+        ),
+      );
+  }
+
+  /// Overflow menu, then — for a meal the user wrote — a confirmation, because
+  /// deleting it also takes it out of the library of everyone who saved it.
+  Future<void> _showActions(BuildContext context, Meal meal) async {
+    final MealsCubit cubit = context.read<MealsCubit>();
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+
+    final MealAction? action = await MealActionsSheet.show(context, meal);
+    if (action == null || !context.mounted) return;
+
+    if (action == MealAction.delete &&
+        !await DeleteMealDialog.show(context, meal)) {
+      return;
+    }
+
+    await cubit.removeMeal(meal);
+
+    // The card is already gone by the time this runs; say which meal left, so
+    // an accidental tap is obvious rather than just a list that got shorter.
+    if (cubit.state.actionErrorKey != null) return;
+
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          backgroundColor: const Color(0xFF2A2A2A),
+          duration: const Duration(seconds: 2),
+          content: Text(
+            (action == MealAction.delete
+                    ? 'meal_deleted'
+                    : 'meal_removed')
+                .tr(args: {'meal': meal.title}),
+            style: GoogleFonts.inter(color: Colors.white, fontSize: 12.sp),
           ),
         ),
       );

@@ -187,7 +187,17 @@ class MealEditorCubit extends Cubit<MealEditorState> {
       );
 
       if (isClosed) return;
-      emit(state.copyWith(status: MealEditorStatus.saved, savedMeal: meal));
+
+      // The repository returns the ingredients only when they were stored, so
+      // an itemised draft that comes back bare is a partial save.
+      final bool lostIngredients =
+          state.draft.hasIngredients && meal.ingredients.isEmpty;
+
+      emit(state.copyWith(
+        status: MealEditorStatus.saved,
+        savedMeal: meal,
+        savedWithoutIngredients: lostIngredients,
+      ));
     } catch (error) {
       if (isClosed) return;
 

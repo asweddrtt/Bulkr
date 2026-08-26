@@ -167,9 +167,19 @@ class MealRepository {
   ///
   /// Order matters. The photo goes up first because a failed upload should not
   /// leave a meal row behind; the meal row is next because the ingredient rows
-  /// need its id; the ingredients land last and are the only step allowed to
-  /// fail without taking the meal with it — a saved meal missing one ingredient
-  /// line can be edited, whereas a lost meal has to be retyped.
+  /// need its id; the ingredients land last.
+  ///
+  /// The ingredients are the only part allowed to fail without taking the meal
+  /// with it, and that is deliberate. They depend on `cached_off_foods`, a table
+  /// shared by every user, so they are the step most likely to be refused by a
+  /// policy — and the calorie totals are computed on the device from the draft
+  /// and do not need them. A meal that saves with the right numbers and no
+  /// itemisation can be fixed later; a photo, a name, a recipe and eight
+  /// ingredients lost to a permissions error on a cache table have to be typed
+  /// again from nothing.
+  ///
+  /// The returned meal carries its [Meal.ingredients] only when they were
+  /// stored, which is how the caller can tell a whole save from a partial one.
   Future<Meal> createMeal({
     required MealDraft draft,
     Uint8List? imageBytes,
@@ -180,7 +190,14 @@ class MealRepository {
       throw StateError('Cannot create a meal without a signed-in user');
     }
 
-    final List<MealIngredient> ingredients = await _cacheIngredientFoods(draft);
+    List<MealIngredient> ingredients;
+    try {
+      ingredients = await _cacheIngredientFoods(draft);
+    } catch (error) {
+      debugPrint('Bulkr: ingredients could not be cached — $error');
+      ingredients = const [];
+    }
+
     final Macros totals = draft.totals;
 
     String? imageUrl;
@@ -278,6 +295,70 @@ class MealRepository {
       default:
         return 'image/jpeg';
     }
+  }
+
+  /// Deletes a meal the user created, and its photo.
+  ///
+  /// The database handles everything pointing at it: ingredients and other
+  /// people's `saved_meals` rows go with it, while `daily_logs` and `posts`
+  /// keep their rows and lose only the link. A past day's log is a record of
+  /// what someone ate and is not the meal's to erase — which is why the log
+  /// row carries its own copy of the calories in the first place.
+  ///
+  /// The photo is removed after the row, and only best-effort: an orphaned file
+  /// in the bucket costs a few kilobytes, whereas failing here after the row is
+  /// already gone would report a delete that plainly did happen as an error.
+  Future<void> deleteMeal(Meal meal) async {
+    final String? userId = _userId;
+    if (userId == null) return;
+
+    if (meal.creatorId != userId) {
+      throw StateError('Only the creator of a meal can delete it');
+    }
+
+    await _client.from('meals').delete().eq('id', meal.id);
+
+    final String? path = storagePathFor(meal.imageUrl);
+    if (path == null) return;
+
+    try {
+      await _client.storage.from(imageBucket).remove([path]);
+    } catch (error) {
+      debugPrint('Bulkr: meal deleted, its photo was not — $error');
+    }
+  }
+
+  /// Drops someone else's meal out of this user's library.
+  ///
+  /// Only the `saved_meals` row goes. The meal belongs to whoever wrote it and
+  /// stays exactly where it was, in their library and in the feed.
+  Future<void> removeFromLibrary(Meal meal) async {
+    final String? userId = _userId;
+    if (userId == null) return;
+
+    await _client
+        .from('saved_meals')
+        .delete()
+        .eq('user_id', userId)
+        .eq('meal_id', meal.id);
+  }
+
+  /// The object path inside [imageBucket] that a public URL points at.
+  ///
+  /// Returns null for a meal with no photo, and for a URL that does not belong
+  /// to this bucket — an image hosted anywhere else is not ours to delete.
+  @visibleForTesting
+  static String? storagePathFor(String? publicUrl) {
+    if (publicUrl == null || publicUrl.isEmpty) return null;
+
+    const String marker = '/public/$imageBucket/';
+    final int start = publicUrl.indexOf(marker);
+    if (start < 0) return null;
+
+    // Query strings appear on signed and transformed URLs, never on the object
+    // path itself.
+    final String path = publicUrl.substring(start + marker.length).split('?').first;
+    return path.isEmpty ? null : Uri.decodeComponent(path);
   }
 
   /// Marks a meal as a favourite, or clears the mark.
