@@ -14,3 +14,4 @@
 .dart_tool/
 .cxx
 local.properties
+.kotlin/
