@@ -74,11 +74,18 @@ class UserRepository {
     return UserProfile.fromMap(row);
   }
 
-  /// Weigh-ins, oldest first, for the progress chart.
+  /// Weigh-ins, oldest first, for the progress chart — at most one per day.
   ///
-  /// Fetched newest-first so the limit keeps the most *recent* entries, then
-  /// reversed for plotting — otherwise a user with a long history would see
-  /// their first 90 days forever and never the current trend.
+  /// Fetched newest-first so the limit keeps the most *recent* rows, then
+  /// collapsed to the last weigh-in of each calendar day and sorted for
+  /// plotting — otherwise a user with a long history would see their first 90
+  /// days forever and never the current trend.
+  ///
+  /// [logWeight] already keeps one row per day going forward; the collapse here
+  /// is what makes rows written before that rule — a re-run onboarding seed, a
+  /// day someone logged four times — read as a single point too. [limit] caps
+  /// rows read, so a history full of such duplicates yields fewer than [limit]
+  /// days.
   Future<List<WeightEntry>> fetchWeightHistory({int limit = 90}) async {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) return const [];
@@ -90,14 +97,15 @@ class UserRepository {
         .order('logged_at', ascending: false)
         .limit(limit);
 
-    return rows
-        .map((row) => WeightEntry.fromMap(row))
-        .toList()
-        .reversed
-        .toList();
+    return WeightEntry.latestPerDay(rows.map(WeightEntry.fromMap));
   }
 
-  /// Records a new weigh-in and moves the profile's current weight with it.
+  /// Records today's weigh-in and moves the profile's current weight with it.
+  ///
+  /// Logging again on the same day overrides the earlier figure rather than
+  /// stacking a second point on the chart: a day has one weight, and the last
+  /// number the user entered is the one they meant. They can re-log as often as
+  /// they like — only the final value for the day survives.
   ///
   /// Two writes, deliberately in this order: the log row is the historical
   /// record and the one the chart reads, so it lands first. If the profile
@@ -108,15 +116,47 @@ class UserRepository {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) return;
 
-    await _client.from('weight_logs').insert({
-      'user_id': userId,
-      'weight_kg': weightKg,
-    });
+    await _writeDailyWeightLog(userId: userId, weightKg: weightKg);
 
     await _client.from('users').update({
       'current_weight_kg': weightKg,
       'last_active_at': DateTime.now().toUtc().toIso8601String(),
     }).eq('id', userId);
+  }
+
+  /// Writes one weigh-in and clears whatever the same local day already held.
+  ///
+  /// Insert first, then delete the superseded rows — never the other way
+  /// round. A failure between the two leaves a duplicate for the day, which
+  /// [fetchWeightHistory] collapses to the newest row anyway; deleting first
+  /// would leave a failed insert with no measurement at all for the day.
+  ///
+  /// `logged_at` is sent explicitly rather than left to the column default so
+  /// the row's timestamp is the same clock the day boundary below is measured
+  /// against.
+  Future<void> _writeDailyWeightLog({
+    required String userId,
+    required double weightKg,
+  }) async {
+    final DateTime loggedAt = DateTime.now();
+    final DateTime startOfDay =
+        DateTime(loggedAt.year, loggedAt.month, loggedAt.day);
+    final String stamp = loggedAt.toUtc().toIso8601String();
+
+    await _client.from('weight_logs').insert({
+      'user_id': userId,
+      'weight_kg': weightKg,
+      'logged_at': stamp,
+    });
+
+    // Bounded on both sides: only this user's own earlier rows from today, and
+    // never the row just written.
+    await _client
+        .from('weight_logs')
+        .delete()
+        .eq('user_id', userId)
+        .gte('logged_at', startOfDay.toUtc().toIso8601String())
+        .lt('logged_at', stamp);
   }
 
   /// Moves the goalpost. Does not touch the calorie target: the target follows
@@ -228,6 +268,10 @@ class UserRepository {
 
   /// Day-one entry in `weight_logs`.
   ///
+  /// Goes through the same day-scoped write as [logWeight], so an account that
+  /// re-runs onboarding replaces today's seed instead of adding a second one
+  /// beside it.
+  ///
   /// Deliberately non-fatal: the account is already created and usable at this
   /// point, and failing the whole flow over a chart data point would strand the
   /// user on screen 5 with a row that already exists.
@@ -236,10 +280,7 @@ class UserRepository {
     required double weightKg,
   }) async {
     try {
-      await _client.from('weight_logs').insert({
-        'user_id': userId,
-        'weight_kg': weightKg,
-      });
+      await _writeDailyWeightLog(userId: userId, weightKg: weightKg);
     } on PostgrestException catch (error) {
       // Still non-fatal, but no longer invisible: a rejected seed row is the
       // difference between "no weigh-ins yet" and "weight_logs cannot be
