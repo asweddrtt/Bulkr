@@ -6,13 +6,43 @@ is a zip file, and pulling strings out of one takes about a minute.
 
 ## Deploy
 
+This repo has more than one Supabase project reachable from the CLI, and the
+Bulkr one is **`hqdfaeiyflbbzkduskaz`** — the same ref as the URL in
+`lib/core/config/supabase_config.dart`. Link it once so neither command has to
+guess:
+
 ```bash
+supabase link --project-ref hqdfaeiyflbbzkduskaz
 supabase functions deploy food-search
-supabase secrets set FATSECRET_CLIENT_ID=... FATSECRET_CLIENT_SECRET=...
 ```
 
-`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are injected by the platform —
-do not set them yourself.
+Until that link exists the CLI picks a project for you, and deploying to the
+wrong one fails with `Cannot retrieve service for project ... status 'INACTIVE'`.
+Pass `--project-ref hqdfaeiyflbbzkduskaz` on each command if you would rather not
+link.
+
+`WARNING: Docker is not running` is harmless here — deploys upload the source and
+build server-side. If the assets are listed as uploading, Docker was not the
+problem.
+
+### Secrets
+
+**Substitute your real credentials.** The angle brackets below are placeholders;
+pasting the line as-is sets each secret to the literal text, and the function
+then authenticates with nonsense.
+
+```bash
+supabase secrets set \
+  FATSECRET_CLIENT_ID=<your client id> \
+  FATSECRET_CLIENT_SECRET=<your client secret>
+```
+
+`supabase secrets list` shows digests rather than values, so there is no reading
+them back to check. If you are unsure what was stored, set them again — it
+overwrites.
+
+`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are injected by the platform — do
+not set them yourself.
 
 Get the credentials from the FatSecret Platform console under *Manage
 Applications → API Credentials*. Note that FatSecret's free tier may also
