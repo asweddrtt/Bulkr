@@ -39,6 +39,34 @@ dependencies:
   easy_localization: ^3.0.8
   go_router: ^17.2.3
 
+  # Backend: auth session + the single onboarding INSERT.
+  supabase_flutter: ^2.17.1
+
+  # Onboarding state has to survive navigation between the five screens.
+  flutter_bloc: ^9.1.1
+  equatable: ^2.0.7
+  google_sign_in: ^7.2.0
+  # NOTE: `intl` (DateFormat/NumberFormat) is not listed here on purpose —
+  # easy_localization re-exports it, which is how NumberFormat is already used
+  # in the reveal screen. Adding it explicitly risks a resolution conflict with
+  # the version flutter_localizations pins.
+
+dependency_overrides:
+  # Not a real dependency — a version pin.
+  #
+  # supabase_flutter pulls app_links in for the OAuth deep-link callback, with
+  # a wide constraint (>=6.4.1 <8.0.0), so pub resolves the newest. app_links
+  # 7.2.1 declares `classpath("com.android.tools.build:gradle:9.2.1")`, and AGP
+  # 9.x needs Gradle 9.x — this project is on AGP 8.9.1 / Gradle 8.12, so the
+  # :app_links subproject fails to configure and the build dies.
+  #
+  # 6.4.1 targets AGP 8.6.1, which our 8.9.1 satisfies.
+  #
+  # To drop this pin: move to Gradle >=8.14 + AGP >=8.11.1 (which Flutter is
+  # already warning about) and this can go to ^7.0.0. Reaching 7.2.1 needs the
+  # full Gradle 9 / AGP 9 jump.
+  app_links: ^6.4.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

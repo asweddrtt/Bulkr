@@ -11,5 +11,7 @@
 /build
 /captures
 .externalNativeBuild
+.dart_tool/
 .cxx
 local.properties
+.kotlin/
