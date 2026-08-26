@@ -46,6 +46,7 @@ dependencies:
   flutter_bloc: ^9.1.1
   equatable: ^2.0.7
   google_sign_in: ^7.2.0
+  flutter_launcher_icons: ^0.14.4
   # NOTE: `intl` (DateFormat/NumberFormat) is not listed here on purpose —
   # easy_localization re-exports it, which is how NumberFormat is already used
   # in the reveal screen. Adding it explicitly risks a resolution conflict with
@@ -119,4 +120,9 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/logo.png"
 
