@@ -3,61 +3,111 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../styles/app_color.dart';
+import 'animations/motion.dart';
+import 'animations/press_scale.dart';
 
 class ActivityLevelCard extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String description;
-  final bool isSelected;
-  final VoidCallback onTap;
-
   const ActivityLevelCard({
     super.key,
     required this.icon,
     required this.title,
     required this.description,
+    required this.multiplier,
     required this.isSelected,
     required this.onTap,
   });
 
+  final IconData icon;
+  final String title;
+  final String description;
+
+  /// Shown on the card so the effect of the choice isn't hidden — picking
+  /// "Very Active" over "Sedentary" swings the daily target by hundreds of
+  /// calories.
+  final double multiplier;
+
+  final bool isSelected;
+  final VoidCallback onTap;
+
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return PressScale(
+      child: GestureDetector(
       onTap: onTap,
-      child: Container(
-        margin: EdgeInsets.only(bottom: 12.h), // Reduced from 16
-        padding: EdgeInsets.all(16.w), // Reduced from 20
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: Motion.scaled(context, Motion.fast),
+        margin: EdgeInsets.only(bottom: 12.h),
+        padding: EdgeInsets.all(16.w),
         decoration: BoxDecoration(
           color: const Color(0xFF1A1A1A),
           borderRadius: BorderRadius.circular(8.r),
-          border: isSelected
-              ? Border.all(color: AppColors.primaryNeon, width: 2)
-              : Border.all(color: Colors.transparent, width: 2),
+          border: Border.all(
+            color: isSelected ? AppColors.primaryNeon : Colors.transparent,
+            width: 2,
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, color: AppColors.offWhiteMuted, size: 28.sp), // Reduced from 32
-            SizedBox(height: 8.h), // Reduced from 12
+            Row(
+              children: [
+                Icon(
+                  icon,
+                  color: isSelected
+                      ? AppColors.primaryNeon
+                      : AppColors.offWhiteMuted,
+                  size: 26.sp,
+                ),
+                const Spacer(),
+                Container(
+                  padding:
+                      EdgeInsets.symmetric(horizontal: 8.w, vertical: 3.h),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? AppColors.primaryNeon
+                        : const Color(0xFF2A2A2A),
+                    borderRadius: BorderRadius.circular(2.r),
+                  ),
+                  child: Text(
+                    '${multiplier}x',
+                    style: GoogleFonts.inter(
+                      fontSize: 10.sp,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1,
+                      color:
+                          isSelected ? Colors.black : AppColors.offWhiteMuted,
+                    ),
+                  ),
+                ),
+                if (isSelected) ...[
+                  SizedBox(width: 8.w),
+                  Icon(Icons.check_circle,
+                      color: AppColors.primaryNeon, size: 18.sp),
+                ],
+              ],
+            ),
+            SizedBox(height: 10.h),
             Text(
               title,
               style: GoogleFonts.anton(
-                fontSize: 20.sp, // Reduced from 24
+                fontSize: 20.sp,
                 color: Colors.white,
                 letterSpacing: 0.5,
               ),
             ),
-            SizedBox(height: 4.h), // Reduced from 8
+            SizedBox(height: 4.h),
             Text(
               description,
               style: GoogleFonts.inter(
-                fontSize: 11.sp, // Reduced from 14
+                fontSize: 11.sp,
                 color: AppColors.offWhiteMuted,
-                height: 1.3, // Tighter line height
+                height: 1.3,
               ),
             ),
           ],
         ),
+      ),
       ),
     );
   }
