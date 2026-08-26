@@ -342,7 +342,7 @@ class _IngredientsSection extends StatelessWidget {
               trailing: ingredients.isEmpty
                   ? null
                   : 'meal_ingredients_count'
-                      .tr(args: {'count': '${ingredients.length}'}),
+                      .tr(namedArgs: {'count': '${ingredients.length}'}),
             ),
             SizedBox(height: 10.h),
             if (ingredients.isEmpty)
@@ -408,7 +408,7 @@ class _IngredientRow extends StatelessWidget {
                 ),
                 SizedBox(height: 4.h),
                 Text(
-                  'meal_ingredient_summary'.tr(args: {
+                  'meal_ingredient_summary'.tr(namedArgs: {
                     'grams': '${ingredient.amountG.round()}',
                     'kcal': '${macros.caloriesRounded}',
                     'protein': '${macros.proteinRounded}',

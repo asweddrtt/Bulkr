@@ -288,7 +288,7 @@ class _FoodResultRowState extends State<_FoodResultRow> {
                 ),
                 SizedBox(height: 4.h),
                 Text(
-                  'food_per_100g'.tr(args: {
+                  'food_per_100g'.tr(namedArgs: {
                     'kcal': '${widget.food.per100g.calories.round()}',
                     'protein': '${widget.food.per100g.proteinG.round()}',
                     'carbs': '${widget.food.per100g.carbsG.round()}',

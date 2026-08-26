@@ -113,7 +113,7 @@ class _MealsHeader extends StatelessWidget {
                 buildWhen: (previous, current) =>
                     previous.library.length != current.library.length,
                 builder: (context, state) => Text(
-                  'meals_count'.tr(args: {'count': '${state.library.length}'}),
+                  'meals_count'.tr(namedArgs: {'count': '${state.library.length}'}),
                   style: GoogleFonts.inter(
                     fontSize: 11.sp,
                     fontWeight: FontWeight.w600,
@@ -324,7 +324,7 @@ class _MealsList extends StatelessWidget {
           backgroundColor: AppColors.primaryNeon,
           duration: const Duration(seconds: 2),
           content: Text(
-            'meal_added_today'.tr(args: {'meal': meal.title}),
+            'meal_added_today'.tr(namedArgs: {'meal': meal.title}),
             style: GoogleFonts.inter(
               color: Colors.black,
               fontSize: 12.sp,
@@ -342,7 +342,7 @@ class _MealsList extends StatelessWidget {
       return _MealsMessage(
         icon: Icons.search_off_rounded,
         title: 'meals_no_results'.tr(),
-        body: 'meals_no_results_body'.tr(args: {'query': state.query.trim()}),
+        body: 'meals_no_results_body'.tr(namedArgs: {'query': state.query.trim()}),
       );
     }
 
