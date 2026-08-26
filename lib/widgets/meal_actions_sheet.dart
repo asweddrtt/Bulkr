@@ -103,8 +103,8 @@ class DeleteMealDialog extends StatelessWidget {
       ),
       content: Text(
         meal.isPublic
-            ? 'meal_delete_confirm_public_body'.tr(args: {'meal': meal.title})
-            : 'meal_delete_confirm_body'.tr(args: {'meal': meal.title}),
+            ? 'meal_delete_confirm_public_body'.tr(namedArgs: {'meal': meal.title})
+            : 'meal_delete_confirm_body'.tr(namedArgs: {'meal': meal.title}),
         style: GoogleFonts.inter(
           fontSize: 13.sp,
           color: AppColors.offWhiteMuted,

@@ -367,7 +367,7 @@ class _MealsList extends StatelessWidget {
             (action == MealAction.delete
                     ? 'meal_deleted'
                     : 'meal_removed')
-                .tr(args: {'meal': meal.title}),
+                .tr(namedArgs: {'meal': meal.title}),
             style: GoogleFonts.inter(color: Colors.white, fontSize: 12.sp),
           ),
         ),
