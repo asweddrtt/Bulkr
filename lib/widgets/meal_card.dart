@@ -225,7 +225,7 @@ class MealCard extends StatelessWidget {
         if (!meal.isMine && meal.creatorUsername != null) ...[
           SizedBox(height: 4.h),
           Text(
-            'meal_by_author'.tr(args: {'author': meal.creatorUsername!}),
+            'meal_by_author'.tr(namedArgs: {'author': meal.creatorUsername!}),
             style: GoogleFonts.inter(
               fontSize: 10.sp,
               color: AppColors.textGray,
