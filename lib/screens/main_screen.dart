@@ -24,10 +24,10 @@ class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
 
   static const List<_NavDestination> _destinations = [
-    _NavDestination(Icons.grid_view_rounded, 'dashboard'),
-    _NavDestination(Icons.fitness_center_rounded, 'workouts'),
-    _NavDestination(Icons.insights_rounded, 'progress'),
-    _NavDestination(Icons.person, 'profile'),
+    _NavDestination(Icons.dynamic_feed_sharp, 'Feed'),
+    _NavDestination(Icons.restaurant_sharp, 'Meals'),
+    _NavDestination(Icons.electric_bolt_sharp, 'Tracker'),
+    _NavDestination(Icons.person_sharp, 'profile'),
   ];
 
   @override

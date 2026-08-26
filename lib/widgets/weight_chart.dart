@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:easy_localization/easy_localization.dart';
+import 'package:easy_localization/easy_localization.dart' hide TextDirection;
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -16,7 +16,7 @@ import 'animations/motion.dart';
 /// Replaces the hardcoded mock curve: that always sloped up and to the right
 /// regardless of what the user actually weighed, which is worse than showing
 /// nothing — it silently congratulates people on progress they haven't made.
-class WeightChart extends StatelessWidget {
+class WeightChart extends StatefulWidget {
   const WeightChart({
     super.key,
     required this.entries,
@@ -29,12 +29,32 @@ class WeightChart extends StatelessWidget {
   final double height;
 
   @override
+  State<WeightChart> createState() => _WeightChartState();
+}
+
+class _WeightChartState extends State<WeightChart> {
+  int? _selectedIndex;
+
+  void _updateSelection(double dx, double width) {
+    if (widget.entries.length < 2 || width <= 0) return;
+    // Map the local X coordinate to a percentage, then find the closest data index
+    final percent = (dx / width).clamp(0.0, 1.0);
+    setState(() {
+      _selectedIndex = (percent * (widget.entries.length - 1)).round();
+    });
+  }
+
+  void _clearSelection() {
+    if (_selectedIndex != null) {
+      setState(() => _selectedIndex = null);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // One point is a dot, not a trend. Say so rather than drawing a
-    // meaningless flat line.
-    if (entries.length < 2) {
+    if (widget.entries.length < 2) {
       return SizedBox(
-        height: height.h,
+        height: widget.height.h,
         child: Center(
           child: Text(
             'chart_needs_more_data'.tr(),
@@ -50,37 +70,51 @@ class WeightChart extends StatelessWidget {
     }
 
     return SizedBox(
-      height: height.h,
-      child: TweenAnimationBuilder<double>(
-        tween: Tween<double>(begin: 0, end: 1),
-        duration: Motion.scaled(context, Motion.reveal),
-        curve: Motion.emphasis,
-        builder: (context, progress, _) => CustomPaint(
-          size: Size(double.infinity, height.h),
-          painter: _WeightChartPainter(
-            entries: entries,
-            progress: progress,
-            isMetric: units.isMetric,
-          ),
-        ),
+      height: widget.height.h,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return GestureDetector(
+            // Handles both tapping a single point and dragging across the graph
+            onTapDown: (details) => _updateSelection(details.localPosition.dx, constraints.maxWidth),
+            onHorizontalDragUpdate: (details) => _updateSelection(details.localPosition.dx, constraints.maxWidth),
+            onTapUp: (_) => _clearSelection(),
+            onTapCancel: _clearSelection,
+            onHorizontalDragEnd: (_) => _clearSelection(),
+            onHorizontalDragCancel: _clearSelection,
+            child: TweenAnimationBuilder<double>(
+              tween: Tween<double>(begin: 0, end: 1),
+              duration: Motion.scaled(context, Motion.reveal),
+              curve: Motion.emphasis,
+              builder: (context, progress, _) => CustomPaint(
+                size: Size(double.infinity, widget.height.h),
+                painter: _WeightChartPainter(
+                  entries: widget.entries,
+                  progress: progress,
+                  isMetric: widget.units.isMetric,
+                  selectedIndex: _selectedIndex, // Pass the active index down
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }
 }
+
 
 class _WeightChartPainter extends CustomPainter {
   _WeightChartPainter({
     required this.entries,
     required this.progress,
     required this.isMetric,
+    this.selectedIndex,
   });
 
   final List<WeightEntry> entries;
-
-  /// 0..1 draw-in factor.
   final double progress;
-
   final bool isMetric;
+  final int? selectedIndex;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -153,9 +187,64 @@ class _WeightChartPainter extends CustomPainter {
 
     canvas.restore();
 
-    // Only the most recent point gets a marker. A dot on every entry turns
-    // into noise once there are more than a handful.
-    if (progress > 0.98) {
+    if (selectedIndex != null && progress > 0.98) {
+      final point = points[selectedIndex!];
+      final entry = entries[selectedIndex!];
+      final weight = isMetric ? entry.weightKg : UnitConverter.kgToLb(entry.weightKg);
+      final unit = isMetric ? 'kg_unit'.tr().toLowerCase() : 'lb_unit'.tr().toLowerCase();
+      final dateStr = DateFormat.MMMd().format(entry.loggedAt);
+
+      // 1. Draw vertical scrubber line
+      canvas.drawLine(
+        Offset(point.dx, 0),
+        Offset(point.dx, size.height),
+        Paint()
+          ..color = AppColors.textGray.withValues(alpha: 0.3)
+          ..strokeWidth = 1
+          ..style = PaintingStyle.stroke,
+      );
+
+      // 2. Draw highlighted dot
+      canvas.drawCircle(point, 6, Paint()..color = AppColors.primaryNeon);
+      // Using a dark center to punch it out of the background
+      canvas.drawCircle(point, 4, Paint()..color = const Color(0xFF1A1A1A));
+
+      // 3. Draw tooltip label using TextPainter
+      final text = '$dateStr • ${weight.toStringAsFixed(1)} $unit';
+      final tp = TextPainter(
+        text: TextSpan(
+          text: text,
+          style: GoogleFonts.inter(
+            fontSize: 10.sp,
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+
+      // Keep tooltip strictly inside horizontal bounds
+      var textX = point.dx - tp.width / 2;
+      if (textX < 0) textX = 0;
+      if (textX + tp.width > size.width) textX = size.width - tp.width;
+
+      // Keep tooltip inside vertical bounds (flip it underneath the point if too high)
+      var textY = point.dy - 16.h - tp.height;
+      if (textY < 0) textY = point.dy + 16.h;
+
+      final bgRect = RRect.fromLTRBR(
+        textX - 8.w,
+        textY - 4.h,
+        textX + tp.width + 8.w,
+        textY + tp.height + 4.h,
+        Radius.circular(6.r),
+      );
+
+      canvas.drawRRect(bgRect, Paint()..color = const Color(0xFF2A2A2A));
+      tp.paint(canvas, Offset(textX, textY));
+
+    } else if (progress > 0.98) {
+      // Default behavior when not touching: only the most recent point gets a marker
       final last = points.last;
       canvas.drawCircle(
         last,
@@ -185,6 +274,7 @@ class _WeightChartPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _WeightChartPainter oldDelegate) =>
       oldDelegate.progress != progress ||
-      oldDelegate.entries != entries ||
-      oldDelegate.isMetric != isMetric;
+          oldDelegate.entries != entries ||
+          oldDelegate.isMetric != isMetric ||
+          oldDelegate.selectedIndex != selectedIndex;
 }
