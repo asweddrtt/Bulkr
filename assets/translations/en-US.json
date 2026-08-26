@@ -206,7 +206,7 @@
   "food_search_subtitle": "Searched across Open Food Facts and our own list.",
   "food_search_hint": "Chicken breast, oats, whey...",
   "food_search_prompt": "Type at least two letters to search for a food.",
-  "food_search_empty": "Nothing found. Try a shorter or more common name.",
+  "food_search_empty": "No food matched that. Try a simpler name — \"chicken breast\" rather than a brand.",
   "food_per_100g": "Per 100g · {kcal} kcal · P{protein} C{carbs} F{fat}",
   "gram_short": "g",
   "meal_delete": "Delete meal",
@@ -220,5 +220,6 @@
   "meal_delete_confirm": "Delete",
   "meal_delete_cancel": "Keep it",
   "meal_deleted": "{meal} deleted",
-  "meal_removed": "{meal} removed from your meals"
+  "meal_removed": "{meal} removed from your meals",
+  "meal_saved_without_ingredients": "Meal saved with the right calories, but its ingredient list couldn't be stored. Check the Supabase policies on cached_off_foods."
 }

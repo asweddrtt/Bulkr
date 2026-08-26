@@ -167,9 +167,19 @@ class MealRepository {
   ///
   /// Order matters. The photo goes up first because a failed upload should not
   /// leave a meal row behind; the meal row is next because the ingredient rows
-  /// need its id; the ingredients land last and are the only step allowed to
-  /// fail without taking the meal with it — a saved meal missing one ingredient
-  /// line can be edited, whereas a lost meal has to be retyped.
+  /// need its id; the ingredients land last.
+  ///
+  /// The ingredients are the only part allowed to fail without taking the meal
+  /// with it, and that is deliberate. They depend on `cached_off_foods`, a table
+  /// shared by every user, so they are the step most likely to be refused by a
+  /// policy — and the calorie totals are computed on the device from the draft
+  /// and do not need them. A meal that saves with the right numbers and no
+  /// itemisation can be fixed later; a photo, a name, a recipe and eight
+  /// ingredients lost to a permissions error on a cache table have to be typed
+  /// again from nothing.
+  ///
+  /// The returned meal carries its [Meal.ingredients] only when they were
+  /// stored, which is how the caller can tell a whole save from a partial one.
   Future<Meal> createMeal({
     required MealDraft draft,
     Uint8List? imageBytes,
@@ -180,7 +190,14 @@ class MealRepository {
       throw StateError('Cannot create a meal without a signed-in user');
     }
 
-    final List<MealIngredient> ingredients = await _cacheIngredientFoods(draft);
+    List<MealIngredient> ingredients;
+    try {
+      ingredients = await _cacheIngredientFoods(draft);
+    } catch (error) {
+      debugPrint('Bulkr: ingredients could not be cached — $error');
+      ingredients = const [];
+    }
+
     final Macros totals = draft.totals;
 
     String? imageUrl;

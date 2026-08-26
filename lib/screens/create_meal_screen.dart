@@ -51,6 +51,26 @@ class _CreateMealView extends StatelessWidget {
       listener: (context, state) {
         final Meal? saved = state.savedMeal;
         if (state.status == MealEditorStatus.saved && saved != null) {
+          // Shown before the pop, but it outlives this screen: the messenger
+          // belongs to the app, not to the route being closed.
+          if (state.savedWithoutIngredients) {
+            ScaffoldMessenger.of(context)
+              ..hideCurrentSnackBar()
+              ..showSnackBar(
+                SnackBar(
+                  backgroundColor: const Color(0xFF2A2A2A),
+                  duration: const Duration(seconds: 6),
+                  content: Text(
+                    'meal_saved_without_ingredients'.tr(),
+                    style: GoogleFonts.inter(
+                      color: Colors.white,
+                      fontSize: 12.sp,
+                    ),
+                  ),
+                ),
+              );
+          }
+
           Navigator.of(context).pop<Meal>(saved);
           return;
         }

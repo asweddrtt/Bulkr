@@ -1,3 +1,8 @@
+-- RUN THIS FIRST. Without it the app reports
+--   42501 · new row violates row-level security policy for table "..."
+-- on the first meal you try to save, because RLS is on and the tables have no
+-- policies at all — the same state weight_logs was in.
+--
 -- Meals tab: the one additive column it needs, row-level security for every
 -- table it touches, the storage bucket for meal photos, and the indexes the
 -- queries assume.
