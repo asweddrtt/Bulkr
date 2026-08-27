@@ -1,6 +1,7 @@
 import 'package:equatable/equatable.dart';
 
 import 'macros.dart';
+import 'meal.dart';
 import 'meal_ingredient.dart';
 
 /// A meal being written, before it becomes a `meals` row.
@@ -13,10 +14,28 @@ class MealDraft extends Equatable {
     this.title = '',
     this.recipe = '',
     this.imagePath,
+    this.existingImageUrl,
     this.ingredients = const [],
     this.manualTotals = Macros.zero,
     this.isPublic = false,
   });
+
+  /// Opens an existing meal for editing.
+  ///
+  /// Its totals go into [manualTotals] whether or not it was itemised. If it
+  /// was, [totals] ignores them and recomputes from the ingredients — but the
+  /// figures are still the right thing to show should every ingredient be
+  /// removed, which would otherwise silently reset a saved meal to zero.
+  factory MealDraft.fromMeal(Meal meal, List<MealIngredient> ingredients) {
+    return MealDraft(
+      title: meal.title,
+      recipe: meal.description ?? '',
+      existingImageUrl: meal.imageUrl,
+      ingredients: ingredients,
+      manualTotals: meal.totals,
+      isPublic: meal.isPublic,
+    );
+  }
 
   final String title;
 
@@ -25,6 +44,16 @@ class MealDraft extends Equatable {
 
   /// Local file path of the photo the user picked, before it is uploaded.
   final String? imagePath;
+
+  /// The photo an edited meal already has, in storage.
+  ///
+  /// Kept apart from [imagePath] because they answer different questions: this
+  /// is what the meal looks like now, that is what the user just chose. A save
+  /// only replaces the stored image when the user actually picked a new one.
+  final String? existingImageUrl;
+
+  /// Whether the meal has a photo at all, wherever it came from.
+  bool get hasImage => imagePath != null || existingImageUrl != null;
 
   final List<MealIngredient> ingredients;
 
@@ -69,6 +98,7 @@ class MealDraft extends Equatable {
     String? title,
     String? recipe,
     String? imagePath,
+    String? existingImageUrl,
     bool clearImage = false,
     List<MealIngredient>? ingredients,
     Macros? manualTotals,
@@ -78,6 +108,10 @@ class MealDraft extends Equatable {
       title: title ?? this.title,
       recipe: recipe ?? this.recipe,
       imagePath: clearImage ? null : (imagePath ?? this.imagePath),
+      // Removing the photo clears both: the picked one and the one already
+      // stored, or "remove" would only undo the most recent choice.
+      existingImageUrl:
+          clearImage ? null : (existingImageUrl ?? this.existingImageUrl),
       ingredients: ingredients ?? this.ingredients,
       manualTotals: manualTotals ?? this.manualTotals,
       isPublic: isPublic ?? this.isPublic,
@@ -118,6 +152,13 @@ class MealDraft extends Equatable {
   }
 
   @override
-  List<Object?> get props =>
-      [title, recipe, imagePath, ingredients, manualTotals, isPublic];
+  List<Object?> get props => [
+        title,
+        recipe,
+        imagePath,
+        existingImageUrl,
+        ingredients,
+        manualTotals,
+        isPublic,
+      ];
 }

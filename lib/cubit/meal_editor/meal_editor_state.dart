@@ -1,6 +1,6 @@
 part of 'meal_editor_cubit.dart';
 
-enum MealEditorStatus { editing, saving, saved, failure }
+enum MealEditorStatus { hydrating, editing, saving, saved, failure }
 
 /// Where the ingredient search is up to. Separate from the editor's own status
 /// so typing in the search field never looks like the meal is being saved.
@@ -10,6 +10,7 @@ class MealEditorState extends Equatable {
   const MealEditorState({
     this.draft = const MealDraft(),
     this.status = MealEditorStatus.editing,
+    this.editing,
     this.imageBytes,
     this.imageExtension = 'jpg',
     this.searchQuery = '',
@@ -23,6 +24,19 @@ class MealEditorState extends Equatable {
 
   final MealDraft draft;
   final MealEditorStatus status;
+
+  /// The meal being edited, or null when writing a new one.
+  ///
+  /// Its presence is what turns one save button into two, and
+  /// [Meal.isMine] on it is what decides whether "replace" is one of them.
+  final Meal? editing;
+
+  bool get isEditing => editing != null;
+
+  /// Replacing is offered only for a meal the user wrote. Someone else's meal
+  /// can be edited into a copy, never overwritten — it is theirs, and other
+  /// people have saved it.
+  bool get canReplace => editing?.isMine ?? false;
 
   /// The picked photo, already read off disk so the save path doesn't have to
   /// touch the filesystem. Null when no photo was chosen.
@@ -46,6 +60,11 @@ class MealEditorState extends Equatable {
 
   bool get isSaving => status == MealEditorStatus.saving;
 
+  /// The form is not built until an edited meal's ingredients have loaded: its
+  /// text fields are seeded once, at construction, and building them over an
+  /// empty draft would leave them empty.
+  bool get isHydrating => status == MealEditorStatus.hydrating;
+
   /// Save is offered only when the meal has a name and a calorie figure, and
   /// never while a write is already in flight.
   bool get canSave => draft.canSave && !isSaving;
@@ -57,6 +76,7 @@ class MealEditorState extends Equatable {
   MealEditorState copyWith({
     MealDraft? draft,
     MealEditorStatus? status,
+    Meal? editing,
     Uint8List? imageBytes,
     bool clearImage = false,
     String? imageExtension,
@@ -72,6 +92,7 @@ class MealEditorState extends Equatable {
     return MealEditorState(
       draft: draft ?? this.draft,
       status: status ?? this.status,
+      editing: editing ?? this.editing,
       imageBytes: clearImage ? null : (imageBytes ?? this.imageBytes),
       imageExtension: imageExtension ?? this.imageExtension,
       searchQuery: searchQuery ?? this.searchQuery,
@@ -89,6 +110,7 @@ class MealEditorState extends Equatable {
   List<Object?> get props => [
         draft,
         status,
+        editing,
         imageBytes,
         imageExtension,
         searchQuery,

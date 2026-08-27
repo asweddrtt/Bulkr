@@ -23,12 +23,16 @@ import '../widgets/image_source_sheet.dart';
 import '../widgets/ingredient_amount_sheet.dart';
 import '../widgets/macro_bar.dart';
 
-/// Writes a new meal: a photo, a name, what is in it, and how it is made.
+/// Writes a meal: a photo, a name, what is in it, and how it is made.
 ///
-/// Pops with the saved [Meal] so the library can show it without waiting for a
-/// refetch, or with null if the user backed out.
-class CreateMealScreen extends StatelessWidget {
-  const CreateMealScreen({super.key});
+/// One screen for both jobs. Pass [meal] to edit an existing one; leave it null
+/// to write a new one. Pops with the saved [Meal] so the library can show it
+/// without waiting for a refetch, or with null if the user backed out.
+class MealEditorScreen extends StatelessWidget {
+  const MealEditorScreen({super.key, this.meal});
+
+  /// The meal to open. Null writes a new one.
+  final Meal? meal;
 
   @override
   Widget build(BuildContext context) {
@@ -36,14 +40,15 @@ class CreateMealScreen extends StatelessWidget {
       create: (_) => MealEditorCubit(
         mealRepository: context.read<MealRepository>(),
         foodRepository: context.read<FoodRepository>(),
+        editing: meal,
       ),
-      child: const _CreateMealView(),
+      child: const _MealEditorView(),
     );
   }
 }
 
-class _CreateMealView extends StatelessWidget {
-  const _CreateMealView();
+class _MealEditorView extends StatelessWidget {
+  const _MealEditorView();
 
   static const Color _bg = Color(0xFF121212);
 
@@ -95,7 +100,11 @@ class _CreateMealView extends StatelessWidget {
           context.read<MealEditorCubit>().dismissError();
         }
       },
-      child: Scaffold(
+      child: BlocBuilder<MealEditorCubit, MealEditorState>(
+        buildWhen: (previous, current) =>
+            previous.isEditing != current.isEditing ||
+            previous.isHydrating != current.isHydrating,
+        builder: (context, state) => Scaffold(
         backgroundColor: _bg,
         appBar: AppBar(
           backgroundColor: _bg,
@@ -105,7 +114,9 @@ class _CreateMealView extends StatelessWidget {
             onPressed: () => Navigator.of(context).pop(),
           ),
           title: Text(
-            'create_meal_title'.tr().toUpperCase(),
+            (state.isEditing ? 'edit_meal_title' : 'create_meal_title')
+                .tr()
+                .toUpperCase(),
             style: GoogleFonts.anton(
               fontSize: 17.sp,
               color: Colors.white,
@@ -113,32 +124,40 @@ class _CreateMealView extends StatelessWidget {
             ),
           ),
         ),
-        body: SafeArea(
-          top: false,
-          child: Column(
-            children: [
-              Expanded(
-                child: ListView(
-                  padding: EdgeInsets.fromLTRB(20.w, 8.h, 20.w, 24.h),
+        // Nothing is built until an edited meal has loaded: the text fields
+        // are seeded once, when they are constructed, so building them over an
+        // empty draft would leave them empty for good.
+        body: state.isHydrating
+            ? const Center(
+                child: CircularProgressIndicator(color: AppColors.primaryNeon),
+              )
+            : SafeArea(
+                top: false,
+                child: Column(
                   children: [
-                    const _PhotoPicker(),
-                    SizedBox(height: 20.h),
-                    const _NameField(),
-                    SizedBox(height: 22.h),
-                    const _IngredientsSection(),
-                    SizedBox(height: 22.h),
-                    const _TotalsSection(),
-                    SizedBox(height: 22.h),
-                    const _RecipeField(),
-                    SizedBox(height: 18.h),
-                    const _PublicToggle(),
+                    Expanded(
+                      child: ListView(
+                        padding: EdgeInsets.fromLTRB(20.w, 8.h, 20.w, 24.h),
+                        children: [
+                          const _PhotoPicker(),
+                          SizedBox(height: 20.h),
+                          const _NameField(),
+                          SizedBox(height: 22.h),
+                          const _IngredientsSection(),
+                          SizedBox(height: 22.h),
+                          const _TotalsSection(),
+                          SizedBox(height: 22.h),
+                          const _RecipeField(),
+                          SizedBox(height: 18.h),
+                          const _PublicToggle(),
+                        ],
+                      ),
+                    ),
+                    const _SaveBar(),
                   ],
                 ),
               ),
-              const _SaveBar(),
-            ],
-          ),
-        ),
+      ),
       ),
     );
   }
@@ -162,13 +181,17 @@ class _PhotoPicker extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocBuilder<MealEditorCubit, MealEditorState>(
       buildWhen: (previous, current) =>
-          previous.imageBytes != current.imageBytes,
+          previous.imageBytes != current.imageBytes ||
+          previous.draft.existingImageUrl != current.draft.existingImageUrl,
       builder: (context, state) {
         final Uint8List? bytes = state.imageBytes;
+        // A meal being edited already has a photo in storage. Freshly picked
+        // bytes win, because those are what the user just chose.
+        final String? storedUrl = state.draft.existingImageUrl;
 
         return PressScale(
           child: GestureDetector(
-            onTap: () => _pick(context, hasImage: bytes != null),
+            onTap: () => _pick(context, hasImage: state.draft.hasImage),
             behavior: HitTestBehavior.opaque,
             child: AspectRatio(
               aspectRatio: 16 / 10,
@@ -182,12 +205,19 @@ class _PhotoPicker extends StatelessWidget {
                   ),
                 ),
                 clipBehavior: Clip.antiAlias,
-                child: bytes == null
+                child: bytes == null && storedUrl == null
                     ? _buildPrompt()
                     : Stack(
                         fit: StackFit.expand,
                         children: [
-                          Image.memory(bytes, fit: BoxFit.cover),
+                          if (bytes != null)
+                            Image.memory(bytes, fit: BoxFit.cover)
+                          else
+                            Image.network(
+                              storedUrl!,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => _buildPrompt(),
+                            ),
                           Positioned(
                             right: 8.w,
                             bottom: 8.h,
@@ -299,14 +329,39 @@ class _PhotoPicker extends StatelessWidget {
   }
 }
 
-class _NameField extends StatelessWidget {
+/// Seeded once from the draft, which is what makes editing work: these are
+/// built after hydration, so the controller starts with the meal's own text
+/// rather than being overwritten on every rebuild as the user types.
+class _NameField extends StatefulWidget {
   const _NameField();
+
+  @override
+  State<_NameField> createState() => _NameFieldState();
+}
+
+class _NameFieldState extends State<_NameField> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(
+      text: context.read<MealEditorCubit>().state.draft.title,
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return _LabelledField(
       label: 'meal_name_label'.tr(),
       child: TextField(
+        controller: _controller,
         onChanged: context.read<MealEditorCubit>().setTitle,
         textCapitalization: TextCapitalization.words,
         maxLength: 80,
@@ -319,8 +374,29 @@ class _NameField extends StatelessWidget {
   }
 }
 
-class _RecipeField extends StatelessWidget {
+class _RecipeField extends StatefulWidget {
   const _RecipeField();
+
+  @override
+  State<_RecipeField> createState() => _RecipeFieldState();
+}
+
+class _RecipeFieldState extends State<_RecipeField> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(
+      text: context.read<MealEditorCubit>().state.draft.recipe,
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -328,6 +404,7 @@ class _RecipeField extends StatelessWidget {
       label: 'meal_recipe_label'.tr(),
       helper: 'meal_recipe_helper'.tr(),
       child: TextField(
+        controller: _controller,
         onChanged: context.read<MealEditorCubit>().setRecipe,
         minLines: 4,
         maxLines: 10,
@@ -344,8 +421,6 @@ class _RecipeField extends StatelessWidget {
   }
 }
 
-/// The itemised ingredients, each one a food from Open Food Facts or our own
-/// tables plus an amount in grams.
 class _IngredientsSection extends StatelessWidget {
   const _IngredientsSection();
 
@@ -985,6 +1060,13 @@ class _PublicToggle extends StatelessWidget {
   }
 }
 
+/// One button when writing a new meal, two when editing one you own.
+///
+/// Replace is the primary action — someone who opened the editor on their own
+/// meal almost always means to correct it — but saving a copy sits beside it at
+/// equal size, because turning one meal into a variant of itself is the other
+/// half of why anyone edits. For a meal saved from someone else, only the copy
+/// exists: theirs is not yours to overwrite.
 class _SaveBar extends StatelessWidget {
   const _SaveBar();
 
@@ -993,57 +1075,133 @@ class _SaveBar extends StatelessWidget {
     return BlocBuilder<MealEditorCubit, MealEditorState>(
       buildWhen: (previous, current) =>
           previous.canSave != current.canSave ||
-          previous.isSaving != current.isSaving,
+          previous.isSaving != current.isSaving ||
+          previous.canReplace != current.canReplace ||
+          previous.isEditing != current.isEditing,
       builder: (context, state) {
+        final MealEditorCubit cubit = context.read<MealEditorCubit>();
+
         return Container(
           padding: EdgeInsets.fromLTRB(20.w, 12.h, 20.w, 16.h),
           decoration: const BoxDecoration(
             color: Color(0xFF0F0F0F),
             border: Border(top: BorderSide(color: AppColors.darkBorder)),
           ),
-          child: PressScale(
-            enabled: state.canSave,
-            child: GestureDetector(
-              onTap: state.canSave
-                  ? () => context.read<MealEditorCubit>().save()
-                  : null,
-              behavior: HitTestBehavior.opaque,
-              child: Container(
-                width: double.infinity,
-                padding: EdgeInsets.symmetric(vertical: 16.h),
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  // Dimmed rather than hidden while incomplete, so the button
-                  // is visibly the next step even before it can be taken.
-                  color: state.canSave
-                      ? AppColors.buttonNeon
-                      : AppColors.darkBorder,
-                  borderRadius: BorderRadius.circular(5.r),
+          child: Row(
+            children: [
+              if (state.canReplace) ...[
+                Expanded(
+                  child: _SaveButton(
+                    label: 'meal_replace_btn'.tr(),
+                    isPrimary: true,
+                    isEnabled: state.canSave,
+                    isBusy: state.isSaving,
+                    onTap: () => cubit.save(replaceExisting: true),
+                  ),
                 ),
-                child: state.isSaving
-                    ? SizedBox(
-                        width: 20.w,
-                        height: 20.w,
-                        child: const CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.black,
-                        ),
-                      )
-                    : Text(
-                        'meal_save_btn'.tr().toUpperCase(),
-                        style: GoogleFonts.anton(
-                          fontSize: 15.sp,
-                          color: state.canSave
-                              ? Colors.black
-                              : AppColors.textGray,
-                          letterSpacing: 1,
-                        ),
-                      ),
-              ),
-            ),
+                SizedBox(width: 10.w),
+                Expanded(
+                  child: _SaveButton(
+                    label: 'meal_save_copy_btn'.tr(),
+                    isPrimary: false,
+                    isEnabled: state.canSave,
+                    isBusy: false,
+                    onTap: () => cubit.save(),
+                  ),
+                ),
+              ] else
+                Expanded(
+                  child: _SaveButton(
+                    label: (state.isEditing
+                            ? 'meal_save_copy_btn'
+                            : 'meal_save_btn')
+                        .tr(),
+                    isPrimary: true,
+                    isEnabled: state.canSave,
+                    isBusy: state.isSaving,
+                    onTap: () => cubit.save(),
+                  ),
+                ),
+            ],
           ),
         );
       },
+    );
+  }
+}
+
+class _SaveButton extends StatelessWidget {
+  const _SaveButton({
+    required this.label,
+    required this.isPrimary,
+    required this.isEnabled,
+    required this.isBusy,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool isPrimary;
+  final bool isEnabled;
+
+  /// Only one button shows the spinner, even though both are disabled while a
+  /// save runs — two spinners would not say which action is happening.
+  final bool isBusy;
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool active = isEnabled && !isBusy;
+
+    return PressScale(
+      enabled: active,
+      child: GestureDetector(
+        onTap: active ? onTap : null,
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          padding: EdgeInsets.symmetric(vertical: 16.h),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            // Dimmed rather than hidden while incomplete, so the button is
+            // visibly the next step even before it can be taken.
+            color: isPrimary
+                ? (isEnabled ? AppColors.buttonNeon : AppColors.darkBorder)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(5.r),
+            border: isPrimary
+                ? null
+                : Border.all(
+                    color: isEnabled
+                        ? AppColors.primaryNeon
+                        : AppColors.darkBorder,
+                    width: 1.5,
+                  ),
+          ),
+          child: isBusy
+              ? SizedBox(
+                  width: 20.w,
+                  height: 20.w,
+                  child: const CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.black,
+                  ),
+                )
+              : Text(
+                  label.toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.anton(
+                    fontSize: 14.sp,
+                    color: isPrimary
+                        ? (isEnabled ? Colors.black : AppColors.textGray)
+                        : (isEnabled
+                            ? AppColors.primaryNeon
+                            : AppColors.textGray),
+                    letterSpacing: 1,
+                  ),
+                ),
+        ),
+      ),
     );
   }
 }

@@ -9,6 +9,10 @@ import 'sheet_action_row.dart';
 
 /// What the user chose to do with a meal from its overflow menu.
 enum MealAction {
+  /// Open the meal in the editor. Offered for every meal — someone else's can
+  /// be edited into a copy of your own, never overwritten.
+  edit,
+
   /// Delete a meal the user wrote. Irreversible, and visible to anyone who
   /// saved it.
   delete,
@@ -20,9 +24,11 @@ enum MealAction {
 
 /// The overflow menu on a meal card.
 ///
-/// Offers one thing, and which thing depends on whose meal it is: you delete
-/// what you wrote and you let go of what you saved. Presenting both would imply
-/// a user can delete a meal out of someone else's account.
+/// Editing is offered for every meal; what the editor will let you save differs,
+/// and that decision belongs there rather than here. The destructive option is
+/// the one that changes with ownership: you delete what you wrote and you let go
+/// of what you saved. Presenting both would imply a user can delete a meal out
+/// of someone else's account.
 class MealActionsSheet extends StatelessWidget {
   const MealActionsSheet({super.key, required this.meal});
 
@@ -42,6 +48,15 @@ class MealActionsSheet extends StatelessWidget {
     return SheetShell(
       title: meal.title,
       children: [
+        SheetActionRow(
+          icon: Icons.edit_outlined,
+          label: 'meal_edit'.tr(),
+          helper: meal.isMine
+              ? 'meal_edit_helper'.tr()
+              : 'meal_edit_copy_helper'.tr(),
+          onTap: () => Navigator.of(context).pop(MealAction.edit),
+        ),
+        SizedBox(height: 10.h),
         if (meal.isMine)
           SheetActionRow(
             icon: Icons.delete_outline_rounded,

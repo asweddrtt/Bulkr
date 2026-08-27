@@ -25,9 +25,48 @@ class MealEditorCubit extends Cubit<MealEditorState> {
   MealEditorCubit({
     required MealRepository mealRepository,
     required FoodRepository foodRepository,
+    Meal? editing,
   })  : _meals = mealRepository,
         _foods = foodRepository,
-        super(const MealEditorState());
+        super(
+          editing == null
+              ? const MealEditorState()
+              : MealEditorState(
+                  status: MealEditorStatus.hydrating,
+                  editing: editing,
+                ),
+        ) {
+    if (editing != null) _hydrate(editing);
+  }
+
+  /// Loads an existing meal into the draft.
+  ///
+  /// The ingredients are a second read — a meal card carries totals, not an
+  /// itemisation — and the form waits for them. Opening on an empty ingredient
+  /// list and filling it a moment later would show a meal briefly claiming to
+  /// have none, and its totals recomputing from nothing.
+  Future<void> _hydrate(Meal meal) async {
+    try {
+      final List<MealIngredient> ingredients =
+          await _meals.fetchIngredients(meal.id);
+      if (isClosed) return;
+
+      emit(state.copyWith(
+        draft: MealDraft.fromMeal(meal, ingredients),
+        status: MealEditorStatus.editing,
+      ));
+    } catch (error) {
+      if (isClosed) return;
+      debugPrint('Bulkr: could not load meal ingredients — $error');
+
+      // The rest of the meal is still editable, and its stored totals are still
+      // right, so this opens without the itemisation rather than not at all.
+      emit(state.copyWith(
+        draft: MealDraft.fromMeal(meal, const []),
+        status: MealEditorStatus.editing,
+      ));
+    }
+  }
 
   final MealRepository _meals;
   final FoodRepository _foods;
@@ -213,19 +252,37 @@ class MealEditorCubit extends Cubit<MealEditorState> {
     emit(state.copyWith(draft: state.draft.withAmountAt(index, amountG)));
   }
 
-  /// Writes the meal. On success the state carries the saved meal, which the
-  /// screen hands back to the library so it appears without a refetch.
-  Future<void> save() async {
+  /// Writes the meal.
+  ///
+  /// [replaceExisting] overwrites the meal being edited; otherwise this creates
+  /// a new one, which is how an edited copy of someone else's meal is kept
+  /// without touching theirs. On success the state carries the saved meal, which
+  /// the screen hands back to the library so it appears without a refetch.
+  Future<void> save({bool replaceExisting = false}) async {
     if (!state.canSave) return;
+
+    final Meal? editing = state.editing;
+    final bool replacing = replaceExisting && editing != null;
+
+    // Guarded here as well as in the UI: replacing someone else's meal would
+    // rewrite it for everyone who saved it.
+    if (replacing && !editing.isMine) return;
 
     emit(state.copyWith(status: MealEditorStatus.saving, clearError: true));
 
     try {
-      final Meal meal = await _meals.createMeal(
-        draft: state.draft,
-        imageBytes: state.imageBytes,
-        imageExtension: state.imageExtension,
-      );
+      final Meal meal = replacing
+          ? await _meals.updateMeal(
+              meal: editing,
+              draft: state.draft,
+              imageBytes: state.imageBytes,
+              imageExtension: state.imageExtension,
+            )
+          : await _meals.createMeal(
+              draft: state.draft,
+              imageBytes: state.imageBytes,
+              imageExtension: state.imageExtension,
+            );
 
       if (isClosed) return;
 

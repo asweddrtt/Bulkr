@@ -11,7 +11,7 @@ import '../widgets/animations/entrance.dart';
 import '../widgets/animations/press_scale.dart';
 import '../widgets/meal_actions_sheet.dart';
 import '../widgets/meal_card.dart';
-import 'create_meal_screen.dart';
+import 'meal_editor_screen.dart';
 
 /// The user's meal library.
 ///
@@ -357,6 +357,11 @@ class _MealsList extends StatelessWidget {
     final MealAction? action = await MealActionsSheet.show(context, meal);
     if (action == null || !context.mounted) return;
 
+    if (action == MealAction.edit) {
+      await _openMealEditor(context, cubit, meal: meal);
+      return;
+    }
+
     if (action == MealAction.delete &&
         !await DeleteMealDialog.show(context, meal)) {
       return;
@@ -494,6 +499,28 @@ class _MealsMessage extends StatelessWidget {
   }
 }
 
+/// Opens the editor and folds whatever comes back into the library.
+///
+/// Shared by the create button and the edit action, because what happens
+/// afterwards is the same either way: a meal came back, show it now and
+/// reconcile against the server behind it.
+Future<void> _openMealEditor(
+  BuildContext context,
+  MealsCubit cubit, {
+  Meal? meal,
+}) async {
+  final Meal? saved = await Navigator.of(context).push<Meal>(
+    MaterialPageRoute(builder: (_) => MealEditorScreen(meal: meal)),
+  );
+
+  if (saved == null) return;
+
+  // Shown immediately from what was just written, then reconciled against the
+  // server — so the meal is on screen before the refetch returns.
+  cubit.adopt(saved);
+  await cubit.refresh();
+}
+
 /// Opens the create-meal form and folds whatever comes back into the library.
 class _CreateMealButton extends StatelessWidget {
   const _CreateMealButton();
@@ -516,18 +543,6 @@ class _CreateMealButton extends StatelessWidget {
     );
   }
 
-  Future<void> _openEditor(BuildContext context) async {
-    final MealsCubit cubit = context.read<MealsCubit>();
-
-    final Meal? created = await Navigator.of(context).push<Meal>(
-      MaterialPageRoute(builder: (_) => const CreateMealScreen()),
-    );
-
-    if (created == null) return;
-
-    // Shown immediately from what was just written, then reconciled against the
-    // server — so the new meal is on screen before the refetch returns.
-    cubit.adopt(created);
-    await cubit.refresh();
-  }
+  Future<void> _openEditor(BuildContext context) =>
+      _openMealEditor(context, context.read<MealsCubit>());
 }

@@ -1,5 +1,6 @@
 import 'package:bulkr/models/food_item.dart';
 import 'package:bulkr/models/macros.dart';
+import 'package:bulkr/models/meal.dart';
 import 'package:bulkr/models/meal_draft.dart';
 import 'package:bulkr/models/meal_ingredient.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -130,6 +131,76 @@ void main() {
       const draft = MealDraft(manualTotals: Macros(calories: 500));
 
       expect(draft.totalGrams, isNull);
+    });
+  });
+
+  group('fromMeal', () {
+    Meal saved({
+      String title = 'Apex Ribeye',
+      String? description = 'Sear it.',
+      String? imageUrl = 'https://x.test/a.jpg',
+      bool isPublic = true,
+    }) {
+      return Meal(
+        id: 'meal-1',
+        creatorId: 'user-1',
+        title: title,
+        description: description,
+        imageUrl: imageUrl,
+        totals: const Macros(calories: 1450, proteinG: 67),
+        isPublic: isPublic,
+        createdAt: DateTime(2026, 8, 20),
+        isMine: true,
+      );
+    }
+
+    test('carries every editable field across', () {
+      final draft = MealDraft.fromMeal(saved(), const []);
+
+      expect(draft.title, 'Apex Ribeye');
+      expect(draft.recipe, 'Sear it.');
+      expect(draft.existingImageUrl, 'https://x.test/a.jpg');
+      expect(draft.isPublic, isTrue);
+      expect(draft.canSave, isTrue);
+    });
+
+    test('a meal with no recipe opens with an empty one, not null', () {
+      expect(MealDraft.fromMeal(saved(description: null), const []).recipe, '');
+    });
+
+    test('keeps the stored totals even when ingredients drive them', () {
+      // Otherwise removing every ingredient from a saved meal would silently
+      // reset it to zero rather than falling back to what it already said.
+      final draft = MealDraft.fromMeal(
+        saved(),
+        [ingredient('Rice', 'a', 200)],
+      );
+
+      expect(draft.totals.caloriesRounded, 200);
+      expect(draft.withoutIngredientAt(0).totals.caloriesRounded, 1450);
+    });
+
+    test('the existing photo survives edits to other fields', () {
+      final draft = MealDraft.fromMeal(saved(), const [])
+          .copyWith(title: 'Renamed');
+
+      expect(draft.existingImageUrl, 'https://x.test/a.jpg');
+      expect(draft.hasImage, isTrue);
+    });
+
+    test('removing the photo clears the stored one too', () {
+      // Otherwise "remove" would only undo a fresh pick and leave the meal
+      // still showing the image it had.
+      final draft = MealDraft.fromMeal(saved(), const [])
+          .copyWith(clearImage: true);
+
+      expect(draft.existingImageUrl, isNull);
+      expect(draft.hasImage, isFalse);
+    });
+
+    test('a meal with no photo has none', () {
+      expect(MealDraft.fromMeal(saved(imageUrl: null), const []).hasImage,
+          isFalse);
     });
   });
 

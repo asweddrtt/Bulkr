@@ -293,6 +293,128 @@ class MealRepository {
     );
   }
 
+  /// Writes [draft] over an existing meal the user owns.
+  ///
+  /// Only the creator can do this, and the check is here rather than only in
+  /// the UI: a meal saved from someone else's post is theirs, and editing it
+  /// would silently rewrite it for everyone who saved it. Changing a saved meal
+  /// means [createMeal] — a copy of your own.
+  ///
+  /// Already-logged days are untouched. `daily_logs` rows carry their own copy
+  /// of the calories precisely so that correcting a meal today cannot rewrite
+  /// what was eaten last Tuesday. That includes today's entry: it records what
+  /// was logged at the time it was logged.
+  Future<Meal> updateMeal({
+    required Meal meal,
+    required MealDraft draft,
+    Uint8List? imageBytes,
+    String imageExtension = 'jpg',
+  }) async {
+    final String? userId = _userId;
+    if (userId == null) {
+      throw StateError('Cannot edit a meal without a signed-in user');
+    }
+    if (meal.creatorId != userId) {
+      throw StateError('Only the creator of a meal can edit it');
+    }
+
+    List<MealIngredient> ingredients;
+    try {
+      ingredients = await _cacheIngredientFoods(draft);
+    } catch (error) {
+      debugPrint('Bulkr: ingredients could not be cached — $error');
+      ingredients = const [];
+    }
+
+    // The photo the meal keeps: a newly picked one, or the one it already had.
+    final String? previousUrl = meal.imageUrl;
+    String? imageUrl = draft.existingImageUrl;
+
+    if (imageBytes != null) {
+      imageUrl = await _uploadImage(
+        userId: userId,
+        bytes: imageBytes,
+        extension: imageExtension,
+      );
+    }
+
+    final Macros totals = draft.totals;
+
+    final Map<String, dynamic> row = await _client
+        .from('meals')
+        .update({
+          'title': draft.title.trim(),
+          'description':
+              draft.recipe.trim().isEmpty ? null : draft.recipe.trim(),
+          'image_url': imageUrl,
+          'total_calories': totals.caloriesRounded,
+          'total_protein_g': totals.proteinRounded,
+          'total_carbs_g': totals.carbsRounded,
+          'total_fat_g': totals.fatRounded,
+          'is_public': draft.isPublic,
+        })
+        .eq('id', meal.id)
+        .eq('creator_id', userId)
+        .select(_mealColumns)
+        .single();
+
+    await _replaceIngredients(mealId: meal.id, ingredients: ingredients);
+
+    // Only once the row no longer points at it. An orphaned file costs a few
+    // kilobytes; deleting one the meal still references costs the photo.
+    if (previousUrl != null && previousUrl != imageUrl) {
+      await _deleteStoredImage(previousUrl);
+    }
+
+    return Meal.fromRow(row, currentUserId: userId).copyWith(
+      isSaved: meal.isSaved,
+      isFavorite: meal.isFavorite,
+      savedAt: meal.savedAt,
+      isLoggedToday: meal.isLoggedToday,
+      ingredients: ingredients,
+      totalGrams: draft.totalGrams,
+    );
+  }
+
+  /// Swaps a meal's ingredient rows for a new set.
+  ///
+  /// Delete then insert, rather than working out which rows changed: the join
+  /// row holds only a food and an amount, so there is nothing in it worth
+  /// preserving, and a diff would be more code with more ways to be wrong.
+  ///
+  /// Non-fatal, like the insert on create. The meal's totals are on its own row
+  /// and are already correct; losing the itemisation is recoverable by editing
+  /// again, whereas failing here would report a save that did happen as an
+  /// error.
+  Future<void> _replaceIngredients({
+    required String mealId,
+    required List<MealIngredient> ingredients,
+  }) async {
+    try {
+      await _client.from('meal_ingredients').delete().eq('meal_id', mealId);
+
+      if (ingredients.isEmpty) return;
+
+      await _client.from('meal_ingredients').insert(
+            ingredients.map((i) => i.toRowValues(mealId: mealId)).toList(),
+          );
+    } catch (error) {
+      debugPrint('Bulkr: meal updated but ingredients failed — $error');
+    }
+  }
+
+  /// Best-effort removal of a photo no meal points at any more.
+  Future<void> _deleteStoredImage(String publicUrl) async {
+    final String? path = storagePathFor(publicUrl);
+    if (path == null) return;
+
+    try {
+      await _client.storage.from(imageBucket).remove([path]);
+    } catch (error) {
+      debugPrint('Bulkr: old meal photo not removed — $error');
+    }
+  }
+
   /// Every ingredient's food needs a `cached_off_foods` row before it can be
   /// referenced, since results straight from the Open Food Facts API have no id
   /// yet.
@@ -366,14 +488,8 @@ class MealRepository {
 
     await _client.from('meals').delete().eq('id', meal.id);
 
-    final String? path = storagePathFor(meal.imageUrl);
-    if (path == null) return;
-
-    try {
-      await _client.storage.from(imageBucket).remove([path]);
-    } catch (error) {
-      debugPrint('Bulkr: meal deleted, its photo was not — $error');
-    }
+    final String? imageUrl = meal.imageUrl;
+    if (imageUrl != null) await _deleteStoredImage(imageUrl);
   }
 
   /// Drops someone else's meal out of this user's library.
