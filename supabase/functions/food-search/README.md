@@ -93,8 +93,17 @@ Either way the answer looks like:
 Lengths, never values — enough to spot a truncated or mistyped secret while
 being useless to anyone who reads the output. Both should be 32.
 
-`tokenOk: false` comes with FatSecret's own words in `detail`: `invalid_client`
-is a wrong secret, anything mentioning the IP is the allow-list.
+`tokenOk: false` comes with FatSecret's own words in `detail`:
+
+* **`invalid_client`** — the pair was rejected. Both values are 32 hex
+  characters, so nothing about either says which is which, and setting them the
+  wrong way round gives exactly this. `diagnose` therefore also tries the swap
+  and reports `swappedWorks`. If that is `true`, exchange the two secrets. If it
+  is `false`, the pair does not belong together at all — most often because the
+  secret was regenerated in the console after the id was copied, which
+  invalidates the old one immediately. Copy both again in one sitting.
+* **anything mentioning the IP** — FatSecret's allow-list. Add Supabase's egress
+  addresses, not your machine.
 
 There is no `supabase functions logs` subcommand in CLI v2 — read logs in the
 dashboard under *Edge Functions → food-search → Logs*.

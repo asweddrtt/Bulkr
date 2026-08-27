@@ -113,13 +113,32 @@ async function diagnose(
     resetToken();
     await getAccessToken(clientId, clientSecret);
     result.tokenOk = true;
+    return result;
   } catch (error) {
     result.tokenOk = false;
-    // FatSecret's own words. It says "invalid_client" for a bad secret and
-    // something about the IP for an allow-list problem, and telling those two
-    // apart is the whole point of asking.
+    // FatSecret's own words. `invalid_client` means the pair was rejected;
+    // anything mentioning the IP is an allow-list problem, and telling those
+    // two apart is most of the point of asking.
     result.detail = `${error}`;
   }
+
+  // Both values are 32 hex characters, so nothing about either one says which
+  // is which — and setting them the wrong way round produces exactly the
+  // `invalid_client` above. Rather than leave that to guesswork, try the swap
+  // and say whether it works. Diagnose only; the search path never does this.
+  try {
+    resetToken();
+    await getAccessToken(clientSecret, clientId);
+    result.swappedWorks = true;
+    result.detail =
+      "The values are the right way round in FatSecret's eyes when swapped — " +
+      "set FATSECRET_CLIENT_ID to what is currently the secret, and vice versa.";
+  } catch (_) {
+    result.swappedWorks = false;
+  }
+
+  // Leave no cached token behind from a failed probe.
+  resetToken();
 
   return result;
 }
