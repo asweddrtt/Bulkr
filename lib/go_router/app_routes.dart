@@ -1,8 +1,12 @@
 class AppRoutes {
   const AppRoutes._();
 
+  /// Launch. Decides between sign-in, onboarding and the app, then replaces
+  /// itself — see [SplashScreen] for why that decision cannot be a redirect.
+  static const String splash = '/';
+
   /// Step 1 — identity.
-  static const String welcome = '/';
+  static const String welcome = '/welcome';
 
   /// Step 2 — biometrics.
   static const String biometrics = '/biometrics';

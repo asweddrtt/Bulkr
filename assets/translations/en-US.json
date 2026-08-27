@@ -231,5 +231,6 @@
   "barcode_added": "{food} added",
   "barcode_not_found": "Nothing found for {barcode}. Try searching by name.",
   "food_one_serving": "1 serving · {grams}g",
-  "food_update_amount": "Update amount"
+  "food_update_amount": "Update amount",
+  "app_name": "Bulkr"
 }

@@ -2,10 +2,12 @@ import 'package:bulkr/screens/main_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../data/app_preferences.dart';
 import '../data/auth_repository.dart';
 import '../screens/activity_level_screen.dart';
 import '../screens/biometrics_screen.dart';
 import '../screens/plan_reveal_screen.dart';
+import '../screens/splash_screen.dart';
 import '../screens/target_pace_screen.dart';
 import '../screens/welcome_screen.dart';
 import '../widgets/animations/motion.dart';
@@ -57,9 +59,12 @@ CustomTransitionPage<void> _stepTransition(GoRouterState state, Widget child) {
 class AppRouter {
   const AppRouter._();
 
-  static GoRouter build({required AuthRepository authRepository}) {
+  static GoRouter build({
+    required AuthRepository authRepository,
+    required AppPreferences preferences,
+  }) {
     return GoRouter(
-      initialLocation: AppRoutes.welcome,
+      initialLocation: AppRoutes.splash,
       debugLogDiagnostics: true,
 
       // Steps 2-5 assume a session and in-memory onboarding answers. Without
@@ -67,14 +72,27 @@ class AppRouter {
       // back to sign-in rather than letting them walk a flow that can't be
       // saved. This also makes a hot restart mid-flow behave predictably.
       redirect: (context, state) {
-        final isSigningIn = state.matchedLocation == AppRoutes.welcome;
-        if (!authRepository.hasSession && !isSigningIn) {
+        // Splash is exempt as well as the sign-in screen: it is what decides
+        // where a session goes, and bouncing it to sign-in would defeat the
+        // point of having one.
+        final location = state.matchedLocation;
+        final isEntry =
+            location == AppRoutes.welcome || location == AppRoutes.splash;
+
+        if (!authRepository.hasSession && !isEntry) {
           return AppRoutes.welcome;
         }
         return null;
       },
 
       routes: [
+        GoRoute(
+          path: AppRoutes.splash,
+          builder: (context, state) => SplashScreen(
+            authRepository: authRepository,
+            preferences: preferences,
+          ),
+        ),
         GoRoute(
           path: AppRoutes.welcome,
           builder: (context, state) => const WelcomeScreen(),

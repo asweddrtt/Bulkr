@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/calorie_engine.dart';
 import '../../core/insight_engine.dart';
 import '../../core/progress_stats.dart';
+import '../../data/app_preferences.dart';
 import '../../data/user_repository.dart';
 import '../../models/gender.dart';
 import '../../models/insight.dart';
@@ -22,12 +23,15 @@ class ProfileCubit extends Cubit<ProfileState> {
   ProfileCubit({
     required UserRepository userRepository,
     InsightEngine insightEngine = const InsightEngine(),
+    AppPreferences? preferences,
   })  : _userRepository = userRepository,
         _insightEngine = insightEngine,
+        _preferences = preferences ?? AppPreferences(),
         super(const ProfileState());
 
   final UserRepository _userRepository;
   final InsightEngine _insightEngine;
+  final AppPreferences _preferences;
 
   /// Translation key surfaced when any of the writes below fail.
   static const String _saveFailedKey = 'save_failed';
@@ -102,7 +106,15 @@ class ProfileCubit extends Cubit<ProfileState> {
   Future<bool> hasCompletedOnboarding() async {
     try {
       final profile = await _userRepository.fetchProfile();
-      return profile?.onboardingCompleted ?? false;
+      final bool completed = profile?.onboardingCompleted ?? false;
+
+      // Remembered so the next launch can route without waiting on the network
+      // — and can route correctly when there isn't any.
+      if (completed && profile != null) {
+        await _preferences.setCompletedOnboarding(profile.id);
+      }
+
+      return completed;
     } catch (error) {
       debugPrint('Bulkr: could not read onboarding state — ${_describe(error)}');
       return false;

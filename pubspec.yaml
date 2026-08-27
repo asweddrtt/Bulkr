@@ -59,6 +59,11 @@ dependencies:
   # Barcode scanning for the ingredient picker. A scanned code is the one input
   # that identifies a packaged food exactly, with no spelling and no ranking.
   mobile_scanner: ^5.2.3
+
+  # Remembering where launch should go. Already present transitively — both
+  # easy_localization and supabase_flutter use it — and declared here because
+  # AppPreferences calls it directly.
+  shared_preferences: ^2.3.2
   # NOTE: `intl` (DateFormat/NumberFormat) is not listed here on purpose —
   # easy_localization re-exports it, which is how NumberFormat is already used
   # in the reveal screen. Adding it explicitly risks a resolution conflict with

@@ -4,6 +4,7 @@ import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../data/app_preferences.dart';
 import '../../data/auth_repository.dart';
 
 part 'auth_state.dart';
@@ -11,13 +12,17 @@ part 'auth_state.dart';
 /// Screen 1 only. Establishes the Supabase Auth session and nothing else —
 /// the public `users` row is deferred to the end of onboarding by design.
 class AuthCubit extends Cubit<AuthenticationState> {
-  AuthCubit({required AuthRepository authRepository})
-      : _authRepository = authRepository,
+  AuthCubit({
+    required AuthRepository authRepository,
+    AppPreferences? preferences,
+  })  : _authRepository = authRepository,
+        _preferences = preferences ?? AppPreferences(),
         super(const AuthenticationState()) {
     _bootstrap();
   }
 
   final AuthRepository _authRepository;
+  final AppPreferences _preferences;
   StreamSubscription<AuthState>? _authSubscription;
 
   void _bootstrap() {
@@ -105,6 +110,10 @@ class AuthCubit extends Cubit<AuthenticationState> {
 
   Future<void> signOut() async {
     await _authRepository.signOut();
+    // Cleared before the state changes: the remembered "this user finished
+    // onboarding" is what launch routes on, and leaving it behind would send
+    // the next account straight past a flow it has not been through.
+    await _preferences.clear();
     emit(const AuthenticationState(status: AuthStatus.unauthenticated));
   }
 

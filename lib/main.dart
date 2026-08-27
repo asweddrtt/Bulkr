@@ -10,6 +10,7 @@ import 'cubit/auth/auth_cubit.dart';
 import 'cubit/meals/meals_cubit.dart';
 import 'cubit/onboarding/onboarding_cubit.dart';
 import 'cubit/profile/profile_cubit.dart';
+import 'data/app_preferences.dart';
 import 'data/auth_repository.dart';
 import 'data/food_repository.dart';
 import 'data/meal_repository.dart';
@@ -45,6 +46,7 @@ class BulkrApp extends StatefulWidget {
 
 class _BulkrAppState extends State<BulkrApp> {
   late final AuthRepository _authRepository;
+  late final AppPreferences _preferences;
   late final UserRepository _userRepository;
   late final FoodRepository _foodRepository;
   late final MealRepository _mealRepository;
@@ -54,13 +56,17 @@ class _BulkrAppState extends State<BulkrApp> {
   void initState() {
     super.initState();
     _authRepository = AuthRepository();
+    _preferences = AppPreferences();
     _userRepository = UserRepository();
     // One food repository for the whole app: it owns an HTTP client that is
     // kept alive across searches rather than reopened per query.
     _foodRepository = FoodRepository();
     _mealRepository = MealRepository(foodRepository: _foodRepository);
     // Built once: rebuilding a GoRouter throws away the navigation stack.
-    _router = AppRouter.build(authRepository: _authRepository);
+    _router = AppRouter.build(
+      authRepository: _authRepository,
+      preferences: _preferences,
+    );
   }
 
   @override
@@ -84,13 +90,19 @@ class _BulkrAppState extends State<BulkrApp> {
       // navigation between the five steps.
       providers: [
         BlocProvider(
-          create: (_) => AuthCubit(authRepository: _authRepository),
+          create: (_) => AuthCubit(
+            authRepository: _authRepository,
+            preferences: _preferences,
+          ),
         ),
         BlocProvider(
           create: (_) => OnboardingCubit(userRepository: _userRepository),
         ),
         BlocProvider(
-          create: (_) => ProfileCubit(userRepository: _userRepository),
+          create: (_) => ProfileCubit(
+            userRepository: _userRepository,
+            preferences: _preferences,
+          ),
         ),
         BlocProvider(
           create: (_) => MealsCubit(mealRepository: _mealRepository),
