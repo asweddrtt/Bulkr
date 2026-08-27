@@ -50,7 +50,11 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _decide() async {
+    // Both read off the context before the first await, so nothing here reaches
+    // through a BuildContext that may have gone by the time it resolves.
     final GoRouter router = GoRouter.of(context);
+    final ProfileCubit profile = context.read<ProfileCubit>();
+
     final String? userId = widget.authRepository.currentUser?.id;
 
     if (!widget.authRepository.hasSession || userId == null) {
@@ -70,8 +74,7 @@ class _SplashScreenState extends State<SplashScreen> {
     // problem sends the user to onboarding rather than into an app with no
     // profile behind it — and finishing onboarding again writes the same row
     // rather than a second one.
-    final bool completed =
-        await context.read<ProfileCubit>().hasCompletedOnboarding();
+    final bool completed = await profile.hasCompletedOnboarding();
 
     if (!mounted) return;
     router.go(completed ? AppRoutes.home : AppRoutes.biometrics);
