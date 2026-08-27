@@ -29,7 +29,17 @@ class MealRepository {
   static const String imageBucket = 'meal-images';
 
   /// Columns of `meals`, plus the author's handle for meals saved from the feed.
-  static const String _mealColumns = '*, users(username)';
+  ///
+  /// The foreign key is named explicitly, and has to be. `meals` and `users` are
+  /// related two ways: directly through `meals.creator_id`, and as a
+  /// many-to-many through `saved_meals`, which PostgREST reads as a junction
+  /// table because it holds foreign keys to both and nothing else of its own.
+  /// A bare `users(...)` is ambiguous between them and fails with PGRST201.
+  ///
+  /// `daily_logs` is a second such path, so this does not get less ambiguous
+  /// over time.
+  static const String _mealColumns =
+      '*, users!meals_creator_id_fkey(username)';
 
   /// How many meals a library page holds. Well beyond what anyone curates by
   /// hand, and it keeps a runaway account from pulling thousands of rows.

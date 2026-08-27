@@ -246,6 +246,17 @@ alter table public.posts
   foreign key (attached_meal_id) references public.meals(id) on delete set null;
 
 -- ---------------------------------------------------------------------------
+-- 6. Reload the API's schema cache
+-- ---------------------------------------------------------------------------
+-- PostgREST caches the schema, including which tables are related and how. The
+-- foreign keys rebuilt above change that, and until it re-reads them the API
+-- can answer from a picture of the database that no longer exists.
+--
+-- Supabase reloads on DDL by itself, but not instantly, and this is free.
+
+notify pgrst, 'reload schema';
+
+-- ---------------------------------------------------------------------------
 -- Verify
 -- ---------------------------------------------------------------------------
 --   select tablename, policyname, cmd from pg_policies
@@ -254,6 +265,13 @@ alter table public.posts
 --    order by tablename, cmd;
 --
 --   select id, public from storage.buckets where id = 'meal-images';
+--
+-- That `meals` and `users` are related more than one way, which is why the app
+-- names the foreign key when it embeds the author rather than asking for a bare
+-- `users(...)` — `saved_meals` and `daily_logs` both read as junction tables:
+--   select constraint_name, table_name from information_schema.table_constraints
+--    where constraint_type = 'FOREIGN KEY'
+--      and table_name in ('meals', 'saved_meals', 'daily_logs');
 --
 -- And that a deleted meal takes the right things with it:
 --   select tc.table_name, tc.constraint_name, rc.delete_rule
