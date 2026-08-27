@@ -50,6 +50,35 @@ void main() {
       expect(names(ranked), ['Whey protein isolate, powder']);
     });
 
+    test('a reference food outranks a brand that took its name', () {
+      // FoodData Central returned a branded product called exactly "RICE"
+      // ahead of the reference entry, because an identical name won the exact
+      // match outright while the reference entry was penalised for describing
+      // which rice it is.
+      final ranked = FoodSearchRanking.rank([
+        candidate('RICE', brand: 'SomeBrand', source: FoodSource.hosted),
+        candidate('Rice, white, long-grain, regular, cooked, unenriched',
+            source: FoodSource.hosted),
+      ], 'rice');
+
+      expect(
+        names(ranked).first,
+        'Rice, white, long-grain, regular, cooked, unenriched',
+      );
+    });
+
+    test('the head of a reference name is matched, not the whole thing', () {
+      // "Almonds, raw" answers "almond": the head is the food, the rest says
+      // which version, and singular/plural is the same tolerance used
+      // everywhere else.
+      final ranked = FoodSearchRanking.rankScored([
+        candidate('Almonds, raw'),
+      ], 'almond');
+
+      expect(ranked.first.score,
+          greaterThanOrEqualTo(FoodSearchRanking.strongMatchScore));
+    });
+
     test('a generic food outranks a product that merely contains it', () {
       final ranked = FoodSearchRanking.rank([
         candidate('Chicken & Bacon Sandwich Meal Deal', brand: 'Tesco'),

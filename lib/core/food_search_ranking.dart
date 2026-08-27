@@ -142,27 +142,58 @@ class FoodSearchRanking {
     // coincidence, and is worth more than any amount of partial credit.
     if (matched == queryTokens.length) score += 200;
 
-    if (name == queryText) {
+    // A reference food is named "head, qualifier, qualifier": "Rice, white,
+    // long-grain, regular, cooked, unenriched". The head is what the food *is*
+    // and the rest describes which version of it, so a head matching the query
+    // is as exact a match as an identical name — and the qualifiers are
+    // information rather than noise, which is why the length penalty is waived
+    // below when it hits.
+    //
+    // Without this, a branded product called exactly "RICE" outscores the
+    // reference entry for rice, because it wins the identical-name bonus
+    // outright while the reference entry is penalised for describing itself.
+    final bool headIsQuery = _headMatchesQuery(name, queryTokens);
+
+    if (name == queryText || headIsQuery) {
       score += 1000;
     } else if (name.startsWith(queryText)) {
       score += 400;
-    } else if (nameTokens.first == queryTokens.first) {
+    } else if (_tokensMatch(queryTokens.first, nameTokens.first)) {
       // "Egg, boiled" for "egg" — the food is the subject of its own name
       // rather than an ingredient mentioned in passing.
       score += 150;
     }
 
     // Shorter names are more generic, and a generic food is almost always what
-    // someone typing two plain words meant.
-    final int extraWords = nameTokens.length - queryTokens.length;
-    if (extraWords > 0) {
-      score -= 8 * (extraWords > _lengthPenaltyCap ? _lengthPenaltyCap : extraWords);
+    // someone typing two plain words meant. Skipped when the head already
+    // matched: there the extra words are the food's own description.
+    if (!headIsQuery) {
+      final int extraWords = nameTokens.length - queryTokens.length;
+      if (extraWords > 0) {
+        score -=
+            8 * (extraWords > _lengthPenaltyCap ? _lengthPenaltyCap : extraWords);
+      }
     }
 
     // An unbranded entry is the generic version of the food.
     if (food.brand == null || food.brand!.trim().isEmpty) score += 40;
 
     return score;
+  }
+
+  /// Whether the part of [name] before its first comma is the query.
+  ///
+  /// Compared token by token rather than as a string, so "Almonds, raw" answers
+  /// "almond" — the same singular/plural tolerance the rest of the matching
+  /// uses.
+  static bool _headMatchesQuery(String name, List<String> queryTokens) {
+    final List<String> head = tokenize(name.split(',').first);
+    if (head.length != queryTokens.length) return false;
+
+    for (var i = 0; i < head.length; i++) {
+      if (!_tokensMatch(queryTokens[i], head[i])) return false;
+    }
+    return true;
   }
 
   /// Whether a query word and a name word are the same word.

@@ -67,10 +67,12 @@ export async function searchFoods(
       query,
       dataType: DATA_TYPES,
       pageSize: maxResults,
-      // Their own relevance, which is decent. The app re-ranks everything
-      // against the query afterwards regardless.
-      sortBy: "dataType.keyword",
-      sortOrder: "asc",
+      // No sortBy on purpose. Sorting by dataType looks appealing — it would
+      // group the curated datasets together — but it is alphabetical, so
+      // "Branded" comes first and the window fills with barcodes before a
+      // single whole food appears. Left unsorted, FoodData Central returns its
+      // own relevance order, which is a better set of 25 candidates for the
+      // app to re-rank.
     }),
   });
 
