@@ -126,15 +126,15 @@ void main() {
       final ranked = FoodSearchRanking.rank([
         candidate('Olive oil', barcode: 'off', source: FoodSource.openFoodFacts),
         candidate('Olive oil', barcode: 'system', source: FoodSource.system),
-        candidate('Olive oil', barcode: 'fatsecret',
-            source: FoodSource.fatSecret),
+        candidate('Olive oil', barcode: 'hosted',
+            source: FoodSource.hosted),
         candidate('Olive oil', barcode: 'cached', source: FoodSource.cached),
       ], 'olive oil');
 
       // Identical text, identical names — only the source separates them.
       expect(
         ranked.map((f) => f.barcode).toList(),
-        ['system', 'cached', 'fatsecret', 'off'],
+        ['system', 'cached', 'hosted', 'off'],
       );
     });
 

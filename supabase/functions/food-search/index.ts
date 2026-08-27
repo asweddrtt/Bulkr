@@ -1,36 +1,28 @@
-// Tier 2 of the ingredient search: FatSecret, behind a function.
+// Tier 2 of the ingredient search: USDA FoodData Central, behind a function.
 //
-// It runs here rather than on the device for one non-negotiable reason: the
-// FatSecret client secret. It is a real credential, and anything shipped in a
-// mobile binary is public — an .apk is a zip, and pulling strings out of one
-// takes a minute. So the secret stays in the function's environment and the
-// device never sees it.
-//
+// It runs here rather than on the device so the API key is not shipped in the
+// binary — an .apk is a zip, and pulling strings out of one takes a minute.
 // Two things fall out of that which are worth having anyway:
 //
-//   * The OAuth token is fetched once per warm isolate instead of once per
-//     device, so a 24-hour token is actually used for 24 hours.
-//   * Results are written to `cached_off_foods` here, with the service role.
-//     That means every user's search warms the cache for everyone, and the
-//     client needs no insert rights on that shared table for FatSecret foods.
+//   * Results are written to `cached_off_foods` with the service role, so every
+//     user's search warms tier 1 for everyone and the app needs no write access
+//     to that shared table.
+//   * Results come back already carrying their cache id, so a meal can
+//     reference an ingredient without a further round trip.
 //
 // Deploy:
+//   supabase link --project-ref hqdfaeiyflbbzkduskaz
 //   supabase functions deploy food-search
-//   supabase secrets set FATSECRET_CLIENT_ID=... FATSECRET_CLIENT_SECRET=...
 //
-// SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are injected by the platform.
+// The key is free from https://fdc.nal.usda.gov/api-key-signup.html and is set
+// as USDA_API_KEY. SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are injected by
+// the platform.
 //
 // The caller's JWT is verified by default, so only signed-in users reach this.
 
-import {
-  currentAuthStyle,
-  getAccessToken,
-  type NormalisedFood,
-  resetToken,
-  searchFoods,
-} from "./fatsecret.ts";
+import { type NormalisedFood, searchFoods } from "./usda.ts";
 
-const MAX_RESULTS = 20;
+const MAX_RESULTS = 25;
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -47,26 +39,21 @@ Deno.serve(async (request: Request) => {
     const body = await request.json();
     const term = `${body?.query ?? ""}`.trim();
 
-    const clientId = Deno.env.get("FATSECRET_CLIENT_ID");
-    const clientSecret = Deno.env.get("FATSECRET_CLIENT_SECRET");
+    const apiKey = Deno.env.get("USDA_API_KEY");
 
-    if (body?.diagnose === true) {
-      return json(await diagnose(clientId, clientSecret));
-    }
+    if (body?.diagnose === true) return json(await diagnose(apiKey));
 
     if (term.length < 2) return json({ foods: [] });
 
-    if (!clientId || !clientSecret) {
-      // A missing secret is a deployment mistake, not a user-facing failure.
-      // The app treats an errored tier as an empty one and falls through to
-      // Open Food Facts, so searching still works while this is sorted out.
-      console.error("FATSECRET_CLIENT_ID / _SECRET are not set");
-      return json({ foods: [], error: "not_configured" }, 200);
+    if (!apiKey) {
+      // A missing key is a deployment mistake, not a user-facing failure. The
+      // app treats an errored tier as an empty one and falls through to Open
+      // Food Facts, so searching still works while this is sorted out.
+      console.error("USDA_API_KEY is not set");
+      return json({ foods: [], error: "not_configured" });
     }
 
-    const token = await getAccessToken(clientId, clientSecret);
-    const foods = await searchFoods(token, term, MAX_RESULTS);
-
+    const foods = await searchFoods(apiKey, term, MAX_RESULTS);
     if (foods.length === 0) return json({ foods: [] });
 
     return json({ foods: await cacheFoods(foods) });
@@ -74,101 +61,54 @@ Deno.serve(async (request: Request) => {
     console.error("food-search failed:", error);
     // Same reasoning: a 200 with nothing in it keeps the client's cascade
     // moving to the next tier instead of surfacing a third party's outage.
-    return json({ foods: [], error: `${error}` }, 200);
+    return json({ foods: [], error: `${error}` });
   }
 });
 
 /**
- * Answers "is tier 2 actually working?" without revealing anything.
+ * Answers "is tier 2 actually working?" without revealing the key.
  *
- * Worth having because the failure mode here is silent by design: a
- * misconfigured function returns an empty list and the app falls through to
- * Open Food Facts, so tier 2 can be dead for weeks and look like nothing more
- * than a quiet search.
- *
- * Lengths, never values. A secret pasted with a typo, or truncated by a shell
- * that split it on a space, is the likeliest thing to be wrong, and a length is
- * enough to see that while being useless to anyone who reads it. A FatSecret
- * client id and secret are both 32 hex characters.
+ * Worth having because the failure mode is silent by design: a misconfigured
+ * function returns an empty list and the app falls through to Open Food Facts,
+ * so tier 2 can be dead for weeks and look like nothing more than a quiet
+ * search.
  */
-async function diagnose(
-  clientId: string | undefined,
-  clientSecret: string | undefined,
-): Promise<Record<string, unknown>> {
+async function diagnose(apiKey: string | undefined): Promise<
+  Record<string, unknown>
+> {
   const result: Record<string, unknown> = {
-    configured: Boolean(clientId && clientSecret),
-    clientIdLength: clientId?.length ?? 0,
-    clientSecretLength: clientSecret?.length ?? 0,
-    expectedLength: 32,
+    provider: "usda-fooddata-central",
+    configured: Boolean(apiKey),
+    // Length, never the value — enough to spot a key truncated by a shell
+    // splitting on a space, useless to whoever reads the output.
+    apiKeyLength: apiKey?.length ?? 0,
   };
 
-  // What FatSecret sees as the caller. Their free tier restricts access by IP,
-  // and an edge function's egress address is not yours and is not promised to
-  // be stable — so this is both the value to allow-list and the way to find out
-  // whether allow-listing one address can work at all. Call diagnose a few
-  // times: if this changes, a static hop is needed rather than a list entry.
-  result.egressIp = await egressIp();
-
-  if (!clientId || !clientSecret) {
-    result.tokenOk = false;
-    result.detail = "FATSECRET_CLIENT_ID / _SECRET are not both set";
+  if (!apiKey) {
+    result.searchOk = false;
+    result.detail = "USDA_API_KEY is not set";
     return result;
   }
 
   try {
-    // Forces a real exchange rather than reusing a cached token, so this
-    // reports the state of the credentials now.
-    resetToken();
-    await getAccessToken(clientId, clientSecret);
-    result.tokenOk = true;
-    result.authStyle = currentAuthStyle();
-    return result;
+    // A real search rather than a ping: it exercises the key, the request shape
+    // and the parsing in one go, which is what "working" actually means here.
+    const foods = await searchFoods(apiKey, "rice", 5);
+    result.searchOk = true;
+    result.sampleCount = foods.length;
+    result.sample = foods[0]?.product_name ?? null;
   } catch (error) {
-    result.tokenOk = false;
-    // FatSecret's own words. `invalid_client` means the pair was rejected;
-    // anything mentioning the IP is an allow-list problem, and telling those
-    // two apart is most of the point of asking.
+    result.searchOk = false;
+    // FoodData Central's own words. An invalid key says so plainly, and
+    // OVER_RATE_LIMIT is the hourly cap rather than anything misconfigured.
     result.detail = `${error}`;
   }
-
-  // Both values are 32 hex characters, so nothing about either one says which
-  // is which — and setting them the wrong way round produces exactly the
-  // `invalid_client` above. Rather than leave that to guesswork, try the swap
-  // and say whether it works. Diagnose only; the search path never does this.
-  try {
-    resetToken();
-    await getAccessToken(clientSecret, clientId);
-    result.swappedWorks = true;
-    result.detail =
-      "The values are the right way round in FatSecret's eyes when swapped — " +
-      "set FATSECRET_CLIENT_ID to what is currently the secret, and vice versa.";
-  } catch (_) {
-    result.swappedWorks = false;
-  }
-
-  // Leave no cached token behind from a failed probe.
-  resetToken();
 
   return result;
 }
 
-/** The address outbound requests from this function appear to come from. */
-async function egressIp(): Promise<string> {
-  try {
-    const response = await fetch("https://api.ipify.org?format=json");
-    if (!response.ok) return `unavailable (${response.status})`;
-    return `${(await response.json()).ip}`;
-  } catch (error) {
-    return `unavailable (${error})`;
-  }
-}
-
 /**
  * Upserts into `cached_off_foods` and returns the stored rows.
- *
- * Returning the rows rather than what we sent means the response carries each
- * food's cache id, so the app can reference it from a meal without a further
- * round trip — and without needing write access to the table.
  *
  * A failed cache write is not a failed search: the foods are still returned,
  * just without ids, and the app falls back to caching them itself.

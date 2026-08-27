@@ -3,10 +3,15 @@ import '../models/food_item.dart';
 /// Where a search result came from, which is the tie-breaker when two foods
 /// score the same on the text.
 ///
-/// Our own curated list beats the shared cache, which beats FatSecret, which
-/// beats a cold hit from Open Food Facts — the order of how much the data
-/// behind each can be trusted. Declaration order is also the tie-break order.
-enum FoodSource { system, cached, fatSecret, openFoodFacts }
+/// Our own curated list beats the shared cache, which beats the hosted food
+/// database, which beats a cold hit from Open Food Facts — the order of how
+/// much the data behind each can be trusted. Declaration order is also the
+/// tie-break order.
+///
+/// [hosted] is deliberately not named after a provider: the app knows only that
+/// it called the `food-search` function, and which database sits behind it is
+/// that function's business. It has already changed once.
+enum FoodSource { system, cached, hosted, openFoodFacts }
 
 /// A candidate result, before it has earned its place in the list.
 class ScoredFood {
@@ -176,7 +181,7 @@ class FoodSearchRanking {
   static double _sourceBonus(FoodSource source) => switch (source) {
         FoodSource.system => 120,
         FoodSource.cached => 60,
-        FoodSource.fatSecret => 40,
+        FoodSource.hosted => 40,
         FoodSource.openFoodFacts => 0,
       };
 

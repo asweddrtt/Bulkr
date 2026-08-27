@@ -17,10 +17,10 @@ import '../models/macros.dart';
 ///   1. **Our own database** — `system_foods` (curated whole foods) and
 ///      `cached_off_foods` (everything anyone here has used before). One round
 ///      trip, no third party, and it gets better the more the app is used.
-///   2. **FatSecret**, through the `food-search` edge function. Good coverage of
-///      both generic and branded food. It runs server-side because its client
-///      secret cannot ship in an app, and the function writes what it finds
-///      straight into tier 1.
+///   2. **A hosted food database**, through the `food-search` edge function —
+///      currently USDA FoodData Central. It runs server-side so its key is not
+///      shipped in the binary, and the function writes what it finds straight
+///      into tier 1.
 ///   3. **Open Food Facts** — the long tail and anything international.
 ///
 /// The tiers are sequential rather than parallel, and that is the point: Open
@@ -91,8 +91,8 @@ class FoodRepository {
   /// Below this a query matches half the database and none of it usefully.
   static const int minQueryLength = 2;
 
-  /// The edge function holding the FatSecret credentials.
-  static const String _fatSecretFunction = 'food-search';
+  /// The edge function holding the hosted database's credentials.
+  static const String _hostedFunction = 'food-search';
 
   static const Duration _functionTimeout = Duration(seconds: 8);
 
@@ -136,8 +136,8 @@ class FoodRepository {
     List<ScoredFood> ranked = _rank(found, trimmed);
     if (_isEnough(ranked)) return _asFoods(ranked);
 
-    // Tier 2 — FatSecret, which caches into tier 1 as a side effect.
-    _collect(found, await _searchFatSecret(trimmed));
+    // Tier 2 — the hosted database, which caches into tier 1 as a side effect.
+    _collect(found, await _searchHosted(trimmed));
 
     ranked = _rank(found, trimmed);
     if (_isEnough(ranked)) return _asFoods(ranked);
@@ -216,15 +216,16 @@ class FoodRepository {
     return Future.wait(foods.map(ensureCached));
   }
 
-  /// Tier 2 — FatSecret, through the edge function that holds its secret.
+  /// Tier 2 — the hosted food database, through the edge function that holds
+  /// its key.
   ///
   /// The function returns the rows it wrote to `cached_off_foods`, so results
   /// arrive already carrying their cache id and can be referenced by a meal
   /// without the app needing write access to that table.
-  Future<List<ScoredFood>> _searchFatSecret(String query) async {
+  Future<List<ScoredFood>> _searchHosted(String query) async {
     try {
       final FunctionResponse response = await _client.functions
-          .invoke(_fatSecretFunction, body: {'query': query})
+          .invoke(_hostedFunction, body: {'query': query})
           .timeout(_functionTimeout);
 
       final Object? data = response.data;
@@ -247,7 +248,7 @@ class FoodRepository {
           .map(FoodItem.fromCacheRow)
           .map((food) => ScoredFood(
                 food: food,
-                source: FoodSource.fatSecret,
+                source: FoodSource.hosted,
                 score: 0,
               ))
           .toList();

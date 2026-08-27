@@ -20,9 +20,8 @@ local.properties
 #
 # `supabase link` writes the project ref here, and `supabase secrets set --env-file`
 # reads a .env that holds real credentials. Neither belongs in the repo — the
-# FatSecret client secret is the one credential in this project that is not
-# safe to publish, unlike the publishable key in supabase_config.dart, which is
-# designed to ship.
+# FoodData Central API key is not safe to publish, unlike the publishable key in
+# supabase_config.dart, which is designed to ship.
 supabase/.temp/
 supabase/.env
 supabase/functions/**/.env

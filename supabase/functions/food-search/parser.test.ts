@@ -1,12 +1,14 @@
 // Run: node --experimental-strip-types supabase/functions/food-search/parser.test.ts
 import assert from "node:assert/strict";
 import {
+  barcodeFor,
+  brandFor,
+  energyKcalPer100g,
   normaliseFood,
   normaliseSearchResponse,
-  parseFoodDescription,
   readNutrient,
   servingGrams,
-} from "./fatsecret.ts";
+} from "./usda.ts";
 
 let passed = 0;
 function check(name: string, run: () => void) {
@@ -19,136 +21,151 @@ function check(name: string, run: () => void) {
   }
 }
 
-check("per 100g is taken as-is", () => {
-  const parsed = parseFoodDescription(
-    "Per 100g - Calories: 130kcal | Fat: 0.28g | Carbs: 28.17g | Protein: 2.69g",
-  );
-  assert.deepEqual(parsed, {
-    calories: 130,
-    protein: 2.69,
-    carbs: 28.17,
-    fat: 0.28,
-    servingSizeG: 100,
-  });
+/** The flattened shape the /foods/search endpoint returns. */
+const RICE = {
+  fdcId: 168878,
+  description: "Rice, white, long-grain, regular, cooked, unenriched",
+  dataType: "SR Legacy",
+  foodNutrients: [
+    { nutrientId: 1008, nutrientName: "Energy", unitName: "KCAL", value: 130 },
+    { nutrientId: 1003, nutrientName: "Protein", unitName: "G", value: 2.69 },
+    { nutrientId: 1005, nutrientName: "Carbohydrate, by difference", unitName: "G", value: 28.17 },
+    { nutrientId: 1004, nutrientName: "Total lipid (fat)", unitName: "G", value: 0.28 },
+  ],
+};
+
+check("a whole food becomes a cache row", () => {
+  const food = normaliseFood(RICE);
+
+  assert.equal(food?.product_name, "Rice, white, long-grain, regular, cooked, unenriched");
+  assert.equal(food?.calories_100g, 130);
+  assert.equal(food?.protein_100g, 2.69);
+  assert.equal(food?.carbs_100g, 28.17);
+  assert.equal(food?.fat_100g, 0.28);
 });
 
-check("a gram serving is rescaled to 100g", () => {
-  const parsed = parseFoodDescription(
-    "Per 1 serving (28g) - Calories: 140kcal | Fat: 7.00g | Carbs: 16.00g | Protein: 2.00g",
-  );
-  // 140 kcal in 28g is 500 kcal per 100g.
-  assert.equal(parsed?.calories, 500);
-  assert.equal(parsed?.protein, 7.14);
-  assert.equal(parsed?.servingSizeG, 28);
+check("a whole food is unbranded, which is what earns its ranking bonus", () => {
+  // Must be null, not "" and not invented: the app gives unbranded entries a
+  // bonus, and that is how a generic beats a product that merely contains it.
+  assert.equal(normaliseFood(RICE)?.brand_name, null);
+  assert.equal(brandFor(RICE), null);
+  assert.equal(brandFor({ brandName: "  " }), null);
+  assert.equal(brandFor({ brandOwner: "Kellogg" }), "Kellogg");
+  assert.equal(brandFor({ brandName: "Special K", brandOwner: "Kellogg" }), "Special K");
 });
 
-check("a serving with no weight is rejected, not guessed", () => {
+check("a branded product is keyed on its real barcode", () => {
+  // So a USDA entry and an Open Food Facts entry for the same tin collapse to
+  // one row rather than appearing twice.
+  assert.equal(barcodeFor({ fdcId: 1, gtinUpc: "0038000138416" }), "0038000138416");
+  assert.equal(barcodeFor({ fdcId: 168878 }), "usda-168878");
+  assert.equal(barcodeFor({ fdcId: 1, gtinUpc: "not-a-gtin" }), "usda-1");
+  assert.equal(barcodeFor({ fdcId: 1, gtinUpc: "123" }), "usda-1");
+  assert.equal(barcodeFor({}), null);
+});
+
+check("energy falls back through the Atwater variants and kilojoules", () => {
+  assert.equal(energyKcalPer100g([{ nutrientId: 1008, value: 130 }]), 130);
+  assert.equal(energyKcalPer100g([{ nutrientId: 2047, value: 128 }]), 128);
   assert.equal(
-    parseFoodDescription(
-      "Per 1 cup cooked - Calories: 205kcal | Fat: 0.44g | Carbs: 44.51g | Protein: 4.25g",
-    ),
+    energyKcalPer100g([{ nutrientId: 1062, value: 544 }]),
+    544 / 4.184,
+  );
+  // kcal wins when both are present.
+  assert.equal(
+    energyKcalPer100g([
+      { nutrientId: 1062, value: 544 },
+      { nutrientId: 1008, value: 130 },
+    ]),
+    130,
+  );
+  assert.equal(energyKcalPer100g([]), null);
+});
+
+check("a food with no energy is dropped, not logged as zero", () => {
+  assert.equal(
+    normaliseFood({ fdcId: 1, description: "Water", foodNutrients: [] }),
     null,
   );
-});
-
-check("millilitres are accepted as grams", () => {
-  const parsed = parseFoodDescription(
-    "Per 250ml - Calories: 105kcal | Fat: 4.00g | Carbs: 12.00g | Protein: 8.00g",
-  );
-  assert.equal(parsed?.calories, 42);
-});
-
-check("a missing macro reads as zero, a missing energy rejects the food", () => {
-  const noFat = parseFoodDescription("Per 100g - Calories: 90kcal | Protein: 3g");
-  assert.equal(noFat?.fat, 0);
-  assert.equal(noFat?.protein, 3);
-
-  assert.equal(parseFoodDescription("Per 100g - Fat: 3g | Protein: 3g"), null);
-});
-
-check("malformed descriptions do not throw", () => {
-  assert.equal(parseFoodDescription(""), null);
-  assert.equal(parseFoodDescription("   "), null);
-  assert.equal(parseFoodDescription("Calories: 100kcal"), null);
-  assert.equal(parseFoodDescription("Per - Calories: 100kcal"), null);
-  assert.equal(parseFoodDescription("Per 0g - Calories: 100kcal"), null);
-});
-
-check("servingGrams reads the shapes that carry a weight", () => {
-  assert.equal(servingGrams("100g"), 100);
-  assert.equal(servingGrams("100 g"), 100);
-  assert.equal(servingGrams("250ml"), 250);
-  assert.equal(servingGrams("1 serving (28g)"), 28);
-  assert.equal(servingGrams("1 cup (158 g)"), 158);
-  assert.equal(servingGrams("1 cup cooked"), null);
-  assert.equal(servingGrams("1 large"), null);
-});
-
-check("readNutrient is case insensitive and unit agnostic", () => {
-  assert.equal(readNutrient("Calories: 130kcal", "Calories"), 130);
-  assert.equal(readNutrient("calories: 130 kcal", "Calories"), 130);
-  assert.equal(readNutrient("Fat: 0.28g", "Fat"), 0.28);
-  assert.equal(readNutrient("Carbs: 28g", "Protein"), null);
-});
-
-check("a food entry becomes a cache row", () => {
-  const food = normaliseFood({
-    food_id: "35755",
-    food_name: "Rice",
-    brand_name: "",
-    food_description:
-      "Per 100g - Calories: 130kcal | Fat: 0.28g | Carbs: 28.17g | Protein: 2.69g",
-  });
-
-  assert.equal(food?.barcode, "fs-35755");
-  assert.equal(food?.product_name, "Rice");
-  assert.equal(food?.brand_name, null);
-  assert.equal(food?.calories_100g, 130);
-});
-
-check("an entry with no id, name or usable nutrition is dropped", () => {
-  assert.equal(normaliseFood({ food_name: "Rice" }), null);
-  assert.equal(normaliseFood({ food_id: "1" }), null);
   assert.equal(
     normaliseFood({
-      food_id: "1",
-      food_name: "Rice",
-      food_description: "Per 1 bowl - Calories: 200kcal",
+      fdcId: 1,
+      description: "Mystery",
+      foodNutrients: [{ nutrientId: 1008, value: 0 }],
     }),
     null,
   );
 });
 
-check("a single result arrives as an object, not an array", () => {
-  // FatSecret collapses `foods.food` to a bare object when one food matches,
-  // which is a good way to crash on the day a query is specific enough.
-  const single = normaliseSearchResponse({
-    foods: {
-      food: {
-        food_id: "1",
-        food_name: "Rice",
-        food_description: "Per 100g - Calories: 130kcal",
-      },
-    },
-  });
-  assert.equal(single.length, 1);
-
-  const many = normaliseSearchResponse({
-    foods: {
-      food: [
-        { food_id: "1", food_name: "Rice", food_description: "Per 100g - Calories: 130kcal" },
-        { food_id: "2", food_name: "Brown rice", food_description: "Per 100g - Calories: 123kcal" },
-      ],
-    },
-  });
-  assert.equal(many.length, 2);
+check("a nameless entry is dropped", () => {
+  assert.equal(normaliseFood({ fdcId: 1, foodNutrients: [] }), null);
+  assert.equal(normaliseFood({ fdcId: 1, description: "   " }), null);
 });
 
-check("an empty or unexpected payload is an empty list", () => {
+check("missing macros read as zero", () => {
+  const food = normaliseFood({
+    fdcId: 1,
+    description: "Olive oil",
+    foodNutrients: [
+      { nutrientId: 1008, value: 884 },
+      { nutrientId: 1004, value: 100 },
+    ],
+  });
+
+  assert.equal(food?.calories_100g, 884);
+  assert.equal(food?.fat_100g, 100);
+  assert.equal(food?.protein_100g, 0);
+  assert.equal(food?.carbs_100g, 0);
+});
+
+check("the nested nutrient shape is read too", () => {
+  // The search endpoint flattens to {nutrientId, value}; the detail endpoint
+  // nests as {nutrient: {id}, amount}. Both turn up.
+  assert.equal(readNutrient([{ nutrient: { id: 1003 }, amount: 31 }], [1003]), 31);
+  assert.equal(readNutrient([{ nutrientId: 1003, value: 31 }], [1003]), 31);
+  assert.equal(readNutrient([{ nutrientId: 1003, value: 31 }], [1005]), null);
+  assert.equal(readNutrient([], [1003]), null);
+});
+
+check("serving size is taken only when stated by weight", () => {
+  assert.equal(servingGrams({ servingSize: 55, servingSizeUnit: "g" }), 55);
+  assert.equal(servingGrams({ servingSize: 240, servingSizeUnit: "ml" }), 240);
+  assert.equal(servingGrams({ servingSize: 55, servingSizeUnit: "G" }), 55);
+  // "1 cup" cannot honestly become grams.
+  assert.equal(servingGrams({ servingSize: 1, servingSizeUnit: "cup" }), null);
+  assert.equal(servingGrams({ servingSize: 0, servingSizeUnit: "g" }), null);
+  assert.equal(servingGrams({}), null);
+});
+
+check("values are rounded to two places", () => {
+  const food = normaliseFood({
+    fdcId: 1,
+    description: "Thing",
+    foodNutrients: [
+      { nutrientId: 1008, value: 130.456789 },
+      { nutrientId: 1003, value: 2.6949 },
+    ],
+  });
+
+  assert.equal(food?.calories_100g, 130.46);
+  assert.equal(food?.protein_100g, 2.69);
+});
+
+check("a search payload becomes a list, and junk becomes an empty one", () => {
+  assert.equal(normaliseSearchResponse({ foods: [RICE] }).length, 1);
+  assert.deepEqual(normaliseSearchResponse({ foods: [] }), []);
   assert.deepEqual(normaliseSearchResponse({}), []);
   assert.deepEqual(normaliseSearchResponse(null), []);
-  assert.deepEqual(normaliseSearchResponse({ foods: {} }), []);
-  assert.deepEqual(normaliseSearchResponse({ error: "rate limited" }), []);
+  assert.deepEqual(normaliseSearchResponse({ error: "OVER_RATE_LIMIT" }), []);
 });
 
-console.log(`${passed} FatSecret parser checks passed`);
+check("unusable entries are filtered out of an otherwise good payload", () => {
+  const foods = normaliseSearchResponse({
+    foods: [RICE, { fdcId: 2, description: "No energy", foodNutrients: [] }],
+  });
+
+  assert.equal(foods.length, 1);
+  assert.equal(foods[0].barcode, "usda-168878");
+});
+
+console.log(`${passed} FoodData Central parser checks passed`);
