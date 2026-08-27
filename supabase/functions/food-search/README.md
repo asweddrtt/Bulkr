@@ -90,13 +90,19 @@ Working looks like:
 
 ```json
 { "provider": "usda-fooddata-central", "configured": true, "apiKeyLength": 40,
-  "searchOk": true, "sampleCount": 5,
-  "sample": "Rice, white, long-grain, regular, cooked, unenriched" }
+  "searchOk": true, "resultCount": 5,
+  "unrankedSample": ["RICE", "Rice, white, long-grain, regular, cooked, unenriched", ...] }
 ```
 
 It runs a real search for "rice" rather than a ping, so it exercises the key,
 the request shape and the parsing together — which is what "working" means here.
 The key's length is reported, never its value.
+
+`unrankedSample` is **FoodData Central's own order, not the order anyone sees.**
+Ranking against the query happens in the app, in `FoodSearchRanking`, after
+these results are merged with the cached and Open Food Facts tiers. A branded
+"RICE" sitting at the top of this list is normal and says nothing about what the
+search will show. To check the ordering users actually get, use the app.
 
 `searchOk: false` carries FoodData Central's own words in `detail`. An invalid
 key says so plainly; `OVER_RATE_LIMIT` is the hourly cap rather than anything

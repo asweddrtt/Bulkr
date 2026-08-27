@@ -95,8 +95,14 @@ async function diagnose(apiKey: string | undefined): Promise<
     // and the parsing in one go, which is what "working" actually means here.
     const foods = await searchFoods(apiKey, "rice", 5);
     result.searchOk = true;
-    result.sampleCount = foods.length;
-    result.sample = foods[0]?.product_name ?? null;
+    result.resultCount = foods.length;
+
+    // FoodData Central's own order, NOT the order anyone sees. Ranking against
+    // the query happens in the app, after these are merged with the cached and
+    // Open Food Facts tiers — so a branded "RICE" sitting at the top here is
+    // normal and says nothing about what the search will show. This field is
+    // for confirming the tier returns plausible food at all.
+    result.unrankedSample = foods.map((food) => food.product_name);
   } catch (error) {
     result.searchOk = false;
     // FoodData Central's own words. An invalid key says so plainly, and
