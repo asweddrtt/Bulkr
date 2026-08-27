@@ -66,7 +66,7 @@ class MealsScreen extends StatelessWidget {
         );
 
       case MealsStatus.ready:
-        return _MealsList(state: state);
+        return _MealsSwipeView(state: state);
     }
   }
 
@@ -275,9 +275,11 @@ class _TabButton extends StatelessWidget {
 }
 
 class _MealsList extends StatelessWidget {
-  const _MealsList({required this.state});
+  const _MealsList({super.key, required this.state, required this.viewTab});
 
   final MealsState state;
+  final MealsTab viewTab;
+
 
   @override
   Widget build(BuildContext context) {
@@ -545,4 +547,64 @@ class _CreateMealButton extends StatelessWidget {
 
   Future<void> _openEditor(BuildContext context) =>
       _openMealEditor(context, context.read<MealsCubit>());
+}
+class _MealsSwipeView extends StatefulWidget {
+  final MealsState state;
+  const _MealsSwipeView({super.key, required this.state});
+
+  @override
+  State<_MealsSwipeView> createState() => _MealsSwipeViewState();
+}
+
+class _MealsSwipeViewState extends State<_MealsSwipeView> {
+  late PageController _pageController;
+
+  @override
+  void initState() {
+    super.initState();
+    // Start on the correct page based on current tab
+    _pageController = PageController(
+      initialPage: widget.state.tab == MealsTab.mine ? 0 : 1,
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant _MealsSwipeView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // If the user taps a tab button, animate the PageView to match
+    final targetPage = widget.state.tab == MealsTab.mine ? 0 : 1;
+    if (_pageController.hasClients && _pageController.page?.round() != targetPage) {
+      _pageController.animateToPage(
+        targetPage,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOutCubic,
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PageView(
+      controller: _pageController,
+      onPageChanged: (index) {
+        // If the user swipes, update the Cubit to switch the active tab
+        final targetTab = index == 0 ? MealsTab.mine : MealsTab.favorites;
+        if (widget.state.tab != targetTab) {
+          context.read<MealsCubit>().selectTab(targetTab);
+        }
+      },
+      children: [
+        // Page 0: Mine
+        _MealsList(state: widget.state, viewTab: MealsTab.mine),
+        // Page 1: Favorites
+        _MealsList(state: widget.state, viewTab: MealsTab.favorites),
+      ],
+    );
+  }
 }
