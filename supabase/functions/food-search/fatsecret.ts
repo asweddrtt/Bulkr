@@ -35,6 +35,23 @@ export const BARCODE_PREFIX = "fs-";
  */
 let cachedToken: { value: string; expiresAt: number } | null = null;
 
+/**
+ * How the client credentials are presented at the token endpoint.
+ *
+ * RFC 6749 allows either, and providers differ on which they accept. FatSecret
+ * documents HTTP Basic, but a provider that wanted the other form would reject
+ * Basic with `invalid_client` — the same error a genuinely wrong secret gets.
+ * So both are tried rather than assumed, and whichever works is remembered.
+ */
+export type AuthStyle = "basic" | "body";
+
+let preferredStyle: AuthStyle = "basic";
+
+/** Which style last succeeded. Reported by the diagnose endpoint. */
+export function currentAuthStyle(): AuthStyle {
+  return preferredStyle;
+}
+
 export async function getAccessToken(
   clientId: string,
   clientSecret: string,
@@ -46,26 +63,61 @@ export async function getAccessToken(
     return cachedToken.value;
   }
 
-  const credentials = btoa(`${clientId}:${clientSecret}`);
+  // Whichever worked last time first, so the second style costs a round trip
+  // once rather than on every renewal.
+  const order: AuthStyle[] =
+    preferredStyle === "basic" ? ["basic", "body"] : ["body", "basic"];
+
+  const failures: string[] = [];
+
+  for (const style of order) {
+    try {
+      const token = await requestToken(clientId, clientSecret, style, now);
+      preferredStyle = style;
+      return token;
+    } catch (error) {
+      failures.push(`${style}: ${error instanceof Error ? error.message : error}`);
+    }
+  }
+
+  throw new Error(failures.join(" | "));
+}
+
+async function requestToken(
+  clientId: string,
+  clientSecret: string,
+  style: AuthStyle,
+  now: number,
+): Promise<string> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/x-www-form-urlencoded",
+  };
+
+  const form = new URLSearchParams({
+    grant_type: "client_credentials",
+    scope: "basic",
+  });
+
+  if (style === "basic") {
+    headers.Authorization = `Basic ${btoa(`${clientId}:${clientSecret}`)}`;
+  } else {
+    form.set("client_id", clientId);
+    form.set("client_secret", clientSecret);
+  }
 
   const response = await fetch(TOKEN_URL, {
     method: "POST",
-    headers: {
-      Authorization: `Basic ${credentials}`,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: "grant_type=client_credentials&scope=basic",
+    headers,
+    body: form.toString(),
   });
 
   if (!response.ok) {
-    throw new Error(
-      `FatSecret token request failed: ${response.status} ${await response.text()}`,
-    );
+    throw new Error(`${response.status} ${await response.text()}`);
   }
 
   const body = await response.json();
   const token = body.access_token;
-  if (typeof token !== "string") throw new Error("FatSecret returned no token");
+  if (typeof token !== "string") throw new Error("no access_token in response");
 
   const lifetimeMs = (Number(body.expires_in) || 86_400) * 1000;
   cachedToken = { value: token, expiresAt: now + lifetimeMs };

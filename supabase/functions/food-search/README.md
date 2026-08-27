@@ -95,13 +95,22 @@ being useless to anyone who reads the output. Both should be 32.
 
 `tokenOk: false` comes with FatSecret's own words in `detail`:
 
-* **`invalid_client`** — the pair was rejected. Both values are 32 hex
-  characters, so nothing about either says which is which, and setting them the
-  wrong way round gives exactly this. `diagnose` therefore also tries the swap
-  and reports `swappedWorks`. If that is `true`, exchange the two secrets. If it
-  is `false`, the pair does not belong together at all — most often because the
-  secret was regenerated in the console after the id was copied, which
-  invalidates the old one immediately. Copy both again in one sitting.
+* **`invalid_client`** — the pair was rejected. The `detail` shows both
+  client-authentication styles being tried (`basic:` and `body:`), so if both
+  failed the request shape is not the problem and the credentials are.
+
+  Both values are 32 hex characters, so nothing about either says which is
+  which. `diagnose` tries the swap and reports `swappedWorks`: `true` means
+  exchange them. `false` means the pair does not belong together — check, in
+  this order:
+
+  1. **They are the OAuth 2.0 pair.** FatSecret's console also lists OAuth 1.0
+     consumer credentials, which are the same shape and will not authenticate
+     here.
+  2. **They came from one sitting.** Regenerating the secret invalidates the old
+     one on the spot, so an id copied before a rotation no longer matches.
+  3. **One application.** If the console has more than one app, both values have
+     to be from the same one.
 * **anything mentioning the IP** — FatSecret's allow-list. Add Supabase's egress
   addresses, not your machine.
 

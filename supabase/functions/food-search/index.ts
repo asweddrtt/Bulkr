@@ -23,6 +23,7 @@
 // The caller's JWT is verified by default, so only signed-in users reach this.
 
 import {
+  currentAuthStyle,
   getAccessToken,
   type NormalisedFood,
   resetToken,
@@ -113,6 +114,7 @@ async function diagnose(
     resetToken();
     await getAccessToken(clientId, clientSecret);
     result.tokenOk = true;
+    result.authStyle = currentAuthStyle();
     return result;
   } catch (error) {
     result.tokenOk = false;
