@@ -62,12 +62,28 @@ The failure mode is silent by design — an errored tier is an empty tier, and t
 app falls through to Open Food Facts — so tier 2 can be dead and look like
 nothing worse than a quiet search. Ask it directly:
 
+**PowerShell** — `curl` there is an alias for `Invoke-WebRequest`, which does not
+take `-X` or `-H`, so use the native cmdlet:
+
+```powershell
+Invoke-RestMethod `
+  -Uri "https://hqdfaeiyflbbzkduskaz.supabase.co/functions/v1/food-search" `
+  -Method Post `
+  -Headers @{ Authorization = "Bearer <your publishable key>" } `
+  -ContentType "application/json" `
+  -Body (@{ diagnose = $true } | ConvertTo-Json)
+```
+
+**bash / zsh**:
+
 ```bash
 curl -X POST "https://hqdfaeiyflbbzkduskaz.supabase.co/functions/v1/food-search" \
   -H "Authorization: Bearer <your publishable key>" \
   -H "Content-Type: application/json" \
   -d '{"diagnose": true}'
 ```
+
+Either way the answer looks like:
 
 ```json
 { "configured": true, "clientIdLength": 32, "clientSecretLength": 32,
