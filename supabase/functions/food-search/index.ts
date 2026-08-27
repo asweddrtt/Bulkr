@@ -102,6 +102,13 @@ async function diagnose(
     expectedLength: 32,
   };
 
+  // What FatSecret sees as the caller. Their free tier restricts access by IP,
+  // and an edge function's egress address is not yours and is not promised to
+  // be stable — so this is both the value to allow-list and the way to find out
+  // whether allow-listing one address can work at all. Call diagnose a few
+  // times: if this changes, a static hop is needed rather than a list entry.
+  result.egressIp = await egressIp();
+
   if (!clientId || !clientSecret) {
     result.tokenOk = false;
     result.detail = "FATSECRET_CLIENT_ID / _SECRET are not both set";
@@ -143,6 +150,17 @@ async function diagnose(
   resetToken();
 
   return result;
+}
+
+/** The address outbound requests from this function appear to come from. */
+async function egressIp(): Promise<string> {
+  try {
+    const response = await fetch("https://api.ipify.org?format=json");
+    if (!response.ok) return `unavailable (${response.status})`;
+    return `${(await response.json()).ip}`;
+  } catch (error) {
+    return `unavailable (${error})`;
+  }
 }
 
 /**

@@ -111,8 +111,18 @@ being useless to anyone who reads the output. Both should be 32.
      one on the spot, so an id copied before a rotation no longer matches.
   3. **One application.** If the console has more than one app, both values have
      to be from the same one.
-* **anything mentioning the IP** — FatSecret's allow-list. Add Supabase's egress
-  addresses, not your machine.
+* **the IP allow-list.** FatSecret's free tier restricts API access to
+  allow-listed addresses, and it is not always obvious from the error which is
+  at fault — an un-allow-listed caller can be refused at the token endpoint as
+  `invalid_client`, indistinguishable from a bad secret. Do not rule it out on
+  the wording alone.
+
+  `diagnose` reports `egressIp`: the address this function appears to call
+  from, which is what FatSecret would need allow-listed — never your own
+  machine. Call it several times. **If the value changes, allow-listing cannot
+  work here**, because an edge function's egress address is not pinned. In that
+  case the options are a FatSecret plan without the IP restriction, or routing
+  the call through something with a static address.
 
 There is no `supabase functions logs` subcommand in CLI v2 — read logs in the
 dashboard under *Edge Functions → food-search → Logs*.
