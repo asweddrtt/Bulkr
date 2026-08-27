@@ -22,7 +22,12 @@
 //
 // The caller's JWT is verified by default, so only signed-in users reach this.
 
-import { getAccessToken, type NormalisedFood, searchFoods } from "./fatsecret.ts";
+import {
+  getAccessToken,
+  type NormalisedFood,
+  resetToken,
+  searchFoods,
+} from "./fatsecret.ts";
 
 const MAX_RESULTS = 20;
 
@@ -38,13 +43,17 @@ Deno.serve(async (request: Request) => {
   }
 
   try {
-    const { query } = await request.json();
-    const term = `${query ?? ""}`.trim();
-
-    if (term.length < 2) return json({ foods: [] });
+    const body = await request.json();
+    const term = `${body?.query ?? ""}`.trim();
 
     const clientId = Deno.env.get("FATSECRET_CLIENT_ID");
     const clientSecret = Deno.env.get("FATSECRET_CLIENT_SECRET");
+
+    if (body?.diagnose === true) {
+      return json(await diagnose(clientId, clientSecret));
+    }
+
+    if (term.length < 2) return json({ foods: [] });
 
     if (!clientId || !clientSecret) {
       // A missing secret is a deployment mistake, not a user-facing failure.
@@ -67,6 +76,53 @@ Deno.serve(async (request: Request) => {
     return json({ foods: [], error: `${error}` }, 200);
   }
 });
+
+/**
+ * Answers "is tier 2 actually working?" without revealing anything.
+ *
+ * Worth having because the failure mode here is silent by design: a
+ * misconfigured function returns an empty list and the app falls through to
+ * Open Food Facts, so tier 2 can be dead for weeks and look like nothing more
+ * than a quiet search.
+ *
+ * Lengths, never values. A secret pasted with a typo, or truncated by a shell
+ * that split it on a space, is the likeliest thing to be wrong, and a length is
+ * enough to see that while being useless to anyone who reads it. A FatSecret
+ * client id and secret are both 32 hex characters.
+ */
+async function diagnose(
+  clientId: string | undefined,
+  clientSecret: string | undefined,
+): Promise<Record<string, unknown>> {
+  const result: Record<string, unknown> = {
+    configured: Boolean(clientId && clientSecret),
+    clientIdLength: clientId?.length ?? 0,
+    clientSecretLength: clientSecret?.length ?? 0,
+    expectedLength: 32,
+  };
+
+  if (!clientId || !clientSecret) {
+    result.tokenOk = false;
+    result.detail = "FATSECRET_CLIENT_ID / _SECRET are not both set";
+    return result;
+  }
+
+  try {
+    // Forces a real exchange rather than reusing a cached token, so this
+    // reports the state of the credentials now.
+    resetToken();
+    await getAccessToken(clientId, clientSecret);
+    result.tokenOk = true;
+  } catch (error) {
+    result.tokenOk = false;
+    // FatSecret's own words. It says "invalid_client" for a bad secret and
+    // something about the IP for an allow-list problem, and telling those two
+    // apart is the whole point of asking.
+    result.detail = `${error}`;
+  }
+
+  return result;
+}
 
 /**
  * Upserts into `cached_off_foods` and returns the stored rows.

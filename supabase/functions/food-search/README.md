@@ -27,19 +27,26 @@ problem.
 
 ### Secrets
 
-**Substitute your real credentials.** The angle brackets below are placeholders;
-pasting the line as-is sets each secret to the literal text, and the function
-then authenticates with nonsense.
+The client secret is the one credential in this project that must not be
+published, so keep it out of shell history and out of anywhere it gets pasted.
+Easiest safe route is the dashboard:
+
+*Project Settings → Edge Functions → Secrets → Add new secret*
+
+Or from a file the repo already ignores:
 
 ```bash
-supabase secrets set \
-  FATSECRET_CLIENT_ID=<your client id> \
-  FATSECRET_CLIENT_SECRET=<your client secret>
+printf 'FATSECRET_CLIENT_ID=...\nFATSECRET_CLIENT_SECRET=...\n' > supabase/.env
+supabase secrets set --env-file supabase/.env
 ```
 
+If you do use the inline form, beware that the shell splits on spaces: a stray
+word in the middle of the line silently truncates the value at the first space,
+and `secrets set` reports success either way. `diagnose` below catches exactly
+that.
+
 `supabase secrets list` shows digests rather than values, so there is no reading
-them back to check. If you are unsure what was stored, set them again — it
-overwrites.
+them back.
 
 `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are injected by the platform — do
 not set them yourself.
@@ -48,6 +55,33 @@ Get the credentials from the FatSecret Platform console under *Manage
 Applications → API Credentials*. Note that FatSecret's free tier may also
 require IP allow-listing; if so, allow-list the Supabase egress addresses, not a
 device.
+
+## Is it actually working?
+
+The failure mode is silent by design — an errored tier is an empty tier, and the
+app falls through to Open Food Facts — so tier 2 can be dead and look like
+nothing worse than a quiet search. Ask it directly:
+
+```bash
+curl -X POST "https://hqdfaeiyflbbzkduskaz.supabase.co/functions/v1/food-search" \
+  -H "Authorization: Bearer <your publishable key>" \
+  -H "Content-Type: application/json" \
+  -d '{"diagnose": true}'
+```
+
+```json
+{ "configured": true, "clientIdLength": 32, "clientSecretLength": 32,
+  "expectedLength": 32, "tokenOk": true }
+```
+
+Lengths, never values — enough to spot a truncated or mistyped secret while
+being useless to anyone who reads the output. Both should be 32.
+
+`tokenOk: false` comes with FatSecret's own words in `detail`: `invalid_client`
+is a wrong secret, anything mentioning the IP is the allow-list.
+
+There is no `supabase functions logs` subcommand in CLI v2 — read logs in the
+dashboard under *Edge Functions → food-search → Logs*.
 
 ## Test the parser
 
