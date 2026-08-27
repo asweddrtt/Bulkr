@@ -65,6 +65,12 @@ class FoodRepository {
   static const String _legacySearchUrl =
       'https://world.openfoodfacts.org/cgi/search.pl';
 
+  /// Barcode lookup. A different endpoint with a different budget — a hundred a
+  /// minute rather than search's ten — because it is a keyed read rather than a
+  /// query, which is why [findByBarcode] does not spend the search limiter.
+  static const String _productUrl =
+      'https://world.openfoodfacts.org/api/v2/product';
+
   /// Only what gets stored — this turns a multi-megabyte response into a few
   /// kilobytes, which is most of why the search feels immediate or doesn't.
   static const List<String> _offFields = [
@@ -175,6 +181,84 @@ class FoodRepository {
   static bool _isEnough(List<ScoredFood> ranked) {
     if (ranked.length < _cacheIsEnoughCount) return false;
     return ranked.first.score >= FoodSearchRanking.strongMatchScore;
+  }
+
+  /// The food behind a scanned barcode, or null if nothing knows it.
+  ///
+  /// Walks the same tiers as [search] and for the same reason, but keyed rather
+  /// than queried, so there is nothing to rank: a barcode identifies one product
+  /// exactly. Our own tables first, then Open Food Facts, which is the authority
+  /// on barcodes — it is a catalogue of packaged products, which is precisely
+  /// what a scan produces.
+  ///
+  /// Does not spend the search rate limit. Open Food Facts budgets product reads
+  /// separately and far more generously than searches.
+  Future<FoodItem?> findByBarcode(String barcode) async {
+    final String code = barcode.trim();
+    if (code.isEmpty) return null;
+
+    final FoodItem? cached = await _barcodeFromTable('cached_off_foods', code);
+    if (cached != null) return cached;
+
+    final FoodItem? system = await _barcodeFromTable('system_foods', code);
+    if (system != null) return system;
+
+    return _barcodeFromOpenFoodFacts(code);
+  }
+
+  Future<FoodItem?> _barcodeFromTable(String table, String barcode) async {
+    try {
+      final Map<String, dynamic>? row = await _client
+          .from(table)
+          .select()
+          .eq('barcode', barcode)
+          .maybeSingle();
+
+      if (row == null) return null;
+
+      return table == 'system_foods'
+          ? FoodItem.fromSystemRow(row)
+          : FoodItem.fromCacheRow(row);
+    } catch (error) {
+      debugPrint('Bulkr: $table barcode lookup failed — $error');
+      return null;
+    }
+  }
+
+  Future<FoodItem?> _barcodeFromOpenFoodFacts(String barcode) async {
+    final Uri uri = Uri.parse('$_productUrl/$barcode.json').replace(
+      queryParameters: {'fields': _offFields.join(',')},
+    );
+
+    try {
+      final http.Response response = await _http
+          .get(uri, headers: const {'User-Agent': _userAgent})
+          .timeout(_networkTimeout);
+
+      // 404 is the ordinary answer for a product nobody has catalogued, not a
+      // failure worth reporting as one.
+      if (response.statusCode != 200) return null;
+
+      final Object? decoded = jsonDecode(response.body);
+      if (decoded is! Map<String, dynamic>) return null;
+
+      final Object? product = decoded['product'];
+      if (product is! Map<String, dynamic>) return null;
+
+      final FoodItem? food = foodFromOffProduct(product);
+      if (food == null) return null;
+
+      // The same plausibility bar the ranked results clear. A scan that returns
+      // a food claiming 3,500 kcal per 100g is worse than one that returns
+      // nothing, because the user has no reason to doubt it.
+      return FoodSearchRanking.isPlausible(food) ? food : null;
+    } on TimeoutException {
+      debugPrint('Bulkr: barcode lookup timed out');
+      return null;
+    } catch (error) {
+      debugPrint('Bulkr: barcode lookup failed — $error');
+      return null;
+    }
   }
 
   /// Ensures [food] exists in `cached_off_foods` and returns it carrying the row

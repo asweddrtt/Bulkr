@@ -11,13 +11,16 @@ import 'package:image_picker/image_picker.dart';
 import '../cubit/meal_editor/meal_editor_cubit.dart';
 import '../data/food_repository.dart';
 import '../data/meal_repository.dart';
+import '../models/food_item.dart';
 import '../models/macros.dart';
 import '../models/meal.dart';
 import '../models/meal_ingredient.dart';
 import '../styles/app_color.dart';
 import '../widgets/animations/press_scale.dart';
+import '../widgets/barcode_scanner_sheet.dart';
 import '../widgets/food_search_sheet.dart';
 import '../widgets/image_source_sheet.dart';
+import '../widgets/ingredient_amount_sheet.dart';
 import '../widgets/macro_bar.dart';
 
 /// Writes a new meal: a photo, a name, what is in it, and how it is made.
@@ -378,6 +381,7 @@ class _IngredientsSection extends StatelessWidget {
               for (var i = 0; i < ingredients.length; i++)
                 _IngredientRow(
                   ingredient: ingredients[i],
+                  onEditAmount: () => _editAmount(context, i, ingredients[i]),
                   onRemove: () =>
                       context.read<MealEditorCubit>().removeIngredientAt(i),
                 ),
@@ -390,10 +394,36 @@ class _IngredientsSection extends StatelessWidget {
   }
 }
 
+/// Opens the amount editor for one ingredient and applies whatever comes back.
+Future<void> _editAmount(
+  BuildContext context,
+  int index,
+  MealIngredient ingredient,
+) async {
+  final MealEditorCubit cubit = context.read<MealEditorCubit>();
+
+  final double? grams = await IngredientAmountSheet.show(
+    context,
+    food: ingredient.food,
+    amountG: ingredient.amountG,
+  );
+
+  if (grams != null) cubit.setAmountAt(index, grams);
+}
+
 class _IngredientRow extends StatelessWidget {
-  const _IngredientRow({required this.ingredient, required this.onRemove});
+  const _IngredientRow({
+    required this.ingredient,
+    required this.onEditAmount,
+    required this.onRemove,
+  });
 
   final MealIngredient ingredient;
+
+  /// Tapping the row changes how much of this food is in the meal — the thing
+  /// most likely to be wrong right after adding it.
+  final VoidCallback onEditAmount;
+
   final VoidCallback onRemove;
 
   @override
@@ -413,7 +443,11 @@ class _IngredientRow extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: Column(
+            child: PressScale(
+              child: GestureDetector(
+                onTap: onEditAmount,
+                behavior: HitTestBehavior.opaque,
+                child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
@@ -441,8 +475,11 @@ class _IngredientRow extends StatelessWidget {
                   ),
                 ),
               ],
+                ),
+              ),
             ),
           ),
+          Icon(Icons.edit_outlined, size: 15.sp, color: AppColors.textGray),
           IconButton(
             onPressed: onRemove,
             icon: Icon(Icons.close_rounded, size: 18.sp),
@@ -455,20 +492,94 @@ class _IngredientRow extends StatelessWidget {
   }
 }
 
+/// The two ways into the ingredient list: search it, or scan it.
+///
+/// Side by side and equally weighted, because which one is right depends
+/// entirely on the food in your hand. A packet has a barcode and scanning it is
+/// exact; a chicken breast does not, and typing is the only way.
 class _AddIngredientButton extends StatelessWidget {
   const _AddIngredientButton();
 
   @override
   Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: _IngredientAction(
+            icon: Icons.search,
+            label: 'meal_add_ingredient'.tr(),
+            onTap: () => FoodSearchSheet.show(
+              context,
+              context.read<MealEditorCubit>(),
+            ),
+          ),
+        ),
+        SizedBox(width: 10.w),
+        Expanded(
+          child: _IngredientAction(
+            icon: Icons.qr_code_scanner_rounded,
+            label: 'meal_scan_barcode'.tr(),
+            onTap: () => _scanBarcode(context),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Scans a barcode, looks it up, and says what happened either way.
+///
+/// A scan that silently adds nothing is the worst outcome: the user has no way
+/// to tell a product Open Food Facts has never heard of from a scanner that
+/// misread the label.
+Future<void> _scanBarcode(BuildContext context) async {
+  final MealEditorCubit cubit = context.read<MealEditorCubit>();
+  final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+
+  final String? barcode = await BarcodeScannerSheet.show(context);
+  if (barcode == null) return;
+
+  final FoodItem? food = await cubit.addScannedBarcode(barcode);
+
+  messenger
+    ..hideCurrentSnackBar()
+    ..showSnackBar(
+      SnackBar(
+        backgroundColor:
+            food == null ? const Color(0xFF2A2A2A) : AppColors.primaryNeon,
+        duration: const Duration(seconds: 3),
+        content: Text(
+          food == null
+              ? 'barcode_not_found'.tr(namedArgs: {'barcode': barcode})
+              : 'barcode_added'.tr(namedArgs: {'food': food.name}),
+          style: GoogleFonts.inter(
+            color: food == null ? Colors.white : Colors.black,
+            fontSize: 12.sp,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+}
+
+class _IngredientAction extends StatelessWidget {
+  const _IngredientAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
     return PressScale(
       child: GestureDetector(
-        onTap: () => FoodSearchSheet.show(
-          context,
-          context.read<MealEditorCubit>(),
-        ),
+        onTap: onTap,
         behavior: HitTestBehavior.opaque,
         child: Container(
-          width: double.infinity,
           padding: EdgeInsets.symmetric(vertical: 14.h),
           alignment: Alignment.center,
           decoration: BoxDecoration(
@@ -478,14 +589,18 @@ class _AddIngredientButton extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.search, size: 16.sp, color: AppColors.primaryNeon),
+              Icon(icon, size: 16.sp, color: AppColors.primaryNeon),
               SizedBox(width: 8.w),
-              Text(
-                'meal_add_ingredient'.tr().toUpperCase(),
-                style: GoogleFonts.anton(
-                  fontSize: 12.sp,
-                  color: AppColors.primaryNeon,
-                  letterSpacing: 1,
+              Flexible(
+                child: Text(
+                  label.toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.anton(
+                    fontSize: 12.sp,
+                    color: AppColors.primaryNeon,
+                    letterSpacing: 0.8,
+                  ),
                 ),
               ),
             ],

@@ -81,7 +81,45 @@ class MealRepository {
     final List<Meal> library = byId.values.toList()
       ..sort((a, b) => b.acquiredAt.compareTo(a.acquiredAt));
 
-    return _withIngredientWeights(library);
+    return _withTodaysLogState(await _withIngredientWeights(library));
+  }
+
+  /// Marks the meals that are already in today's log.
+  ///
+  /// One query for the whole list, and the reason the tick on a card survives a
+  /// tab switch: the state is read from `daily_logs` rather than remembered
+  /// from whatever this session happened to tap.
+  Future<List<Meal>> _withTodaysLogState(List<Meal> meals) async {
+    final String? userId = _userId;
+    if (userId == null || meals.isEmpty) return meals;
+
+    try {
+      final Set<String> logged = await loggedMealIdsToday(userId);
+      if (logged.isEmpty) return meals;
+
+      return meals
+          .map((meal) => meal.copyWith(isLoggedToday: logged.contains(meal.id)))
+          .toList();
+    } catch (error) {
+      // The library is still usable without it; the tick just starts blank.
+      debugPrint("Bulkr: today's log state unavailable — $error");
+      return meals;
+    }
+  }
+
+  /// Ids of the meals logged against today.
+  Future<Set<String>> loggedMealIdsToday([String? userId]) async {
+    final String? id = userId ?? _userId;
+    if (id == null) return <String>{};
+
+    final rows = await _client
+        .from('daily_logs')
+        .select('meal_id')
+        .eq('user_id', id)
+        .eq('log_date', _asDate(DateTime.now()))
+        .not('meal_id', 'is', null);
+
+    return rows.map((row) => '${row['meal_id']}').toSet();
   }
 
   Future<List<Meal>> _fetchCreated(String userId) async {
@@ -392,6 +430,24 @@ class MealRepository {
       },
       onConflict: 'user_id,meal_id',
     );
+  }
+
+  /// Removes [meal] from today's log.
+  ///
+  /// Deletes every row for it today rather than the most recent one: the button
+  /// is a toggle, so "off" has to mean the meal is not counted today, not
+  /// "counted one time fewer". Only today — a past day's record is not this
+  /// button's to touch.
+  Future<void> unlogMealToday(Meal meal) async {
+    final String? userId = _userId;
+    if (userId == null) return;
+
+    await _client
+        .from('daily_logs')
+        .delete()
+        .eq('user_id', userId)
+        .eq('meal_id', meal.id)
+        .eq('log_date', _asDate(DateTime.now()));
   }
 
   /// Records one serving of [meal] against today in `daily_logs`.

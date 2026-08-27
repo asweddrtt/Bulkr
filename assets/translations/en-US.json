@@ -221,5 +221,15 @@
   "meal_delete_cancel": "Keep it",
   "meal_deleted": "{meal} deleted",
   "meal_removed": "{meal} removed from your meals",
-  "meal_saved_without_ingredients": "Meal saved with the right calories, but its ingredient list couldn't be stored. Check the Supabase policies on cached_off_foods."
+  "meal_saved_without_ingredients": "Meal saved with the right calories, but its ingredient list couldn't be stored. Check the Supabase policies on cached_off_foods.",
+  "meal_removed_today": "{meal} taken off today",
+  "meal_scan_barcode": "Scan barcode",
+  "barcode_scan_title": "Scan a barcode",
+  "barcode_scan_subtitle": "Point at the barcode on the packet.",
+  "barcode_torch": "Torch",
+  "barcode_camera_unavailable": "The camera isn't available. Check Bulkr has camera permission, or search for the food by name instead.",
+  "barcode_added": "{food} added",
+  "barcode_not_found": "Nothing found for {barcode}. Try searching by name.",
+  "food_one_serving": "1 serving · {grams}g",
+  "food_update_amount": "Update amount"
 }

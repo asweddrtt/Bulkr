@@ -1,4 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- mobile_scanner holds the camera open to read barcodes, which needs the
+         permission declared. image_picker does not: it hands off to the camera
+         app through an intent. -->
+    <uses-permission android:name="android.permission.CAMERA" />
     <application
         android:label="Bulkr"
         android:name="${applicationName}"

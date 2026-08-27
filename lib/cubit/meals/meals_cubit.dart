@@ -65,7 +65,7 @@ class MealsCubit extends Cubit<MealsState> {
 
   void selectTab(MealsTab tab) {
     if (state.tab == tab) return;
-    emit(state.copyWith(tab: tab, clearLogged: true));
+    emit(state.copyWith(tab: tab));
   }
 
   void search(String query) {
@@ -103,29 +103,38 @@ class MealsCubit extends Cubit<MealsState> {
     }
   }
 
-  /// Adds one serving of [meal] to today's log.
+  /// Puts [meal] in today's log, or takes it back out.
+  ///
+  /// A toggle rather than a repeated add, because the button shows a state
+  /// rather than firing an event: a card reading "logged" that adds a second
+  /// helping when tapped is lying about what it is. Off deletes today's rows
+  /// for the meal, so the day's total is what the ticked cards say it is.
   ///
   /// Not optimistic, unlike favouriting: a calorie total the user believes was
   /// recorded and was not is worth the half-second of waiting.
-  Future<void> logMealToday(Meal meal) async {
+  Future<void> toggleLoggedToday(Meal meal) async {
     if (state.busyMealId != null) return;
 
-    emit(state.copyWith(
-      busyMealId: meal.id,
-      clearLogged: true,
-      clearActionError: true,
-    ));
+    final bool wasLogged = meal.isLoggedToday;
+    emit(state.copyWith(busyMealId: meal.id, clearActionError: true));
 
     try {
-      await _meals.logMealToday(meal);
+      if (wasLogged) {
+        await _meals.unlogMealToday(meal);
+      } else {
+        await _meals.logMealToday(meal);
+      }
       if (isClosed) return;
 
-      emit(state.copyWith(clearBusy: true, loggedMealId: meal.id));
+      emit(state.copyWith(
+        clearBusy: true,
+        library: _replace(meal.copyWith(isLoggedToday: !wasLogged)),
+      ));
     } catch (error) {
       if (isClosed) return;
 
       final String detail = _describe(error);
-      debugPrint('Bulkr: meal log failed — $detail');
+      debugPrint('Bulkr: meal log toggle failed — $detail');
 
       emit(state.copyWith(
         clearBusy: true,
@@ -133,51 +142,6 @@ class MealsCubit extends Cubit<MealsState> {
         actionErrorDetail: detail,
       ));
     }
-  }
-
-  /// Takes a meal out of the library.
-  ///
-  /// Which write that is depends on whose meal it is — the user's own is
-  /// deleted outright, someone else's is only unsaved — and [Meal.isMine] is the
-  /// single place that decides.
-  ///
-  /// Optimistic: the card goes immediately and comes back if the write fails.
-  /// Restoring the whole previous list rather than re-inserting at an index
-  /// keeps the order right even if something else changed the library while the
-  /// delete was in flight.
-  Future<void> removeMeal(Meal meal) async {
-    final List<Meal> before = state.library;
-
-    emit(state.copyWith(
-      library: before.where((m) => m.id != meal.id).toList(),
-      clearLogged: true,
-      clearActionError: true,
-    ));
-
-    try {
-      if (meal.isMine) {
-        await _meals.deleteMeal(meal);
-      } else {
-        await _meals.removeFromLibrary(meal);
-      }
-    } catch (error) {
-      if (isClosed) return;
-
-      final String detail = _describe(error);
-      debugPrint('Bulkr: meal removal failed — $detail');
-
-      emit(state.copyWith(
-        library: before,
-        actionErrorKey: _actionFailedKey,
-        actionErrorDetail: detail,
-      ));
-    }
-  }
-
-  /// Called once the confirmation tick has been shown.
-  void clearLoggedMark() {
-    if (state.loggedMealId == null) return;
-    emit(state.copyWith(clearLogged: true));
   }
 
   /// Called once a failure has been surfaced, so it isn't repeated on rebuild.

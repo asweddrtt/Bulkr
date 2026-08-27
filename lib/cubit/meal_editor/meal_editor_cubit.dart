@@ -164,6 +164,47 @@ class MealEditorCubit extends Cubit<MealEditorState> {
     ));
   }
 
+  /// Looks up a scanned barcode and adds it, or reports that nothing knows it.
+  ///
+  /// Added at 100g rather than opening the amount editor first: a scan is a
+  /// confident answer about *what*, and the amount is a separate decision the
+  /// user can make by tapping the row. Returns the food so the screen can say
+  /// which one landed.
+  Future<FoodItem?> addScannedBarcode(String barcode) async {
+    emit(state.copyWith(searchStatus: FoodSearchStatus.searching));
+
+    try {
+      final FoodItem? food = await _foods.findByBarcode(barcode);
+      if (isClosed) return null;
+
+      emit(state.copyWith(searchStatus: FoodSearchStatus.idle));
+      if (food == null) return null;
+
+      // Keeps the existing amount when the food is already in the meal, so
+      // re-scanning something does not quietly reset 250g to 100.
+      final double amount = _existingAmountFor(food) ?? _defaultScanAmountG;
+      addIngredient(food, amount);
+
+      return food;
+    } catch (error) {
+      if (isClosed) return null;
+      debugPrint('Bulkr: barcode lookup failed — $error');
+      emit(state.copyWith(searchStatus: FoodSearchStatus.idle));
+      return null;
+    }
+  }
+
+  /// The basis nutrition is quoted on, and the honest default when nothing
+  /// about the scan says how much was eaten.
+  static const double _defaultScanAmountG = 100;
+
+  double? _existingAmountFor(FoodItem food) {
+    for (final MealIngredient ingredient in state.draft.ingredients) {
+      if (ingredient.food.barcode == food.barcode) return ingredient.amountG;
+    }
+    return null;
+  }
+
   void removeIngredientAt(int index) =>
       emit(state.copyWith(draft: state.draft.withoutIngredientAt(index)));
 

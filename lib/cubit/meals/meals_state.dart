@@ -15,7 +15,6 @@ class MealsState extends Equatable {
     this.tab = MealsTab.mine,
     this.query = '',
     this.busyMealId,
-    this.loggedMealId,
     this.errorMessage,
     this.actionErrorKey,
     this.actionErrorDetail,
@@ -35,10 +34,11 @@ class MealsState extends Equatable {
 
   /// Meal currently mid-write, so its own card can show a spinner while the
   /// rest of the list stays interactive.
+  ///
+  /// Whether a meal is logged today is not held here: it lives on the [Meal]
+  /// itself, read from `daily_logs`, so it survives a tab switch and a restart
+  /// rather than lasting as long as this screen happens to.
   final String? busyMealId;
-
-  /// Meal that was just added to today's log, for the confirmation tick.
-  final String? loggedMealId;
 
   final String? errorMessage;
   final String? actionErrorKey;
@@ -72,8 +72,6 @@ class MealsState extends Equatable {
     String? query,
     String? busyMealId,
     bool clearBusy = false,
-    String? loggedMealId,
-    bool clearLogged = false,
     String? errorMessage,
     String? actionErrorKey,
     String? actionErrorDetail,
@@ -85,7 +83,6 @@ class MealsState extends Equatable {
       tab: tab ?? this.tab,
       query: query ?? this.query,
       busyMealId: clearBusy ? null : (busyMealId ?? this.busyMealId),
-      loggedMealId: clearLogged ? null : (loggedMealId ?? this.loggedMealId),
       errorMessage: errorMessage ?? this.errorMessage,
       actionErrorKey: clearActionError ? null : (actionErrorKey ?? this.actionErrorKey),
       actionErrorDetail:
@@ -100,7 +97,6 @@ class MealsState extends Equatable {
         tab,
         query,
         busyMealId,
-        loggedMealId,
         errorMessage,
         actionErrorKey,
         actionErrorDetail,

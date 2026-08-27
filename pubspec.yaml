@@ -55,6 +55,10 @@ dependencies:
   # Open Food Facts lookups. supabase_flutter already depends on http, but the
   # food repository calls it directly, so it is declared rather than inherited.
   http: ^1.2.2
+
+  # Barcode scanning for the ingredient picker. A scanned code is the one input
+  # that identifies a packaged food exactly, with no spelling and no ranking.
+  mobile_scanner: ^5.2.3
   # NOTE: `intl` (DateFormat/NumberFormat) is not listed here on purpose —
   # easy_localization re-exports it, which is how NumberFormat is already used
   # in the reveal screen. Adding it explicitly risks a resolution conflict with

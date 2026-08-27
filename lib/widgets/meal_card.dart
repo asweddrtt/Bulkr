@@ -22,7 +22,6 @@ class MealCard extends StatelessWidget {
     required this.onShowActions,
     this.onOpen,
     this.isLogging = false,
-    this.wasJustLogged = false,
   });
 
   final Meal meal;
@@ -40,9 +39,6 @@ class MealCard extends StatelessWidget {
 
   /// This card's log write is in flight.
   final bool isLogging;
-
-  /// Just landed — swaps the + for a tick for a moment.
-  final bool wasJustLogged;
 
   static const Color _cardColor = Color(0xFF1A1A1A);
   static const Color _imageColor = Color(0xFF232323);
@@ -279,7 +275,12 @@ class MealCard extends StatelessWidget {
     );
   }
 
-  /// The whole point of the card: one tap puts this meal in today's log.
+  /// The whole point of the card: one tap puts this meal in today's log, and
+  /// another takes it back out.
+  ///
+  /// The lit state comes from [Meal.isLoggedToday], which is read from the
+  /// database — so it is still lit after switching tabs, pulling to refresh, or
+  /// reopening the app, rather than for as long as this screen stays alive.
   Widget _buildLogButton(BuildContext context) {
     return PressScale(
       enabled: !isLogging,
@@ -292,7 +293,8 @@ class MealCard extends StatelessWidget {
           height: 40.h,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: wasJustLogged ? AppColors.primaryNeon : const Color(0xFF2A2A2A),
+            color:
+                meal.isLoggedToday ? AppColors.primaryNeon : const Color(0xFF2A2A2A),
             borderRadius: BorderRadius.circular(5.r),
           ),
           child: _buildLogButtonChild(),
@@ -314,8 +316,8 @@ class MealCard extends StatelessWidget {
     }
 
     return Icon(
-      wasJustLogged ? Icons.check_rounded : Icons.add_rounded,
-      color: wasJustLogged ? Colors.black : Colors.white,
+      meal.isLoggedToday ? Icons.check_rounded : Icons.add_rounded,
+      color: meal.isLoggedToday ? Colors.black : Colors.white,
       size: 22.sp,
     );
   }

@@ -298,8 +298,7 @@ class _MealsList extends StatelessWidget {
           return MealCard(
             meal: meal,
             isLogging: state.busyMealId == meal.id,
-            wasJustLogged: state.loggedMealId == meal.id,
-            onLog: () => _logMeal(context, meal),
+            onLog: () => _toggleLog(context, meal),
             onToggleFavorite: () =>
                 context.read<MealsCubit>().toggleFavorite(meal),
             onShowActions: () => _showActions(context, meal),
@@ -309,26 +308,38 @@ class _MealsList extends StatelessWidget {
     );
   }
 
-  Future<void> _logMeal(BuildContext context, Meal meal) async {
+  Future<void> _toggleLog(BuildContext context, Meal meal) async {
     final MealsCubit cubit = context.read<MealsCubit>();
     final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
 
-    await cubit.logMealToday(meal);
+    final bool wasLogged = meal.isLoggedToday;
+    await cubit.toggleLoggedToday(meal);
 
     // Only claim it landed if it did — a failure has already put its own
     // message up through the listener.
-    if (cubit.state.loggedMealId != meal.id) return;
+    Meal? updated;
+    for (final Meal candidate in cubit.state.library) {
+      if (candidate.id == meal.id) {
+        updated = candidate;
+        break;
+      }
+    }
+    if (updated == null || updated.isLoggedToday == wasLogged) return;
+
+    final bool nowLogged = updated.isLoggedToday;
 
     messenger
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
-          backgroundColor: AppColors.primaryNeon,
+          backgroundColor:
+              nowLogged ? AppColors.primaryNeon : const Color(0xFF2A2A2A),
           duration: const Duration(seconds: 2),
           content: Text(
-            'meal_added_today'.tr(namedArgs: {'meal': meal.title}),
+            (nowLogged ? 'meal_added_today' : 'meal_removed_today')
+                .tr(namedArgs: {'meal': meal.title}),
             style: GoogleFonts.inter(
-              color: Colors.black,
+              color: nowLogged ? Colors.black : Colors.white,
               fontSize: 12.sp,
               fontWeight: FontWeight.w700,
             ),

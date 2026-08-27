@@ -33,6 +33,7 @@ class Meal extends Equatable {
     this.savedAt,
     this.ingredients = const [],
     this.totalGrams,
+    this.isLoggedToday = false,
   });
 
   final String id;
@@ -74,6 +75,13 @@ class Meal extends Equatable {
   /// "not loaded", not "no ingredients" — the card must not read anything into
   /// it.
   final List<MealIngredient> ingredients;
+
+  /// Whether this meal is in today's `daily_logs`.
+  ///
+  /// Read from the database rather than remembered in the UI, so it survives a
+  /// tab switch, a refresh and a restart — the card is showing what today's log
+  /// actually contains, not what this session happened to tap.
+  final bool isLoggedToday;
 
   /// Summed ingredient grams, when known.
   ///
@@ -132,6 +140,7 @@ class Meal extends Equatable {
     List<MealIngredient>? ingredients,
     double? totalGrams,
     String? creatorUsername,
+    bool? isLoggedToday,
   }) {
     return Meal(
       id: id,
@@ -149,6 +158,7 @@ class Meal extends Equatable {
       savedAt: savedAt ?? this.savedAt,
       ingredients: ingredients ?? this.ingredients,
       totalGrams: totalGrams ?? this.totalGrams,
+      isLoggedToday: isLoggedToday ?? this.isLoggedToday,
     );
   }
 
@@ -207,5 +217,6 @@ class Meal extends Equatable {
         isFavorite,
         ingredients,
         totalGrams,
+        isLoggedToday,
       ];
 }

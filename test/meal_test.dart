@@ -205,6 +205,25 @@ void main() {
     });
   });
 
+  group('isLoggedToday', () {
+    test('defaults to false and is carried by copyWith', () {
+      // The card's lit state reads from here rather than from screen state, so
+      // it has to survive being copied when other fields change.
+      expect(meal().isLoggedToday, isFalse);
+      expect(meal().copyWith(isLoggedToday: true).isLoggedToday, isTrue);
+      expect(
+        meal().copyWith(isLoggedToday: true).copyWith(isFavorite: true)
+            .isLoggedToday,
+        isTrue,
+      );
+    });
+
+    test('two meals differing only in it are not equal', () {
+      // Otherwise the list would not rebuild when a meal is logged.
+      expect(meal(), isNot(meal().copyWith(isLoggedToday: true)));
+    });
+  });
+
   test('FoodItem.label pairs the name with one brand', () {
     const food = FoodItem(
       barcode: '1',
