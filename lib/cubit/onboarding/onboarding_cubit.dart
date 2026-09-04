@@ -135,16 +135,28 @@ class OnboardingCubit extends Cubit<OnboardingState> {
   ///
   /// Returns true when the row landed, so the screen knows whether to navigate.
   Future<bool> submit() async {
-    final userId = state.userId;
+    // Falls back to the live session, because this cubit's copy of the id can
+    // legitimately be absent: it is seeded once when the flow is entered, and
+    // a launch that resumes an abandoned onboarding used to enter without
+    // seeding it. The session is the authority either way — the repository's
+    // upsert prefers it too.
+    final userId = state.userId ?? _userRepository.currentUserId;
     final plan = state.nutritionPlan;
     final gender = state.gender;
     final dateOfBirth = state.dateOfBirth;
+
+    // Counted, not just flagged. Two failed attempts in a row produce
+    // identical states, and Cubit drops an emit that equals the current state
+    // — so the screen's listener would fire for the first tap and stay silent
+    // for every one after it, leaving a button that visibly does nothing.
+    final int attempt = state.submissionAttempt + 1;
 
     if (userId == null ||
         plan == null ||
         gender == null ||
         dateOfBirth == null) {
       emit(state.copyWith(
+        submissionAttempt: attempt,
         submission: SubmissionStatus.failure,
         errorMessage: 'onboarding_error_incomplete',
       ));
@@ -152,6 +164,7 @@ class OnboardingCubit extends Cubit<OnboardingState> {
     }
 
     emit(state.copyWith(
+      submissionAttempt: attempt,
       submission: SubmissionStatus.submitting,
       clearError: true,
     ));

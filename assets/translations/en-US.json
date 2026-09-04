@@ -69,6 +69,7 @@
   "kcal_day": "KCAL / DAY",
   "start_bulking_btn": "Start Bulking",
   "onboarding_error_incomplete": "Some details are missing. Go back and complete the previous steps.",
+  "onboarding_error_incomplete_action": "Back to the start",
   "home_welcome": "Let's go, {name}.",
   "home_placeholder_body": "Your plan is saved. The dashboard, food logging and progress tracking land here next.",
   "dashboard": "Dashboard",

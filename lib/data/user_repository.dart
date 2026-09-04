@@ -29,6 +29,13 @@ class UserRepository {
   final SupabaseClient _client;
   final UsernameGenerator _usernames;
 
+  /// The signed-in user's id, or null when there is no session.
+  ///
+  /// Exposed because callers that hold onto a user id of their own — the
+  /// onboarding flow keeps one in cubit state across five screens — need a way
+  /// to fall back to the live session when theirs is missing.
+  String? get currentUserId => _client.auth.currentUser?.id;
+
   /// Postgres unique-violation SQLSTATE.
   static const String _uniqueViolation = '23505';
 

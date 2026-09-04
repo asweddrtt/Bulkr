@@ -28,6 +28,7 @@ class OnboardingState extends Equatable {
     this.targetWeightKg,
     this.weeklyGainKg = defaultWeeklyGainKg,
     this.submission = SubmissionStatus.idle,
+    this.submissionAttempt = 0,
     this.errorMessage,
   });
 
@@ -67,6 +68,15 @@ class OnboardingState extends Equatable {
 
   // --- Screen 5: commit ---------------------------------------------------
   final SubmissionStatus submission;
+
+  /// How many times the final commit has been attempted.
+  ///
+  /// Only exists to make repeated failures distinguishable. Two taps that fail
+  /// the same way produce equal states, and Cubit swallows an emit equal to
+  /// the current state — without a counter the screen would report the first
+  /// failure and go quiet for every one after it.
+  final int submissionAttempt;
+
   final String? errorMessage;
 
   /// Falls back to a sensible target rather than forcing the user to set one
@@ -127,6 +137,7 @@ class OnboardingState extends Equatable {
     double? targetWeightKg,
     double? weeklyGainKg,
     SubmissionStatus? submission,
+    int? submissionAttempt,
     String? errorMessage,
     bool clearError = false,
   }) {
@@ -146,6 +157,7 @@ class OnboardingState extends Equatable {
       targetWeightKg: targetWeightKg ?? this.targetWeightKg,
       weeklyGainKg: weeklyGainKg ?? this.weeklyGainKg,
       submission: submission ?? this.submission,
+      submissionAttempt: submissionAttempt ?? this.submissionAttempt,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
     );
   }
@@ -167,6 +179,7 @@ class OnboardingState extends Equatable {
         targetWeightKg,
         weeklyGainKg,
         submission,
+        submissionAttempt,
         errorMessage,
       ];
 }

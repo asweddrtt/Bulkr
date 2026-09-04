@@ -4,7 +4,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../cubit/onboarding/onboarding_cubit.dart';
 import '../cubit/profile/profile_cubit.dart';
 import '../data/app_preferences.dart';
 import '../data/auth_repository.dart';
@@ -27,6 +29,13 @@ import '../styles/app_color.dart';
 ///   * no session            -> sign in
 ///   * session, onboarded    -> straight into the app
 ///   * session, not finished -> back into onboarding where it stopped
+///
+/// The third case has to hand the session's identity to [OnboardingCubit] the
+/// same way the sign-in screen does. That cubit is where onboarding keeps the
+/// user id it eventually writes against, and it starts empty on every launch —
+/// so a user who reaches onboarding through here rather than through sign-in
+/// would walk all four steps and only find out at the very end that there was
+/// nothing to attach them to.
 class SplashScreen extends StatefulWidget {
   const SplashScreen({
     super.key,
@@ -54,13 +63,16 @@ class _SplashScreenState extends State<SplashScreen> {
     // through a BuildContext that may have gone by the time it resolves.
     final GoRouter router = GoRouter.of(context);
     final ProfileCubit profile = context.read<ProfileCubit>();
+    final OnboardingCubit onboarding = context.read<OnboardingCubit>();
 
-    final String? userId = widget.authRepository.currentUser?.id;
+    final User? user = widget.authRepository.currentUser;
 
-    if (!widget.authRepository.hasSession || userId == null) {
+    if (!widget.authRepository.hasSession || user == null) {
       router.go(AppRoutes.welcome);
       return;
     }
+
+    final String userId = user.id;
 
     // The device already knows, for a user who has been here before, so launch
     // costs no round trip — and works with no signal at all.
@@ -77,7 +89,16 @@ class _SplashScreenState extends State<SplashScreen> {
     final bool completed = await profile.hasCompletedOnboarding();
 
     if (!mounted) return;
-    router.go(completed ? AppRoutes.home : AppRoutes.biometrics);
+
+    if (completed) {
+      router.go(AppRoutes.home);
+      return;
+    }
+
+    // Seed the flow before entering it, not after: step 2 reads the suggested
+    // username in `initState`, and the final step needs the user id.
+    onboarding.adoptIdentity(user);
+    router.go(AppRoutes.biometrics);
   }
 
   @override

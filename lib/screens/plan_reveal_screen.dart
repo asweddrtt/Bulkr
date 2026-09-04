@@ -27,8 +27,13 @@ class PlanRevealScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocConsumer<OnboardingCubit, OnboardingState>(
+      // The attempt counter is in here on purpose: a second tap that fails
+      // exactly like the first leaves `submission` on `failure`, so watching
+      // it alone would show the message once and then never again — which
+      // looks like a button that does nothing.
       listenWhen: (previous, current) =>
-          previous.submission != current.submission,
+          previous.submission != current.submission ||
+          previous.submissionAttempt != current.submissionAttempt,
       listener: (context, state) {
         if (state.submission == SubmissionStatus.failure &&
             state.errorMessage != null) {
@@ -397,6 +402,35 @@ class _IncompleteDataNotice extends StatelessWidget {
                 fontSize: 14.sp,
                 color: AppColors.offWhiteMuted,
                 height: 1.5,
+              ),
+            ),
+            SizedBox(height: 20.h),
+
+            // The message says to go back, so put going back next to it. The
+            // arrow in the top bar does the same thing, but a notice that
+            // tells someone to do something and then leaves them to find the
+            // control themselves is how people get stuck here.
+            //
+            // Restarts the flow rather than popping one screen: state is
+            // missing somewhere behind this, and stepping back one screen at a
+            // time to hunt for it is the reader's job to do, not theirs.
+            OutlinedButton(
+              onPressed: () => GoRouter.of(context).go(AppRoutes.biometrics),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.white,
+                side: const BorderSide(color: AppColors.darkBorder),
+                padding: EdgeInsets.symmetric(horizontal: 22.w, vertical: 12.h),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8.r),
+                ),
+              ),
+              child: Text(
+                'onboarding_error_incomplete_action'.tr().toUpperCase(),
+                style: GoogleFonts.inter(
+                  fontSize: 11.sp,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1,
+                ),
               ),
             ),
           ],
