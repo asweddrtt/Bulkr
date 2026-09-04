@@ -117,6 +117,100 @@ alter table public.posts
 -- losing the room, not the conversation.
 
 -- ---------------------------------------------------------------------------
+-- 3b. Breaking the policy cycle
+-- ---------------------------------------------------------------------------
+-- These three functions exist because the obvious way to write the policies
+-- below does not work, and fails in a way worth understanding.
+--
+-- A private group is readable only by its members, so the policy on `groups`
+-- has to ask `group_members`. A group's member list is readable only by people
+-- who can read the group, so the policy on `group_members` has to ask
+-- `groups`. Postgres evaluates RLS on every table a policy expression touches,
+-- including inside a subquery — so those two policies call each other, and the
+-- first SELECT against either one dies with:
+--
+--   infinite recursion detected in policy for relation "group_members" (42P17)
+--
+-- The fix is to answer the membership question somewhere RLS does not apply.
+-- SECURITY DEFINER runs as the function's owner, and a table owner is not
+-- subject to that table's policies, so the recursion stops at the function
+-- boundary. This is the standard shape for any RLS design where two tables
+-- gate each other, and it is not a workaround — the check genuinely does not
+-- need row-level filtering, because it returns one boolean about the caller.
+--
+-- Three deliberate choices:
+--
+--   * No user-id argument. Each one answers about `auth.uid()` and nothing
+--     else. A function taking an id would let anyone ask "is user X in private
+--     group Y", which is a membership leak — small, but free to avoid.
+--     `auth.uid()` reads the request's JWT claim, so it still returns the
+--     *caller* inside a definer function rather than the owner.
+--   * `search_path` pinned, as on every definer function here: without it the
+--     caller's path decides which `group_members` this resolves to.
+--   * STABLE, so the planner can call them once per query rather than once per
+--     row — which matters, because the posts policy runs on every row of every
+--     feed page.
+
+create or replace function public.is_group_member(p_group_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (
+    select 1 from public.group_members m
+     where m.group_id = p_group_id and m.user_id = auth.uid()
+  );
+$$;
+
+create or replace function public.is_group_owner(p_group_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (
+    select 1 from public.groups g
+     where g.id = p_group_id and g.owner_id = auth.uid()
+  );
+$$;
+
+-- "Public, or I am in it" — the whole visibility rule for a group, in one
+-- call. Used by the policies on `group_members` and `posts` so neither has to
+-- touch `groups` and re-enter its policy.
+create or replace function public.can_read_group(p_group_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (
+    select 1 from public.groups g
+     where g.id = p_group_id
+       and (
+         not g.is_private
+         or exists (
+           select 1 from public.group_members m
+            where m.group_id = g.id and m.user_id = auth.uid()
+         )
+       )
+  );
+$$;
+
+-- Signed-in callers only. `public` and `anon` are excluded so these are not a
+-- way around the policies for someone holding only the publishable key.
+revoke all on function public.is_group_member(uuid) from public;
+revoke all on function public.is_group_owner(uuid) from public;
+revoke all on function public.can_read_group(uuid) from public;
+
+grant execute on function public.is_group_member(uuid) to authenticated;
+grant execute on function public.is_group_owner(uuid) to authenticated;
+grant execute on function public.can_read_group(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
 -- 4. The posts read policy, revisited
 -- ---------------------------------------------------------------------------
 -- This is the substantive change in this file, and the riskiest.
@@ -137,9 +231,14 @@ alter table public.posts
 -- always; hidden posts never (except your own); a group post only if the group
 -- is public or you are in it; everything else as before.
 --
--- The subquery on `group_members` runs per row, which is why section 6 indexes
--- `(user_id, group_id)` — the reverse of the primary key — so the membership
--- check is an index lookup rather than a scan.
+-- The group check goes through `can_read_group` rather than being written out
+-- here, and section 3b explains why that is not a style preference: a policy
+-- on `posts` that queried `groups` directly would re-enter the `groups`
+-- policy, which queries `group_members`, whose policy queries `groups`.
+--
+-- It is also faster. The function is STABLE, so the planner calls it once per
+-- distinct group per query instead of once per row — and this policy runs on
+-- every row of every feed page.
 
 drop policy if exists "Posts are readable unless hidden" on public.posts;
 drop policy if exists "Posts are readable when visible to you" on public.posts;
@@ -149,20 +248,7 @@ create policy "Posts are readable when visible to you"
     auth.uid() = user_id
     or (
       not is_hidden
-      and (
-        group_id is null
-        or exists (
-          select 1 from public.groups g
-           where g.id = group_id
-             and (
-               not g.is_private
-               or exists (
-                 select 1 from public.group_members m
-                  where m.group_id = g.id and m.user_id = auth.uid()
-               )
-             )
-        )
-      )
+      and (group_id is null or public.can_read_group(group_id))
     )
   );
 
@@ -173,13 +259,7 @@ create policy "Posts are insertable by their author"
   on public.posts for insert to authenticated
   with check (
     auth.uid() = user_id
-    and (
-      group_id is null
-      or exists (
-        select 1 from public.group_members m
-         where m.group_id = group_id and m.user_id = auth.uid()
-      )
-    )
+    and (group_id is null or public.is_group_member(group_id))
   );
 
 -- `group_id` joins the columns an author may update. Without it, the composer
@@ -207,13 +287,7 @@ alter table public.group_members enable row level security;
 drop policy if exists "Groups are readable when public or joined" on public.groups;
 create policy "Groups are readable when public or joined"
   on public.groups for select to authenticated
-  using (
-    not is_private
-    or exists (
-      select 1 from public.group_members m
-       where m.group_id = id and m.user_id = auth.uid()
-    )
-  );
+  using (not is_private or public.is_group_member(id));
 
 -- Anyone can start a group, and only as themselves.
 drop policy if exists "Groups are creatable by their owner" on public.groups;
@@ -236,25 +310,17 @@ create policy "Groups are deletable by their owner"
 -- hiding it from members would make a group a room where you cannot tell who
 -- else is in it.
 --
--- Note this leans on the `groups` policy above: you can only read membership
--- of a group you can read, so a private group's member list is members-only
--- without saying so twice.
+-- Your own membership row is always readable, and that clause is not
+-- redundant: it is what makes the common case — "am I in this group" — answer
+-- without consulting the group at all.
+--
+-- `can_read_group` carries the rest. Writing the group check out here instead
+-- is what caused 42P17: this policy would query `groups`, whose policy queries
+-- `group_members`, whose policy is this one. See section 3b.
 drop policy if exists "Membership is readable with the group" on public.group_members;
 create policy "Membership is readable with the group"
   on public.group_members for select to authenticated
-  using (
-    exists (
-      select 1 from public.groups g
-       where g.id = group_id
-         and (
-           not g.is_private
-           or exists (
-             select 1 from public.group_members m
-              where m.group_id = g.id and m.user_id = auth.uid()
-           )
-         )
-    )
-  );
+  using (auth.uid() = user_id or public.can_read_group(group_id));
 
 -- Joining. Only as yourself, only a group you can see, and only as a plain
 -- member — the `role = 'member'` check is what stops someone joining a group
@@ -271,17 +337,7 @@ create policy "Users join groups as themselves"
   with check (
     auth.uid() = user_id
     and role = 'member'
-    and exists (
-      select 1 from public.groups g
-       where g.id = group_id
-         and (
-           not g.is_private
-           or exists (
-             select 1 from public.group_members m
-              where m.group_id = g.id and m.user_id = auth.uid()
-           )
-         )
-    )
+    and public.can_read_group(group_id)
   );
 
 -- Leaving, or being removed by the owner.
@@ -296,13 +352,7 @@ create policy "Users leave groups, owners remove members"
   on public.group_members for delete to authenticated
   using (
     role <> 'owner'
-    and (
-      auth.uid() = user_id
-      or exists (
-        select 1 from public.groups g
-         where g.id = group_id and g.owner_id = auth.uid()
-      )
-    )
+    and (auth.uid() = user_id or public.is_group_owner(group_id))
   );
 
 -- No UPDATE policy on membership. Promoting someone is the feature that would
@@ -312,10 +362,10 @@ create policy "Users leave groups, owners remove members"
 -- 6. Indexes
 -- ---------------------------------------------------------------------------
 
--- "Which groups is this user in" — read on every For You load, and by the
--- membership subquery in every policy above. The primary key is
--- `(group_id, user_id)`, which cannot serve a lookup that starts with the
--- user, so this is not optional.
+-- "Which groups is this user in" — read on every For You load, and by
+-- `is_group_member` / `can_read_group` on behalf of every policy in section 5.
+-- The primary key is `(group_id, user_id)`, which cannot serve a lookup that
+-- starts with the user, so this is not optional.
 create index if not exists group_members_user_id_joined_at_idx
   on public.group_members (user_id, joined_at desc);
 
@@ -427,3 +477,16 @@ notify pgrst, 'reload schema';
 -- And that the policy count on posts is still one per command:
 --   select policyname, cmd from pg_policies
 --    where tablename = 'posts' order by cmd, policyname;
+--
+-- That no policy recurses. This file originally shipped with `groups` and
+-- `group_members` policies that queried each other, and every one of these
+-- died with 42P17 — so they are the first thing to re-check after any change
+-- to section 5. All four must return without error:
+--   select count(*) from public.groups;
+--   select count(*) from public.group_members;
+--   select count(*) from public.posts;
+--   select public.can_read_group(id) from public.groups limit 1;
+--
+-- That the helpers answer about the caller and not the owner. Signed in as a
+-- member of one group, this must return exactly that group:
+--   select id, name from public.groups where public.is_group_member(id);
