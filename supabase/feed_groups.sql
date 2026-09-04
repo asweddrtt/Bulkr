@@ -341,6 +341,11 @@ create index if not exists posts_feed_label_hot_score_id_idx
 create index if not exists groups_public_created_at_idx
   on public.groups (created_at desc) where not is_private;
 
+-- Group name search runs `ilike '%term%'`, which no btree can serve. pg_trgm
+-- is already enabled by `meals_policies.sql`; the guard is here so this file
+-- stands on its own, the same way `feed_follows.sql` does.
+create extension if not exists pg_trgm;
+
 create index if not exists groups_name_trgm_idx
   on public.groups using gin (name gin_trgm_ops);
 
