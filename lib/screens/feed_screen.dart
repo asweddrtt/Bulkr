@@ -13,6 +13,8 @@ import '../widgets/animations/press_scale.dart';
 import '../widgets/post_actions_sheet.dart';
 import '../widgets/post_card.dart';
 import '../widgets/post_label_chip.dart';
+import 'author_profile_screen.dart';
+import 'find_people_screen.dart';
 import 'post_comments_sheet.dart';
 import 'post_composer_screen.dart';
 
@@ -121,6 +123,20 @@ class _FeedHeader extends StatelessWidget {
                 ),
               ),
               const _FeedTabs(),
+              PressScale(
+                child: GestureDetector(
+                  onTap: () => FindPeopleScreen.open(context),
+                  behavior: HitTestBehavior.opaque,
+                  child: Padding(
+                    padding: EdgeInsets.only(left: 6.w),
+                    child: Icon(
+                      Icons.person_add_alt_1_outlined,
+                      color: AppColors.textGray,
+                      size: 20.sp,
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
         ),
@@ -325,12 +341,17 @@ class _FeedListState extends State<_FeedList> {
           // The cold start. A new account follows nobody, so this is the first
           // thing most users see on this tab — which is why it points at
           // Discover rather than just saying the feed is empty.
+          // The cold start, and now with somewhere to go. "Follow a few
+          // people" was only useful advice once there was a screen for doing
+          // it — before this slice the button could only offer Discover.
           _FeedMessage(
             icon: Icons.group_outlined,
             title: 'feed_empty_for_you'.tr(),
             body: 'feed_empty_for_you_body'.tr(),
-            actionLabel: 'feed_browse_discover'.tr(),
-            onAction: () =>
+            actionLabel: 'feed_find_people'.tr(),
+            onAction: () => FindPeopleScreen.open(context),
+            secondaryLabel: 'feed_browse_discover'.tr(),
+            onSecondary: () =>
                 context.read<FeedCubit>().selectTab(FeedTab.discover),
           )
         else
@@ -376,6 +397,9 @@ class _FeedListState extends State<_FeedList> {
           onComment: () => _openComments(context, post),
           onSaveMeal: post.canSaveMeal ? () => _saveMeal(context, post) : null,
           isSavingMeal: isSavingMeal,
+          onOpenAuthor: post.isMine
+              ? null
+              : () => AuthorProfileScreen.open(context, post.authorId),
         );
       },
     );
@@ -464,6 +488,8 @@ class _FeedMessage extends StatelessWidget {
     this.body,
     this.actionLabel,
     this.onAction,
+    this.secondaryLabel,
+    this.onSecondary,
   });
 
   final IconData icon;
@@ -471,6 +497,12 @@ class _FeedMessage extends StatelessWidget {
   final String? body;
   final String? actionLabel;
   final VoidCallback? onAction;
+
+  /// A second, quieter way out. The cold-start state has two reasonable
+  /// answers — go find people, or go read what everyone else posted — and
+  /// picking one for the user would be picking wrong half the time.
+  final String? secondaryLabel;
+  final VoidCallback? onSecondary;
 
   @override
   Widget build(BuildContext context) {
@@ -524,6 +556,25 @@ class _FeedMessage extends StatelessWidget {
                         fontWeight: FontWeight.bold,
                         letterSpacing: 1,
                       ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+            if (secondaryLabel != null && onSecondary != null) ...[
+              SizedBox(height: 10.h),
+              GestureDetector(
+                onTap: onSecondary,
+                behavior: HitTestBehavior.opaque,
+                child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 6.h),
+                  child: Text(
+                    secondaryLabel!.toUpperCase(),
+                    style: GoogleFonts.inter(
+                      color: AppColors.textGray,
+                      fontSize: 10.sp,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1,
                     ),
                   ),
                 ),

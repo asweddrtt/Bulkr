@@ -12,6 +12,7 @@ import '../models/post_comment.dart';
 import '../models/post_label.dart';
 import '../styles/app_color.dart';
 import '../widgets/animations/press_scale.dart';
+import '../widgets/person_row.dart';
 
 /// One post's conversation.
 ///
@@ -278,7 +279,11 @@ class _CommentRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _Avatar(url: comment.authorAvatarUrl, name: comment.authorName),
+          PersonAvatar(
+            url: comment.authorAvatarUrl,
+            name: comment.authorName,
+            size: 26.w,
+          ),
           SizedBox(width: 10.w),
           Expanded(
             child: Column(
@@ -562,51 +567,6 @@ class _ComposerState extends State<_Composer> {
           ),
         );
       },
-    );
-  }
-}
-
-/// The commenter's picture, or their initial when they have none.
-class _Avatar extends StatelessWidget {
-  const _Avatar({required this.url, required this.name});
-
-  final String? url;
-  final String name;
-
-  @override
-  Widget build(BuildContext context) {
-    final double size = 26.w;
-
-    return ClipOval(
-      child: SizedBox(
-        width: size,
-        height: size,
-        child: url == null || url!.isEmpty
-            ? _buildInitial()
-            : Image.network(
-                url!,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => _buildInitial(),
-              ),
-      ),
-    );
-  }
-
-  Widget _buildInitial() {
-    final String initial =
-        name.trim().isEmpty ? '?' : name.trim()[0].toUpperCase();
-
-    return ColoredBox(
-      color: const Color(0xFF2A2A2A),
-      child: Center(
-        child: Text(
-          initial,
-          style: GoogleFonts.anton(
-            color: AppColors.primaryNeon,
-            fontSize: 11.sp,
-          ),
-        ),
-      ),
     );
   }
 }

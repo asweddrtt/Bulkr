@@ -7,6 +7,7 @@ import '../core/relative_time.dart';
 import '../models/post.dart';
 import '../styles/app_color.dart';
 import 'animations/press_scale.dart';
+import 'person_row.dart';
 import 'post_label_chip.dart';
 
 /// One post in the feed.
@@ -90,7 +91,11 @@ class PostCard extends StatelessWidget {
       padding: EdgeInsets.fromLTRB(14.w, 14.h, 6.w, 10.h),
       child: Row(
         children: [
-          _Avatar(url: post.authorAvatarUrl, name: post.authorName),
+          PersonAvatar(
+            url: post.authorAvatarUrl,
+            name: post.authorName,
+            size: 34.w,
+          ),
           SizedBox(width: 10.w),
           Expanded(
             child: PressScale(
@@ -376,54 +381,6 @@ class PostCard extends StatelessWidget {
             onTap: onSave,
           ),
         ],
-      ),
-    );
-  }
-}
-
-/// The author's picture, or their initial when they have none.
-class _Avatar extends StatelessWidget {
-  const _Avatar({required this.url, required this.name});
-
-  final String? url;
-  final String name;
-
-  @override
-  Widget build(BuildContext context) {
-    final double size = 34.w;
-
-    return ClipOval(
-      child: SizedBox(
-        width: size,
-        height: size,
-        child: url == null || url!.isEmpty
-            ? _buildInitial()
-            : Image.network(
-                url!,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => _buildInitial(),
-              ),
-      ),
-    );
-  }
-
-  Widget _buildInitial() {
-    // `name` falls back through display name to handle to a placeholder, so it
-    // is never empty — but taking [0] of a string is not the place to rely on
-    // that holding.
-    final String initial =
-        name.trim().isEmpty ? '?' : name.trim()[0].toUpperCase();
-
-    return ColoredBox(
-      color: const Color(0xFF2A2A2A),
-      child: Center(
-        child: Text(
-          initial,
-          style: GoogleFonts.anton(
-            color: AppColors.primaryNeon,
-            fontSize: 14.sp,
-          ),
-        ),
       ),
     );
   }

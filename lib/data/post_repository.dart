@@ -7,6 +7,7 @@ import '../models/post_comment.dart';
 import '../models/post_draft.dart';
 import '../models/post_label.dart';
 import 'feed_cursor.dart';
+import 'follow_repository.dart';
 
 /// A photo waiting to go up with a post.
 ///
@@ -40,10 +41,16 @@ class PostImageUpload {
 /// Both page by keyset rather than OFFSET. See [FeedCursor] for why that is not
 /// a micro-optimisation.
 class PostRepository {
-  PostRepository({SupabaseClient? client})
-      : _client = client ?? Supabase.instance.client;
+  PostRepository({SupabaseClient? client, FollowRepository? followRepository})
+      : _client = client ?? Supabase.instance.client,
+        _follows = followRepository ?? FollowRepository(client: client);
 
   final SupabaseClient _client;
+
+  /// Who the user follows, which is what For You is made of. Read through the
+  /// repository that owns the follow graph rather than queried here, so there
+  /// is one place that knows how follows are stored.
+  final FollowRepository _follows;
 
   /// Storage bucket holding post photos. Public-read, because a post has to
   /// render for everyone who can see it.
@@ -131,12 +138,6 @@ class PostRepository {
 
   /// Posts from the people the user follows, newest first.
   ///
-  /// Today "the people the user follows" is only themselves: there is no
-  /// `follows` table yet, so [_followedAuthorIds] returns just the signed-in
-  /// id. That is deliberately not a stub that returns everything — a For You
-  /// tab that quietly shows the whole site is indistinguishable from Discover,
-  /// and the empty state is the honest answer until following exists.
-  ///
   /// Ordered by recency rather than by score. Someone the user chose to follow
   /// does not have to earn a place in their feed twice.
   Future<FeedPage> fetchForYou({
@@ -181,12 +182,58 @@ class PostRepository {
 
   /// Whose posts belong in this user's For You.
   ///
-  /// The signed-in user for now, so the tab has something true to show and the
-  /// composer can be tested end to end. Slice 3 replaces the body with a read
-  /// of `follows` plus `group_members`; the signature does not change, and
-  /// neither does anything above it.
+  /// Everyone they follow, plus themselves. Including your own posts is a
+  /// choice, not an accident: the tab is the feed you built, your own posts are
+  /// part of what you built, and a brand-new account that follows nobody still
+  /// sees something the moment it posts instead of an empty screen.
+  ///
+  /// Groups join this list when they exist — the members of every group you are
+  /// in — and nothing above this method changes when they do.
+  ///
+  /// A failed follow read falls back to the user's own posts rather than to
+  /// everything. Quietly showing the whole site under a tab labelled "for you"
+  /// is worse than showing too little, and the too-little case is visibly a
+  /// problem the user can retry.
   Future<List<String>> _followedAuthorIds(String userId) async {
-    return [userId];
+    try {
+      final List<String> followed = await _follows.followedIds(userId);
+      return [userId, ...followed];
+    } catch (error) {
+      debugPrint('Bulkr: could not read follows for For You — $error');
+      return [userId];
+    }
+  }
+
+  /// One person's posts, newest first.
+  ///
+  /// Their whole profile feed, hidden posts included when the reader is the
+  /// author — the RLS policy decides that, not this query, which is why there
+  /// is no `is_hidden` filter here. On someone else's profile the policy
+  /// removes them; on your own it does not, and the card marks them.
+  Future<FeedPage> fetchAuthorPosts(
+    String authorId, {
+    FeedCursor? cursor,
+  }) async {
+    final String? userId = _userId;
+
+    PostgrestFilterBuilder<List<Map<String, dynamic>>> query =
+        _client.from('posts').select(_postColumns).eq('user_id', authorId);
+
+    if (cursor != null) {
+      query = query.or(_keysetFilter(
+        column: 'created_at',
+        value: '"${cursor.asTimestamp}"',
+        id: cursor.id,
+      ));
+    }
+
+    final List<Map<String, dynamic>> rows = await query
+        .order('created_at', ascending: false)
+        .order('id', ascending: false)
+        .limit(pageSize);
+
+    return await _page(rows,
+        userId: userId, cursorBuilder: FeedCursor.byRecency);
   }
 
   /// A single post, for a deep link or a share target.
