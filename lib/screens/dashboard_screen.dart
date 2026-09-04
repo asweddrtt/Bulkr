@@ -2,21 +2,17 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../core/progress_stats.dart';
 import '../core/unit_converter.dart';
-import '../cubit/auth/auth_cubit.dart';
 import '../cubit/profile/profile_cubit.dart';
-import '../go_router/app_routes.dart';
 import '../models/insight.dart';
 import '../models/nutrition_plan.dart';
 import '../models/plan_breakdown.dart';
 import '../models/user_profile.dart';
 import '../models/weight_entry.dart';
 import '../styles/app_color.dart';
-import '../widgets/account_sheet.dart';
 import '../widgets/animations/entrance.dart';
 import '../widgets/animations/press_scale.dart';
 import '../widgets/insight_list.dart';
@@ -101,33 +97,10 @@ class DashboardScreen extends StatelessWidget {
               onEditTarget: (kg) =>
                   context.read<ProfileCubit>().updateTargetWeight(kg),
               onRecalculate: () => _openRecalculateSheet(context),
-              onOpenAccount: () => _openAccountSheet(context),
             );
         }
       },
       ),
-    );
-  }
-
-  /// Which account am I in, and how do I get out of it.
-  ///
-  /// Signing out is followed by an explicit navigation: the router's guard only
-  /// runs on route changes, so without this the user would sit on a profile
-  /// belonging to a session that no longer exists.
-  Future<void> _openAccountSheet(BuildContext context) async {
-    final AuthCubit auth = context.read<AuthCubit>();
-    final GoRouter router = GoRouter.of(context);
-    final String username =
-        context.read<ProfileCubit>().state.profile?.username ?? '';
-
-    await AccountSheet.show(
-      context,
-      email: auth.state.user?.email,
-      username: username,
-      onSignOut: () async {
-        await auth.signOut();
-        router.go(AppRoutes.welcome);
-      },
     );
   }
 
@@ -184,7 +157,6 @@ class _ProfileView extends StatelessWidget {
     required this.onLogWeight,
     required this.onEditTarget,
     required this.onRecalculate,
-    required this.onOpenAccount,
   });
 
   final UserProfile profile;
@@ -208,7 +180,6 @@ class _ProfileView extends StatelessWidget {
   final ValueChanged<double> onLogWeight;
   final ValueChanged<double> onEditTarget;
   final Future<void> Function() onRecalculate;
-  final VoidCallback onOpenAccount;
 
   bool get _isMetric => profile.units.isMetric;
 
@@ -320,17 +291,10 @@ class _ProfileView extends StatelessWidget {
               ],
             ),
           ),
-          PressScale(
-            child: GestureDetector(
-              onTap: onOpenAccount,
-              behavior: HitTestBehavior.opaque,
-              child: Padding(
-                padding: EdgeInsets.all(4.w),
-                child: Icon(Icons.settings_outlined,
-                    color: DashboardScreen.textMuted, size: 24.sp),
-              ),
-            ),
-          ),
+          // No settings gear. Which account am I in, and how do I get out of
+          // it, are questions about the person rather than about the numbers —
+          // so they live on the Profile tab now, next to the name and picture
+          // they are about.
         ],
       ),
     );

@@ -3,19 +3,26 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../core/post_link.dart';
+import '../cubit/auth/auth_cubit.dart';
 import '../cubit/author/author_cubit.dart';
 import '../cubit/profile/profile_cubit.dart';
 import '../data/follow_repository.dart';
 import '../data/post_repository.dart';
+import '../data/user_repository.dart';
+import '../go_router/app_routes.dart';
 import '../models/person.dart';
 import '../models/post.dart';
 import '../models/user_profile.dart';
 import '../styles/app_color.dart';
+import '../widgets/account_sheet.dart';
 import '../widgets/animations/press_scale.dart';
 import '../widgets/edit_profile_sheet.dart';
+import '../widgets/image_source_sheet.dart';
 import '../widgets/person_row.dart';
 import '../widgets/post_actions_sheet.dart';
 import '../widgets/post_card.dart';
@@ -226,11 +233,7 @@ class _Header extends StatelessWidget {
         children: [
           Row(
             children: [
-              PersonAvatar(
-                url: person.avatarUrl,
-                name: person.name,
-                size: 64.w,
-              ),
+              _EditableAvatar(person: person),
               SizedBox(width: 16.w),
               Expanded(
                 child: Column(
@@ -279,6 +282,24 @@ class _Header extends StatelessWidget {
                       Icons.edit_outlined,
                       color: AppColors.textGray,
                       size: 19.sp,
+                    ),
+                  ),
+                ),
+              ),
+              // Settings live here now rather than on the dashboard. Which
+              // account am I signed in as, and how do I get out of it, are
+              // questions about the person — and this is the screen about the
+              // person. The dashboard is about the numbers.
+              PressScale(
+                child: GestureDetector(
+                  onTap: () => _openAccount(context),
+                  behavior: HitTestBehavior.opaque,
+                  child: Padding(
+                    padding: EdgeInsets.all(6.w),
+                    child: Icon(
+                      Icons.settings_outlined,
+                      color: AppColors.textGray,
+                      size: 20.sp,
                     ),
                   ),
                 ),
@@ -336,6 +357,28 @@ class _Header extends StatelessWidget {
     );
   }
 
+  /// Which account am I in, and how do I get out of it.
+  ///
+  /// Signing out is followed by an explicit navigation: the router's guard only
+  /// runs on route changes, so without it the user would sit on a profile
+  /// belonging to a session that no longer exists.
+  static Future<void> _openAccount(BuildContext context) async {
+    final AuthCubit auth = context.read<AuthCubit>();
+    final GoRouter router = GoRouter.of(context);
+    final String username =
+        context.read<ProfileCubit>().state.profile?.username ?? '';
+
+    await AccountSheet.show(
+      context,
+      email: auth.state.user?.email,
+      username: username,
+      onSignOut: () async {
+        await auth.signOut();
+        router.go(AppRoutes.welcome);
+      },
+    );
+  }
+
   /// Opens the editor and applies what comes back.
   ///
   /// The name and bio are written to `users`, which is [ProfileCubit]'s table
@@ -354,6 +397,187 @@ class _Header extends StatelessWidget {
     if (edit == null) return;
 
     await Future.wait([author.refresh(), profile.load()]);
+  }
+}
+
+/// The profile picture, and the way to change it.
+///
+/// A tap opens the same source sheet the meal editor uses, so picking a photo
+/// works the same way everywhere in the app. The camera icon in the corner is
+/// what makes it discoverable — an avatar that happens to be tappable is an
+/// avatar nobody taps.
+class _EditableAvatar extends StatefulWidget {
+  const _EditableAvatar({required this.person});
+
+  final Person person;
+
+  @override
+  State<_EditableAvatar> createState() => _EditableAvatarState();
+}
+
+class _EditableAvatarState extends State<_EditableAvatar> {
+  /// Resized on the way in, like every other photo the app takes. An avatar is
+  /// rendered at 64 logical pixels and downloaded by everyone who reads a post
+  /// — a full-resolution camera image would be several megabytes for something
+  /// shown the size of a thumbnail.
+  static const int _maxWidth = 512;
+  static const int _quality = 85;
+
+  bool _isSaving = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return PressScale(
+      child: GestureDetector(
+        onTap: _isSaving ? null : _change,
+        behavior: HitTestBehavior.opaque,
+        child: Stack(
+          children: [
+            PersonAvatar(
+              url: widget.person.avatarUrl,
+              name: widget.person.name,
+              size: 64.w,
+            ),
+            if (_isSaving)
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: const BoxDecoration(
+                    color: Colors.black54,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: SizedBox(
+                      width: 18.w,
+                      height: 18.w,
+                      child: const CircularProgressIndicator(
+                        color: AppColors.primaryNeon,
+                        strokeWidth: 2,
+                      ),
+                    ),
+                  ),
+                ),
+              )
+            else
+              Positioned(
+                right: 0,
+                bottom: 0,
+                child: Container(
+                  padding: EdgeInsets.all(4.w),
+                  decoration: BoxDecoration(
+                    color: AppColors.buttonNeon,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: const Color(0xFF121212), width: 2.w),
+                  ),
+                  child: Icon(
+                    Icons.photo_camera,
+                    color: Colors.black,
+                    size: 10.sp,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _change() async {
+    final UserRepository users = context.read<UserRepository>();
+    final AuthorCubit author = context.read<AuthorCubit>();
+    final ProfileCubit profile = context.read<ProfileCubit>();
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+
+    // Removing is only offered when there is something to remove.
+    final ImageSourceChoice? choice = await ImageSourceSheet.show(
+      context,
+      canRemove: widget.person.avatarUrl != null,
+    );
+    if (choice == null) return;
+
+    if (choice == ImageSourceChoice.remove) {
+      await _run(
+        () => users.clearAvatar(),
+        author: author,
+        profile: profile,
+        messenger: messenger,
+      );
+      return;
+    }
+
+    final ImageSource? source = choice.pluginSource;
+    if (source == null) return;
+
+    XFile? picked;
+    try {
+      picked = await ImagePicker().pickImage(
+        source: source,
+        maxWidth: _maxWidth.toDouble(),
+        imageQuality: _quality,
+      );
+    } catch (error) {
+      // A denied camera permission or a cancelled picker throws on some
+      // platforms. Neither is worth an error: the user just gets no photo,
+      // which they can see for themselves.
+      debugPrint('Bulkr: avatar pick failed — $error');
+      return;
+    }
+
+    if (picked == null) return;
+
+    final Uint8List bytes = await picked.readAsBytes();
+    final String extension = _extensionOf(picked.path);
+
+    await _run(
+      () => users.updateAvatar(bytes: bytes, extension: extension),
+      author: author,
+      profile: profile,
+      messenger: messenger,
+    );
+  }
+
+  /// Runs a write, then reloads both cubits that render an avatar.
+  ///
+  /// Both, because the picture appears in two places: this header, off
+  /// `AuthorCubit`, and the dashboard's greeting, off `ProfileCubit`. Reloading
+  /// only one leaves the other showing the previous photo until the app
+  /// restarts.
+  Future<void> _run(
+    Future<void> Function() write, {
+    required AuthorCubit author,
+    required ProfileCubit profile,
+    required ScaffoldMessengerState messenger,
+  }) async {
+    setState(() => _isSaving = true);
+
+    try {
+      await write();
+      await Future.wait([author.refresh(), profile.load()]);
+    } catch (error) {
+      debugPrint('Bulkr: avatar write failed — $error');
+
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            backgroundColor: const Color(0xFF2A2A2A),
+            content: Text(
+              '$error',
+              style: GoogleFonts.inter(color: Colors.white, fontSize: 12.sp),
+            ),
+          ),
+        );
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  /// The picker re-encodes to JPEG when it resizes, but honours the original
+  /// extension when it does not, so the name is the only thing that knows.
+  static String _extensionOf(String path) {
+    final int dot = path.lastIndexOf('.');
+    if (dot < 0 || dot == path.length - 1) return 'jpg';
+    final String extension = path.substring(dot + 1).toLowerCase();
+    return extension.length > 5 ? 'jpg' : extension;
   }
 }
 

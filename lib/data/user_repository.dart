@@ -201,6 +201,83 @@ class UserRepository {
     }).eq('id', userId);
   }
 
+  /// Storage bucket holding profile pictures. Public-read, because an avatar
+  /// appears next to every post its owner has written.
+  static const String avatarBucket = 'avatars';
+
+  /// Uploads a new profile picture and points `avatar_url` at it.
+  ///
+  /// Returns the stored URL, so the caller can show the new picture without
+  /// refetching the row.
+  ///
+  /// A new filename every time, rather than one file per user overwritten in
+  /// place. That is not arbitrary: a public storage URL is cached, and that URL
+  /// is embedded in every post card this user appears on — so overwriting the
+  /// object leaves the URL unchanged and every device that already loaded it
+  /// keeps showing the old picture, which to the person who just changed theirs
+  /// is indistinguishable from the change not saving.
+  ///
+  /// The previous file is left behind. Deleting it means parsing a storage path
+  /// back out of the old URL and deleting that, three steps that can each fail,
+  /// in service of a few kilobytes — and a failure there would block someone
+  /// changing their picture. `supabase/feed_avatars.sql` section 2 says where
+  /// the tidy-up belongs instead.
+  Future<String> updateAvatar({
+    required Uint8List bytes,
+    String extension = 'jpg',
+  }) async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) {
+      throw StateError('Cannot change the avatar without a signed-in user');
+    }
+
+    final String path =
+        '$userId/${DateTime.now().toUtc().microsecondsSinceEpoch}.$extension';
+
+    await _client.storage.from(avatarBucket).uploadBinary(
+          path,
+          bytes,
+          fileOptions: FileOptions(
+            contentType: _avatarContentType(extension),
+            upsert: false,
+          ),
+        );
+
+    final String url = _client.storage.from(avatarBucket).getPublicUrl(path);
+
+    // The row is written after the upload, so a failed upload leaves the old
+    // picture in place rather than pointing the column at nothing.
+    await _client.from('users').update({'avatar_url': url}).eq('id', userId);
+
+    return url;
+  }
+
+  /// Drops the profile picture, falling back to the initial.
+  ///
+  /// Does not restore whatever the OAuth provider supplied at sign-up: that
+  /// URL is not kept anywhere once it has been overwritten, and inventing a way
+  /// to get it back would mean storing two avatars to support an action nobody
+  /// asked for.
+  Future<void> clearAvatar() async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) return;
+
+    await _client.from('users').update({'avatar_url': null}).eq('id', userId);
+  }
+
+  static String _avatarContentType(String extension) {
+    switch (extension.toLowerCase()) {
+      case 'png':
+        return 'image/png';
+      case 'webp':
+        return 'image/webp';
+      case 'heic':
+        return 'image/heic';
+      default:
+        return 'image/jpeg';
+    }
+  }
+
   /// Writes a freshly calculated plan over the stored targets.
   Future<void> applyPlan({required NutritionPlan plan}) async {
     final userId = _client.auth.currentUser?.id;
