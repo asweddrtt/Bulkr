@@ -3,9 +3,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../data/challenge_repository.dart';
 import '../../data/feed_cursor.dart';
 import '../../data/meal_repository.dart';
 import '../../data/post_repository.dart';
+import '../../models/challenge.dart';
 import '../../models/meal.dart';
 import '../../models/post.dart';
 import '../../models/post_label.dart';
@@ -23,8 +25,10 @@ class FeedCubit extends Cubit<FeedState> {
   FeedCubit({
     required PostRepository postRepository,
     required MealRepository mealRepository,
+    required ChallengeRepository challengeRepository,
   })  : _posts = postRepository,
         _meals = mealRepository,
+        _challenges = challengeRepository,
         super(const FeedState());
 
   final PostRepository _posts;
@@ -34,12 +38,18 @@ class FeedCubit extends Cubit<FeedState> {
   /// reimplemented here.
   final MealRepository _meals;
 
+  /// Joining a challenge, for the same reason.
+  final ChallengeRepository _challenges;
+
   /// Translation key for a failed write, matching `MealsCubit`'s convention.
   static const String _actionFailedKey = 'feed_action_failed';
 
   /// Confirmation that a meal landed in the library. Worth saying out loud:
   /// the copy appears on a screen the user is not currently looking at.
   static const String _mealSavedKey = 'post_meal_saved';
+
+  /// Confirmation that a challenge was joined, and what it starts from.
+  static const String _challengeJoinedKey = 'challenge_joined';
 
   /// Loads the visible tab if it has nothing yet.
   ///
@@ -267,6 +277,56 @@ class FeedCubit extends Cubit<FeedState> {
 
       final String detail = _describe(error);
       debugPrint('Bulkr: meal copy failed — $detail');
+
+      emit(state.copyWith(
+        clearBusy: true,
+        actionErrorKey: _actionFailedKey,
+        actionErrorDetail: detail,
+      ));
+    }
+  }
+
+  /// Joins a post's challenge, or leaves it.
+  ///
+  /// Not optimistic, unlike a like. Joining takes a snapshot of the user's
+  /// current weight server-side — it is what every later leaderboard position
+  /// is measured from — so a button that said "joined" before the write landed
+  /// would be claiming a starting point that does not exist.
+  ///
+  /// The participant count moves with it, which is safe to do locally: it is
+  /// an aggregate the next load recomputes.
+  Future<void> toggleChallenge(Post post) async {
+    final Challenge? challenge = post.challenge;
+    if (challenge == null || state.busyPostId != null) return;
+    if (challenge.hasEnded) return;
+
+    final bool next = !challenge.hasJoined;
+
+    emit(state.copyWith(busyPostId: post.id, clearActionError: true));
+
+    try {
+      await _challenges.setJoined(
+        challengeId: challenge.id,
+        hasJoined: next,
+      );
+      if (isClosed) return;
+
+      _replaceEverywhere(
+        post.copyWith(
+          challenge: challenge.copyWith(
+            hasJoined: next,
+            participantCount:
+                (challenge.participantCount + (next ? 1 : -1)).clamp(0, 1 << 30),
+          ),
+        ),
+        clearBusy: true,
+        actionMessageKey: next ? _challengeJoinedKey : null,
+      );
+    } catch (error) {
+      if (isClosed) return;
+
+      final String detail = _describe(error);
+      debugPrint('Bulkr: challenge join failed — $detail');
 
       emit(state.copyWith(
         clearBusy: true,

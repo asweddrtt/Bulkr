@@ -17,6 +17,9 @@ enum PostAction {
 
   /// Flag someone else's post for review.
   report,
+
+  /// Copy a link to the post.
+  share,
 }
 
 /// The overflow menu on a post card.
@@ -39,6 +42,16 @@ class PostActionsSheet extends StatelessWidget {
     );
   }
 
+  /// Offered on every post, yours and everyone else's.
+  Widget _shareRow(BuildContext context) {
+    return SheetActionRow(
+      icon: Icons.link,
+      label: 'post_share'.tr(),
+      helper: 'post_share_helper'.tr(),
+      onTap: () => Navigator.of(context).pop(PostAction.share),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return SheetShell(
@@ -49,6 +62,7 @@ class PostActionsSheet extends StatelessWidget {
 
   List<Widget> _authorActions(BuildContext context) {
     return [
+      _shareRow(context),
       if (post.isHidden)
         SheetActionRow(
           icon: Icons.visibility_sharp,
@@ -75,6 +89,7 @@ class PostActionsSheet extends StatelessWidget {
 
   List<Widget> _readerActions(BuildContext context) {
     return [
+      _shareRow(context),
       SheetActionRow(
         icon: Icons.flag_outlined,
         label: 'post_report'.tr(),

@@ -14,6 +14,8 @@ import '../cubit/post_composer/post_composer_cubit.dart';
 import '../data/meal_repository.dart';
 import '../data/post_repository.dart';
 import '../models/meal.dart';
+import '../models/challenge.dart';
+import '../models/post.dart';
 import '../models/post_draft.dart';
 import '../models/post_label.dart';
 import '../styles/app_color.dart';
@@ -28,7 +30,13 @@ import 'meal_editor_screen.dart';
 /// hundred words, four photos and a meal, and none of that fits in something
 /// half the height of the display with a keyboard over it.
 class PostComposerScreen extends StatelessWidget {
-  const PostComposerScreen({super.key, this.initialLabel, this.attachedMeal});
+  const PostComposerScreen({
+    super.key,
+    this.initialLabel,
+    this.attachedMeal,
+    this.groupName,
+    this.onPosted,
+  });
 
   /// The label to open under. Null starts on [PostLabel.tip], matching the
   /// column default.
@@ -37,14 +45,31 @@ class PostComposerScreen extends StatelessWidget {
   /// A meal to arrive pre-attached, for "post this meal" from the Meals tab.
   final Meal? attachedMeal;
 
+  /// The group being posted into, for the banner. The id lives on the draft.
+  final String? groupName;
+
+  /// Called with the created post, for the screen that opened the composer.
+  final void Function(Post post)? onPosted;
+
   /// Opens the composer, and hands whatever gets written to the feed.
   ///
   /// The cubit is built here rather than provided by the shell, so closing the
   /// screen throws the draft away — the same lifetime the meal editor has.
+  /// [groupId] scopes the post to a group; [onPosted] is how the screen that
+  /// opened the composer learns about it.
+  ///
+  /// `onPosted` exists because a group post does not belong in For You's
+  /// prepend — it belongs at the top of that group. The feed cubit is still
+  /// told, so a post to the feed lands where it always did, and the group
+  /// screen gets its own callback rather than the composer knowing about
+  /// group cubits.
   static Future<void> open(
     BuildContext context, {
     PostLabel? initialLabel,
     Meal? attachedMeal,
+    String? groupId,
+    String? groupName,
+    void Function(Post post)? onPosted,
   }) {
     final FeedCubit feed = context.read<FeedCubit>();
     final PostRepository posts = context.read<PostRepository>();
@@ -58,6 +83,8 @@ class PostComposerScreen extends StatelessWidget {
             mealRepository: meals,
             initialLabel: initialLabel ?? PostLabel.tip,
             attachedMeal: attachedMeal,
+            groupId: groupId,
+            groupName: groupName,
           ),
           // The feed cubit is passed down rather than re-read inside, because
           // the composer is pushed above the shell and its own context does not
@@ -67,6 +94,8 @@ class PostComposerScreen extends StatelessWidget {
             child: PostComposerScreen(
               initialLabel: initialLabel,
               attachedMeal: attachedMeal,
+              groupName: groupName,
+              onPosted: onPosted,
             ),
           ),
         ),
@@ -83,7 +112,19 @@ class PostComposerScreen extends StatelessWidget {
           listenWhen: (previous, current) =>
               previous.created == null && current.created != null,
           listener: (context, state) {
-            context.read<FeedCubit>().postCreated(state.created!);
+            final Post post = state.created!;
+
+            // A group post is not prepended to For You: it belongs at the top
+            // of its group, and For You will pick it up on its next load
+            // because the user is a member. A post to the feed goes straight
+            // in, as before.
+            if (post.isGroupPost) {
+              onPosted?.call(post);
+            } else {
+              context.read<FeedCubit>().postCreated(post);
+              onPosted?.call(post);
+            }
+
             Navigator.of(context).pop();
           },
         ),
@@ -118,7 +159,9 @@ class PostComposerScreen extends StatelessWidget {
                 child: ListView(
                   padding: EdgeInsets.fromLTRB(20.w, 8.h, 20.w, 40.h),
                   children: const [
+                    _GroupBanner(),
                     _LabelPicker(),
+                    _ChallengeFields(),
                     _ContentField(),
                     _ImageStrip(),
                     _MealAttachment(),
@@ -259,6 +302,299 @@ class _SubmitButton extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// Which group this is going into.
+///
+/// Shown rather than chosen. The composer is opened *from* a group, so the
+/// destination is already decided — and a picker here would let someone post
+/// into a group from a screen that is not that group, which the insert policy
+/// would then have to refuse for anyone who left it in the meantime.
+class _GroupBanner extends StatelessWidget {
+  const _GroupBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<PostComposerCubit, PostComposerState>(
+      buildWhen: (previous, current) =>
+          previous.isGroupPost != current.isGroupPost ||
+          previous.groupName != current.groupName,
+      builder: (context, state) {
+        if (!state.isGroupPost) return const SizedBox.shrink();
+
+        return Container(
+          margin: EdgeInsets.only(bottom: 18.h),
+          padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 11.h),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1A1A),
+            borderRadius: BorderRadius.circular(8.r),
+            border: Border.all(
+              color: AppColors.primaryNeon.withValues(alpha: 0.35),
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.groups, color: AppColors.primaryNeon, size: 16.sp),
+              SizedBox(width: 10.w),
+              Expanded(
+                child: Text(
+                  'post_to_group'.tr(namedArgs: {
+                    'group': state.groupName ?? 'post_in_group_unknown'.tr(),
+                  }),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    color: Colors.white,
+                    fontSize: 12.sp,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// The challenge being set up, when the label is `challenge`.
+///
+/// Appears and disappears with the label rather than sitting behind an "add a
+/// challenge" toggle: someone who picked `challenge` has already said what
+/// they are doing, and asking again is a tap for no information.
+class _ChallengeFields extends StatefulWidget {
+  const _ChallengeFields();
+
+  @override
+  State<_ChallengeFields> createState() => _ChallengeFieldsState();
+}
+
+class _ChallengeFieldsState extends State<_ChallengeFields> {
+  final TextEditingController _title = TextEditingController();
+  final TextEditingController _goal = TextEditingController();
+
+  /// The three lengths anyone actually runs a challenge for, plus the default.
+  /// A date picker for something that always starts today is two taps to say
+  /// what one chip says.
+  static const List<int> _dayOptions = [7, 14, 30, 90];
+
+  @override
+  void dispose() {
+    _title.dispose();
+    _goal.dispose();
+    super.dispose();
+  }
+
+  void _update(ChallengeDraft Function(ChallengeDraft) change) {
+    final PostComposerCubit cubit = context.read<PostComposerCubit>();
+    final ChallengeDraft current =
+        cubit.state.draft.challenge ?? const ChallengeDraft();
+
+    cubit.setChallenge(change(current));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<PostComposerCubit, PostComposerState>(
+      buildWhen: (previous, current) =>
+          previous.draft.challenge != current.draft.challenge ||
+          previous.draft.label != current.draft.label,
+      builder: (context, state) {
+        final ChallengeDraft? challenge = state.draft.challenge;
+        if (challenge == null) return const SizedBox.shrink();
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'challenge_setup'.tr().toUpperCase(),
+              style: GoogleFonts.inter(
+                color: AppColors.textGray,
+                fontSize: 10.sp,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1,
+              ),
+            ),
+            SizedBox(height: 6.h),
+            Text(
+              // Says what the leaderboard measures before anyone commits to
+              // running one. A challenge whose metric is a surprise is a
+              // challenge people leave.
+              'challenge_setup_explainer'.tr(),
+              style: GoogleFonts.inter(
+                color: AppColors.textGray,
+                fontSize: 11.sp,
+                height: 1.45,
+              ),
+            ),
+            SizedBox(height: 10.h),
+            _ChallengeField(
+              controller: _title,
+              hint: 'challenge_title_hint'.tr(),
+              maxLength: ChallengeDraft.maxTitleLength,
+              onChanged: (value) =>
+                  _update((draft) => draft.copyWith(title: value)),
+            ),
+            SizedBox(height: 8.h),
+            _ChallengeField(
+              controller: _goal,
+              hint: 'challenge_goal_hint'.tr(),
+              maxLength: 5,
+              isNumeric: true,
+              suffix: challenge.canSubmit || _goal.text.isNotEmpty
+                  ? ChallengeMetric.weightGain.unitKey.tr()
+                  : null,
+              onChanged: (value) => _update(
+                (draft) => draft.copyWith(
+                  goalAmount: double.tryParse(value.replaceAll(',', '.')),
+                  // An unparseable or emptied field clears the goal rather
+                  // than keeping the last valid number, so the button cannot
+                  // stay enabled for a value no longer on screen.
+                  clearGoal: double.tryParse(value.replaceAll(',', '.')) == null,
+                ),
+              ),
+            ),
+            SizedBox(height: 12.h),
+            Text(
+              'challenge_length'.tr().toUpperCase(),
+              style: GoogleFonts.inter(
+                color: AppColors.textGray,
+                fontSize: 10.sp,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1,
+              ),
+            ),
+            SizedBox(height: 8.h),
+            Row(
+              children: [
+                for (final int days in _dayOptions)
+                  Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.only(right: 6.w),
+                      child: _DayChip(
+                        days: days,
+                        isSelected: challenge.days == days,
+                        onTap: () =>
+                            _update((draft) => draft.copyWith(days: days)),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            SizedBox(height: 18.h),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _ChallengeField extends StatelessWidget {
+  const _ChallengeField({
+    required this.controller,
+    required this.hint,
+    required this.maxLength,
+    required this.onChanged,
+    this.isNumeric = false,
+    this.suffix,
+  });
+
+  final TextEditingController controller;
+  final String hint;
+  final int maxLength;
+  final ValueChanged<String> onChanged;
+  final bool isNumeric;
+  final String? suffix;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 2.h),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A1A),
+        borderRadius: BorderRadius.circular(6.r),
+        border: Border.all(color: AppColors.darkBorder),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: controller,
+              onChanged: onChanged,
+              maxLength: maxLength,
+              keyboardType:
+                  isNumeric ? TextInputType.number : TextInputType.text,
+              textCapitalization: isNumeric
+                  ? TextCapitalization.none
+                  : TextCapitalization.sentences,
+              style: GoogleFonts.inter(color: Colors.white, fontSize: 13.sp),
+              decoration: InputDecoration(
+                isDense: true,
+                border: InputBorder.none,
+                counterText: '',
+                hintText: hint,
+                hintStyle: GoogleFonts.inter(
+                  color: AppColors.textGray,
+                  fontSize: 13.sp,
+                ),
+              ),
+            ),
+          ),
+          if (suffix != null)
+            Text(
+              suffix!,
+              style: GoogleFonts.inter(
+                color: AppColors.textGray,
+                fontSize: 12.sp,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DayChip extends StatelessWidget {
+  const _DayChip({
+    required this.days,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  final int days;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return PressScale(
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          alignment: Alignment.center,
+          padding: EdgeInsets.symmetric(vertical: 9.h),
+          decoration: BoxDecoration(
+            color: isSelected ? AppColors.primaryNeon : Colors.transparent,
+            borderRadius: BorderRadius.circular(6.r),
+            border: Border.all(
+              color: isSelected ? AppColors.primaryNeon : AppColors.darkBorder,
+            ),
+          ),
+          child: Text(
+            'challenge_days'.tr(namedArgs: {'days': '$days'}),
+            style: GoogleFonts.inter(
+              color: isSelected ? Colors.black : AppColors.textGray,
+              fontSize: 10.sp,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

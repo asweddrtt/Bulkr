@@ -1,19 +1,25 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../cubit/feed/feed_cubit.dart';
 import '../cubit/meals/meals_cubit.dart';
+import '../core/post_link.dart';
 import '../models/post.dart';
 import '../styles/app_color.dart';
 import '../widgets/animations/motion.dart';
 import '../widgets/animations/press_scale.dart';
 import '../widgets/post_actions_sheet.dart';
 import '../widgets/post_card.dart';
+import '../widgets/report_sheet.dart';
 import '../widgets/post_label_chip.dart';
 import 'author_profile_screen.dart';
+import 'challenge_leaderboard_sheet.dart';
+import 'group_screen.dart';
+import 'groups_screen.dart';
 import 'find_people_screen.dart';
 import 'post_comments_sheet.dart';
 import 'post_composer_screen.dart';
@@ -125,10 +131,24 @@ class _FeedHeader extends StatelessWidget {
               const _FeedTabs(),
               PressScale(
                 child: GestureDetector(
-                  onTap: () => FindPeopleScreen.open(context),
+                  onTap: () => GroupsScreen.open(context),
                   behavior: HitTestBehavior.opaque,
                   child: Padding(
                     padding: EdgeInsets.only(left: 6.w),
+                    child: Icon(
+                      Icons.groups_outlined,
+                      color: AppColors.textGray,
+                      size: 20.sp,
+                    ),
+                  ),
+                ),
+              ),
+              PressScale(
+                child: GestureDetector(
+                  onTap: () => FindPeopleScreen.open(context),
+                  behavior: HitTestBehavior.opaque,
+                  child: Padding(
+                    padding: EdgeInsets.only(left: 4.w),
                     child: Icon(
                       Icons.person_add_alt_1_outlined,
                       color: AppColors.textGray,
@@ -400,6 +420,16 @@ class _FeedListState extends State<_FeedList> {
           onOpenAuthor: post.isMine
               ? null
               : () => AuthorProfileScreen.open(context, post.authorId),
+          onOpenGroup: post.groupId == null
+              ? null
+              : () => GroupScreen.open(context, post.groupId!),
+          onToggleChallenge: post.hasChallenge
+              ? () => context.read<FeedCubit>().toggleChallenge(post)
+              : null,
+          onOpenLeaderboard: post.hasChallenge
+              ? () => ChallengeLeaderboardSheet.show(context, post.challenge!)
+              : null,
+          isJoiningChallenge: busyPostId == post.id,
         );
       },
     );
@@ -462,16 +492,21 @@ class _FeedListState extends State<_FeedList> {
         await cubit.setHidden(post, isHidden: false);
 
       case PostAction.report:
-        // `report_count` exists as a column but has no reports table behind it
-        // yet, so there is nowhere for a report to go. Said plainly rather than
-        // shown as a success that recorded nothing.
+        if (!context.mounted) return;
+        await reportPostFlow(context, post);
+
+      case PostAction.share:
+        await Clipboard.setData(
+          ClipboardData(text: PostLink.shareText(post)),
+        );
+
         messenger
           ..hideCurrentSnackBar()
           ..showSnackBar(
             SnackBar(
               backgroundColor: const Color(0xFF2A2A2A),
               content: Text(
-                'post_action_unavailable'.tr(),
+                'post_share_copied'.tr(),
                 style: GoogleFonts.inter(color: Colors.white, fontSize: 12.sp),
               ),
             ),

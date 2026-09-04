@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 
+import 'challenge.dart';
 import 'meal.dart';
 import 'post_label.dart';
 
@@ -15,6 +16,8 @@ class PostDraft extends Equatable {
     this.content = '',
     this.imagePaths = const [],
     this.attachedMeal,
+    this.groupId,
+    this.challenge,
   });
 
   /// Which of the six kinds of post this is.
@@ -42,6 +45,30 @@ class PostDraft extends Equatable {
   /// it. The picker only offers meals where [Meal.isMine] is true, and the
   /// repository re-checks — the UI is not the place that rule can live alone.
   final Meal? attachedMeal;
+
+  /// The group to post into, or null to post to the feed.
+  ///
+  /// A group post is scoped to that group. The insert policy checks membership
+  /// independently, so a draft aimed at a group the user has left fails at the
+  /// database rather than posting somewhere unexpected.
+  final String? groupId;
+
+  /// The challenge to attach, when the label is `challenge`.
+  ///
+  /// Written as a second row after the post exists, because a challenge needs
+  /// the post's id. Held on the draft so the composer's rules — a challenge
+  /// post needs a title and a goal — are testable arithmetic like the rest.
+  final ChallengeDraft? challenge;
+
+  bool get isGroupPost => groupId != null;
+
+  bool get hasChallenge => challenge != null;
+
+  /// Whether the challenge attached to this post is complete enough to save.
+  ///
+  /// True when there is no challenge: a post with nothing attached has nothing
+  /// to be invalid about.
+  bool get isChallengeValid => challenge?.canSubmit ?? true;
 
   /// How many photos one post may carry.
   ///
@@ -83,7 +110,7 @@ class PostDraft extends Equatable {
   /// other has to explain itself.
   bool get isTooLong => trimmedContent.length > maxContentLength;
 
-  bool get canSubmit => isPostable && !isTooLong;
+  bool get canSubmit => isPostable && !isTooLong && isChallengeValid;
 
   /// How much room is left, for the counter under the field.
   ///
@@ -104,6 +131,10 @@ class PostDraft extends Equatable {
     List<String>? imagePaths,
     Meal? attachedMeal,
     bool clearAttachedMeal = false,
+    String? groupId,
+    bool clearGroup = false,
+    ChallengeDraft? challenge,
+    bool clearChallenge = false,
   }) {
     return PostDraft(
       label: label ?? this.label,
@@ -111,6 +142,8 @@ class PostDraft extends Equatable {
       imagePaths: imagePaths ?? this.imagePaths,
       attachedMeal:
           clearAttachedMeal ? null : (attachedMeal ?? this.attachedMeal),
+      groupId: clearGroup ? null : (groupId ?? this.groupId),
+      challenge: clearChallenge ? null : (challenge ?? this.challenge),
     );
   }
 
@@ -144,9 +177,11 @@ class PostDraft extends Equatable {
       // value in the database instead of two.
       'content': trimmedContent.isEmpty ? null : trimmedContent,
       'attached_meal_id': attachedMeal?.id,
+      'group_id': groupId,
     };
   }
 
   @override
-  List<Object?> get props => [label, content, imagePaths, attachedMeal];
+  List<Object?> get props =>
+      [label, content, imagePaths, attachedMeal, groupId, challenge];
 }

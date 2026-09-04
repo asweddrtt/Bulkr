@@ -13,8 +13,10 @@ import 'cubit/onboarding/onboarding_cubit.dart';
 import 'cubit/profile/profile_cubit.dart';
 import 'data/app_preferences.dart';
 import 'data/auth_repository.dart';
+import 'data/challenge_repository.dart';
 import 'data/follow_repository.dart';
 import 'data/food_repository.dart';
+import 'data/group_repository.dart';
 import 'data/meal_repository.dart';
 import 'data/post_repository.dart';
 import 'data/user_repository.dart';
@@ -54,6 +56,8 @@ class _BulkrAppState extends State<BulkrApp> {
   late final FoodRepository _foodRepository;
   late final MealRepository _mealRepository;
   late final FollowRepository _followRepository;
+  late final GroupRepository _groupRepository;
+  late final ChallengeRepository _challengeRepository;
   late final PostRepository _postRepository;
   late final GoRouter _router;
 
@@ -68,10 +72,17 @@ class _BulkrAppState extends State<BulkrApp> {
     _foodRepository = FoodRepository();
     _mealRepository = MealRepository(foodRepository: _foodRepository);
     _followRepository = FollowRepository();
-    // For You is "posts by people you follow", so the post repository reads the
-    // follow graph through the repository that owns it rather than querying
-    // `follows` itself.
-    _postRepository = PostRepository(followRepository: _followRepository);
+    _groupRepository = GroupRepository();
+    _challengeRepository = ChallengeRepository();
+    // For You is "posts by people you follow, plus posts in your groups", and
+    // a challenge post carries a challenge — so the post repository reads all
+    // three through the repositories that own them rather than querying their
+    // tables itself.
+    _postRepository = PostRepository(
+      followRepository: _followRepository,
+      groupRepository: _groupRepository,
+      challengeRepository: _challengeRepository,
+    );
     // Built once: rebuilding a GoRouter throws away the navigation stack.
     _router = AppRouter.build(
       authRepository: _authRepository,
@@ -98,6 +109,8 @@ class _BulkrAppState extends State<BulkrApp> {
         // it reads both of these off the context rather than being handed them.
         RepositoryProvider.value(value: _postRepository),
         RepositoryProvider.value(value: _followRepository),
+        RepositoryProvider.value(value: _groupRepository),
+        RepositoryProvider.value(value: _challengeRepository),
       ],
       child: MultiBlocProvider(
       // Above the router on purpose — onboarding answers have to survive
@@ -127,6 +140,7 @@ class _BulkrAppState extends State<BulkrApp> {
             // Taking a meal off a post writes to the meal library, so the feed
             // needs the repository that owns it.
             mealRepository: _mealRepository,
+            challengeRepository: _challengeRepository,
           ),
         ),
       ],

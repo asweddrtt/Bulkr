@@ -7,6 +7,7 @@ import '../../data/meal_repository.dart';
 import '../../data/post_repository.dart';
 import '../../models/meal.dart';
 import '../../models/post.dart';
+import '../../models/challenge.dart';
 import '../../models/post_draft.dart';
 import '../../models/post_label.dart';
 
@@ -24,18 +25,56 @@ class PostComposerCubit extends Cubit<PostComposerState> {
     required MealRepository mealRepository,
     PostLabel initialLabel = PostLabel.tip,
     Meal? attachedMeal,
+    String? groupId,
+    String? groupName,
   })  : _posts = postRepository,
         _meals = mealRepository,
         super(PostComposerState(
-          draft: PostDraft(label: initialLabel, attachedMeal: attachedMeal),
+          draft: PostDraft(
+            label: initialLabel,
+            attachedMeal: attachedMeal,
+            groupId: groupId,
+            // A challenge post opens with a blank challenge already attached,
+            // so the fields are there to fill in rather than behind another
+            // tap. Switching away from the label drops it again.
+            challenge: initialLabel == PostLabel.challenge
+                ? const ChallengeDraft()
+                : null,
+          ),
+          groupName: groupName,
         ));
 
   final PostRepository _posts;
   final MealRepository _meals;
 
+  /// Switches the kind of post.
+  ///
+  /// Moving to `challenge` attaches a blank challenge; moving away drops it.
+  /// Keeping it around would mean a tip post silently carrying a challenge
+  /// nobody can see, and the repository would write it.
   void setLabel(PostLabel label) {
     if (state.draft.label == label) return;
-    emit(state.copyWith(draft: state.draft.copyWith(label: label)));
+
+    final bool wantsChallenge = label == PostLabel.challenge;
+
+    emit(state.copyWith(
+      draft: state.draft.copyWith(
+        label: label,
+        challenge: wantsChallenge
+            ? (state.draft.challenge ?? const ChallengeDraft())
+            : null,
+        clearChallenge: !wantsChallenge,
+      ),
+    ));
+  }
+
+  /// Updates the challenge being set up.
+  ///
+  /// A no-op when the label is not `challenge`, so a stale field cannot write
+  /// into a draft that has moved on.
+  void setChallenge(ChallengeDraft challenge) {
+    if (state.draft.label != PostLabel.challenge) return;
+    emit(state.copyWith(draft: state.draft.copyWith(challenge: challenge)));
   }
 
   /// Records what has been typed.
@@ -139,7 +178,10 @@ class PostComposerCubit extends Cubit<PostComposerState> {
           if (state.images[path] != null) state.images[path]!,
       ];
 
-      final Post post = await _posts.createPost(
+      // The challenge-aware path either way: it delegates to `createPost`
+      // when there is no challenge, so there is one call site rather than a
+      // branch that can drift.
+      final Post post = await _posts.createPostWithChallenge(
         draft: state.draft,
         images: images,
       );

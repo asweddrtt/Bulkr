@@ -5,50 +5,44 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../core/post_link.dart';
-import '../cubit/author/author_cubit.dart';
 import '../cubit/feed/feed_cubit.dart';
-import '../data/follow_repository.dart';
+import '../core/post_link.dart';
+import '../cubit/group/group_cubit.dart';
+import '../data/group_repository.dart';
 import '../data/post_repository.dart';
-import '../models/person.dart';
+import '../models/group.dart';
 import '../models/post.dart';
 import '../styles/app_color.dart';
 import '../widgets/animations/press_scale.dart';
-import '../widgets/person_row.dart';
+import '../widgets/group_row.dart';
 import '../widgets/post_actions_sheet.dart';
 import '../widgets/post_card.dart';
 import '../widgets/report_sheet.dart';
+import 'author_profile_screen.dart';
 import 'post_comments_sheet.dart';
+import 'post_composer_screen.dart';
 
-/// One person's profile: who they are, and everything they have posted.
-///
-/// Where the feed's author name finally goes. `PostCard.onOpenAuthor` was a
-/// dangling null until this existed, which meant tapping somebody's name did
-/// nothing — the single most obvious thing to try on a social feed.
-class AuthorProfileScreen extends StatelessWidget {
-  const AuthorProfileScreen({super.key});
+/// One group, and what has been posted in it.
+class GroupScreen extends StatelessWidget {
+  const GroupScreen({super.key});
 
-  /// Opens [personId]'s profile, and refreshes For You on the way out.
-  ///
-  /// The refresh is unconditional: following someone from here changes what the
-  /// feed contains, and coming back to a feed that has not noticed is the exact
-  /// moment the feature looks broken.
-  static Future<void> open(BuildContext context, String personId) async {
-    final FollowRepository follows = context.read<FollowRepository>();
+  /// Opens [groupId], and refreshes For You on the way out.
+  static Future<void> open(BuildContext context, String groupId) async {
+    final GroupRepository groups = context.read<GroupRepository>();
     final PostRepository posts = context.read<PostRepository>();
     final FeedCubit feed = context.read<FeedCubit>();
 
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (_) => BlocProvider(
-          create: (_) => AuthorCubit(
-            followRepository: follows,
+          create: (_) => GroupCubit(
+            groupRepository: groups,
             postRepository: posts,
-            personId: personId,
+            groupId: groupId,
           )..load(),
           child: BlocProvider.value(
             value: feed,
-            child: const AuthorProfileScreen(),
+            child: const GroupScreen(),
           ),
         ),
       ),
@@ -59,7 +53,7 @@ class AuthorProfileScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocListener<AuthorCubit, AuthorState>(
+    return BlocListener<GroupCubit, GroupState>(
       listenWhen: (previous, current) =>
           current.actionErrorKey != null &&
           previous.actionErrorKey != current.actionErrorKey,
@@ -75,10 +69,18 @@ class AuthorProfileScreen extends StatelessWidget {
               ),
             ),
           );
-        context.read<AuthorCubit>().clearNotice();
+        context.read<GroupCubit>().clearNotice();
       },
       child: Scaffold(
         backgroundColor: const Color(0xFF121212),
+        floatingActionButton: BlocBuilder<GroupCubit, GroupState>(
+          buildWhen: (previous, current) => previous.canPost != current.canPost,
+          // Only members get the button, because only members can post — the
+          // insert policy checks the same thing, so a button for a non-member
+          // would be a button that fails.
+          builder: (context, state) =>
+              state.canPost ? const _PostButton() : const SizedBox.shrink(),
+        ),
         body: SafeArea(child: _Body()),
       ),
     );
@@ -114,20 +116,20 @@ class _BodyState extends State<_Body> {
     final ScrollPosition position = _controller.position;
     if (position.pixels < position.maxScrollExtent - _prefetchExtent) return;
 
-    context.read<AuthorCubit>().loadMore();
+    context.read<GroupCubit>().loadMore();
   }
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<AuthorCubit, AuthorState>(
+    return BlocBuilder<GroupCubit, GroupState>(
       builder: (context, state) {
         switch (state.status) {
-          case AuthorStatus.initial:
-          case AuthorStatus.loading:
-            return Column(
+          case GroupStatus.initial:
+          case GroupStatus.loading:
+            return const Column(
               children: [
-                const _BackBar(),
-                const Expanded(
+                _BackBar(),
+                Expanded(
                   child: Center(
                     child:
                         CircularProgressIndicator(color: AppColors.primaryNeon),
@@ -136,68 +138,63 @@ class _BodyState extends State<_Body> {
               ],
             );
 
-          case AuthorStatus.notFound:
+          case GroupStatus.notFound:
             return Column(
               children: [
                 const _BackBar(),
                 Expanded(
                   child: _Message(
-                    icon: Icons.person_off_outlined,
-                    title: 'profile_not_found'.tr(),
-                    body: 'profile_not_found_body'.tr(),
+                    icon: Icons.lock_outline,
+                    title: 'group_not_found'.tr(),
+                    body: 'group_not_found_body'.tr(),
                   ),
                 ),
               ],
             );
 
-          case AuthorStatus.failure:
+          case GroupStatus.failure:
             return Column(
               children: [
                 const _BackBar(),
                 Expanded(
                   child: _Message(
                     icon: Icons.cloud_off_outlined,
-                    title: 'author_load_failed'.tr(),
+                    title: 'group_load_failed'.tr(),
                     body: state.errorMessage,
                     actionLabel: 'retry'.tr(),
-                    onAction: () => context.read<AuthorCubit>().load(),
+                    onAction: () => context.read<GroupCubit>().load(),
                   ),
                 ),
               ],
             );
 
-          case AuthorStatus.ready:
+          case GroupStatus.ready:
             return RefreshIndicator(
               color: AppColors.primaryNeon,
               backgroundColor: const Color(0xFF1A1A1A),
-              onRefresh: () => context.read<AuthorCubit>().refresh(),
+              onRefresh: () => context.read<GroupCubit>().refresh(),
               child: CustomScrollView(
                 controller: _controller,
                 physics: const AlwaysScrollableScrollPhysics(),
                 slivers: [
                   const SliverToBoxAdapter(child: _BackBar()),
-                  SliverToBoxAdapter(
-                    child: _ProfileHeader(state: state),
-                  ),
+                  SliverToBoxAdapter(child: _GroupHeader(state: state)),
                   if (state.hasNoPosts)
                     SliverFillRemaining(
                       hasScrollBody: false,
                       child: _Message(
                         icon: Icons.dynamic_feed_outlined,
-                        title: state.isMe
-                            ? 'profile_no_posts_mine'.tr()
-                            : 'profile_no_posts'.tr(),
-                        body: state.isMe
-                            ? 'profile_no_posts_mine_body'.tr()
-                            : null,
+                        title: 'group_no_posts'.tr(),
+                        body: state.canPost
+                            ? 'group_no_posts_member_body'.tr()
+                            : 'group_no_posts_body'.tr(),
                       ),
                     )
                   else
                     SliverPadding(
-                      padding: EdgeInsets.fromLTRB(20.w, 8.h, 20.w, 30.h),
+                      padding: EdgeInsets.fromLTRB(20.w, 8.h, 20.w, 90.h),
                       sliver: SliverList.builder(
-                        itemCount:
-                            state.posts.length + (state.hasMore ? 1 : 0),
+                        itemCount: state.posts.length + (state.hasMore ? 1 : 0),
                         itemBuilder: (context, index) {
                           if (index >= state.posts.length) {
                             return Padding(
@@ -220,12 +217,22 @@ class _BodyState extends State<_Body> {
                           return PostCard(
                             key: ValueKey(post.id),
                             post: post,
+                            // The group chip is suppressed here: every post on
+                            // this screen is in this group, and repeating that
+                            // on every card is noise.
+                            showsGroup: false,
                             onShowActions: () => _showActions(context, post),
                             onLike: () =>
-                                context.read<AuthorCubit>().toggleLike(post),
+                                context.read<GroupCubit>().toggleLike(post),
                             onSave: () =>
-                                context.read<AuthorCubit>().toggleSave(post),
+                                context.read<GroupCubit>().toggleSave(post),
                             onComment: () => _openComments(context, post),
+                            onOpenAuthor: post.isMine
+                                ? null
+                                : () => AuthorProfileScreen.open(
+                                      context,
+                                      post.authorId,
+                                    ),
                           );
                         },
                       ),
@@ -239,21 +246,15 @@ class _BodyState extends State<_Body> {
   }
 }
 
-/// Opens the thread, and takes the new count back to the card.
 Future<void> _openComments(BuildContext context, Post post) async {
-  final AuthorCubit cubit = context.read<AuthorCubit>();
+  final GroupCubit cubit = context.read<GroupCubit>();
   final int? count = await PostCommentsSheet.show(context, post);
 
   if (count != null) cubit.setCommentCount(post.id, count);
 }
 
-/// The overflow menu, acting on this screen's own copy of the post.
-///
-/// Routed through [AuthorCubit] rather than [FeedCubit] for the same reason
-/// liking is: the feed has never loaded these posts, so its own update would
-/// be a no-op and the card would not change.
 Future<void> _showActions(BuildContext context, Post post) async {
-  final AuthorCubit cubit = context.read<AuthorCubit>();
+  final GroupCubit cubit = context.read<GroupCubit>();
   final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
   final PostAction? action = await PostActionsSheet.show(context, post);
 
@@ -315,27 +316,23 @@ class _BackBar extends StatelessWidget {
   }
 }
 
-class _ProfileHeader extends StatelessWidget {
-  const _ProfileHeader({required this.state});
+class _GroupHeader extends StatelessWidget {
+  const _GroupHeader({required this.state});
 
-  final AuthorState state;
+  final GroupState state;
 
   @override
   Widget build(BuildContext context) {
-    final Person person = state.person!;
+    final Group group = state.group!;
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(20.w, 8.h, 20.w, 16.h),
+      padding: EdgeInsets.fromLTRB(20.w, 8.h, 20.w, 14.h),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              PersonAvatar(
-                url: person.avatarUrl,
-                name: person.name,
-                size: 64.w,
-              ),
+              GroupAvatar(url: group.imageUrl, name: group.name, size: 60.w),
               SizedBox(width: 16.w),
               Expanded(
                 child: Column(
@@ -345,85 +342,66 @@ class _ProfileHeader extends StatelessWidget {
                       children: [
                         Flexible(
                           child: Text(
-                            person.name,
-                            maxLines: 1,
+                            group.name,
+                            maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: GoogleFonts.anton(
                               color: Colors.white,
-                              fontSize: 20.sp,
-                              letterSpacing: 0.6,
+                              fontSize: 19.sp,
+                              letterSpacing: 0.5,
                             ),
                           ),
                         ),
-                        if (person.isTrainer) ...[
+                        if (group.isPrivate) ...[
                           SizedBox(width: 8.w),
-                          const TrainerBadge(),
+                          Icon(
+                            Icons.lock_outline,
+                            color: AppColors.textGray,
+                            size: 14.sp,
+                          ),
                         ],
                       ],
                     ),
-                    if (person.handle != null) ...[
-                      SizedBox(height: 2.h),
-                      Text(
-                        person.handle!,
-                        style: GoogleFonts.inter(
-                          color: AppColors.textGray,
-                          fontSize: 12.sp,
-                        ),
+                    SizedBox(height: 4.h),
+                    Text(
+                      'group_stats'.tr(namedArgs: {
+                        'members': '${group.memberCount}',
+                        'posts': '${group.postCount}',
+                      }),
+                      style: GoogleFonts.inter(
+                        color: AppColors.textGray,
+                        fontSize: 11.sp,
                       ),
-                    ],
-                    // Shown before the follow button is reached, because it
-                    // changes the decision: following back is a different act
-                    // from following.
-                    if (person.followsMe && !person.isMe) ...[
-                      SizedBox(height: 6.h),
-                      Text(
-                        'profile_follows_you'.tr(),
-                        style: GoogleFonts.inter(
-                          color: AppColors.primaryNeon,
-                          fontSize: 10.sp,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
+                    ),
                   ],
                 ),
               ),
             ],
           ),
-          SizedBox(height: 18.h),
-          Row(
-            children: [
-              _Stat(
-                value: person.postCount,
-                labelKey: 'profile_posts_label',
-              ),
-              SizedBox(width: 28.w),
-              _Stat(
-                value: person.followerCount,
-                labelKey: 'profile_followers_label',
-              ),
-              SizedBox(width: 28.w),
-              _Stat(
-                value: person.followingCount,
-                labelKey: 'profile_following_label',
-              ),
-            ],
-          ),
-          if (person.isFollowable) ...[
-            SizedBox(height: 18.h),
-            SizedBox(
-              width: double.infinity,
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: FollowButton(
-                  isFollowing: person.isFollowedByMe,
-                  isBusy: state.isFollowWriting,
-                  onTap: () => context.read<AuthorCubit>().toggleFollow(),
-                ),
+          if (group.description != null &&
+              group.description!.trim().isNotEmpty) ...[
+            SizedBox(height: 14.h),
+            Text(
+              group.description!.trim(),
+              style: GoogleFonts.inter(
+                color: Colors.white,
+                fontSize: 12.sp,
+                height: 1.5,
               ),
             ),
           ],
-          SizedBox(height: 8.h),
+          if (!group.isOwner) ...[
+            SizedBox(height: 16.h),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: GroupJoinButton(
+                isMember: group.isMember,
+                isBusy: state.isMembershipWriting,
+                onTap: () => context.read<GroupCubit>().toggleMembership(),
+              ),
+            ),
+          ],
+          SizedBox(height: 12.h),
           Divider(color: AppColors.darkBorder, height: 1),
         ],
       ),
@@ -431,35 +409,46 @@ class _ProfileHeader extends StatelessWidget {
   }
 }
 
-class _Stat extends StatelessWidget {
-  const _Stat({required this.value, required this.labelKey});
-
-  final int value;
-  final String labelKey;
+class _PostButton extends StatelessWidget {
+  const _PostButton();
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          '$value',
-          style: GoogleFonts.anton(
-            color: Colors.white,
-            fontSize: 17.sp,
+    return PressScale(
+      child: GestureDetector(
+        onTap: () {
+          final GroupCubit cubit = context.read<GroupCubit>();
+          PostComposerScreen.open(
+            context,
+            groupId: cubit.state.groupId,
+            groupName: cubit.state.group?.name,
+            onPosted: cubit.postCreated,
+          );
+        },
+        child: Container(
+          padding: EdgeInsets.symmetric(horizontal: 18.w, vertical: 13.h),
+          decoration: BoxDecoration(
+            color: AppColors.buttonNeon,
+            borderRadius: BorderRadius.circular(8.r),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.add, color: Colors.black, size: 18.sp),
+              SizedBox(width: 8.w),
+              Text(
+                'group_post'.tr().toUpperCase(),
+                style: GoogleFonts.inter(
+                  color: Colors.black,
+                  fontSize: 11.sp,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1,
+                ),
+              ),
+            ],
           ),
         ),
-        SizedBox(height: 2.h),
-        Text(
-          labelKey.tr().toUpperCase(),
-          style: GoogleFonts.inter(
-            color: AppColors.textGray,
-            fontSize: 9.sp,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 0.9,
-          ),
-        ),
-      ],
+      ),
     );
   }
 }

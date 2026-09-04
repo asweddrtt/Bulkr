@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 
+import 'challenge.dart';
 import 'meal.dart';
 import 'post_label.dart';
 
@@ -34,6 +35,9 @@ class Post extends Equatable {
     this.isSaved = false,
     this.isHidden = false,
     this.attachedMealSaved = false,
+    this.groupId,
+    this.groupName,
+    this.challenge,
   });
 
   final String id;
@@ -106,6 +110,29 @@ class Post extends Equatable {
   /// second copy of something the user already took.
   final bool attachedMealSaved;
 
+  /// The group this was posted into, or null for a post to the feed.
+  ///
+  /// A group post appears in that group and in the For You of its members, and
+  /// nowhere else — Discover excludes them. Which group is worth showing on
+  /// the card: reading a post without knowing which room it was written in is
+  /// how a private aside ends up looking like a public statement.
+  final String? groupId;
+
+  /// The group's name, when the post was read with the group joined.
+  final String? groupName;
+
+  /// The challenge this post is running, when it has one.
+  ///
+  /// Not parsed from the post row — `challenges` is its own table and is
+  /// resolved for a whole page at once, the same way likes and saves are. Null
+  /// means "no challenge" on a post read through the feed, and "not asked for"
+  /// anywhere else.
+  final Challenge? challenge;
+
+  bool get isGroupPost => groupId != null;
+
+  bool get hasChallenge => challenge != null;
+
   /// Pulled from the feed, by its author or by reports.
   ///
   /// Only ever true on a post the reader owns — the RLS policy hides everyone
@@ -163,6 +190,7 @@ class Post extends Equatable {
     bool? isSaved,
     bool? isHidden,
     bool? attachedMealSaved,
+    Challenge? challenge,
   }) {
     return Post(
       id: id,
@@ -185,6 +213,9 @@ class Post extends Equatable {
       isSaved: isSaved ?? this.isSaved,
       isHidden: isHidden ?? this.isHidden,
       attachedMealSaved: attachedMealSaved ?? this.attachedMealSaved,
+      groupId: groupId,
+      groupName: groupName,
+      challenge: challenge ?? this.challenge,
     );
   }
 
@@ -222,7 +253,20 @@ class Post extends Equatable {
       isLiked: isLiked,
       isSaved: isSaved,
       isHidden: row['is_hidden'] == true,
+      groupId: row['group_id'] as String?,
+      groupName: _group(row)?['name'] as String?,
     );
+  }
+
+  /// The embedded `groups` row, however PostgREST decided to shape it.
+  static Map<String, dynamic>? _group(Map<String, dynamic> row) {
+    final Object? group = row['groups'];
+    if (group is Map<String, dynamic>) return group;
+    if (group is List && group.isNotEmpty) {
+      final Object? first = group.first;
+      if (first is Map<String, dynamic>) return first;
+    }
+    return null;
   }
 
   /// The embedded `users` row, however PostgREST decided to shape it.
@@ -314,5 +358,8 @@ class Post extends Equatable {
         isSaved,
         isHidden,
         attachedMealSaved,
+        groupId,
+        groupName,
+        challenge,
       ];
 }

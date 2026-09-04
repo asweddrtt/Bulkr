@@ -7,6 +7,7 @@ import '../core/relative_time.dart';
 import '../models/post.dart';
 import '../styles/app_color.dart';
 import 'animations/press_scale.dart';
+import 'challenge_card.dart';
 import 'person_row.dart';
 import 'post_label_chip.dart';
 
@@ -31,6 +32,11 @@ class PostCard extends StatelessWidget {
     this.onSaveMeal,
     this.onLabelTap,
     this.isSavingMeal = false,
+    this.showsGroup = true,
+    this.onOpenGroup,
+    this.onToggleChallenge,
+    this.onOpenLeaderboard,
+    this.isJoiningChallenge = false,
   });
 
   final Post post;
@@ -54,6 +60,26 @@ class PostCard extends StatelessWidget {
   /// Filters the feed to this post's label.
   final VoidCallback? onLabelTap;
 
+  /// Whether to name the group this was posted into.
+  ///
+  /// False inside a group's own screen, where every post is in that group and
+  /// repeating it on every card is noise. True everywhere else, because
+  /// reading a post without knowing which room it was written in is how a
+  /// private aside comes to look like a public statement.
+  final bool showsGroup;
+
+  /// Opens the group. Null when there is nowhere to go.
+  final VoidCallback? onOpenGroup;
+
+  /// Joins the post's challenge, or leaves it.
+  final VoidCallback? onToggleChallenge;
+
+  /// Opens the challenge's standings.
+  final VoidCallback? onOpenLeaderboard;
+
+  /// A challenge join write is in flight.
+  final bool isJoiningChallenge;
+
   static const Color _cardColor = Color(0xFF1A1A1A);
   static const Color _imageColor = Color(0xFF232323);
   static const Color _textMuted = Color(0xFF9CA3AF);
@@ -73,10 +99,18 @@ class PostCard extends StatelessWidget {
         children: [
           _buildHeader(),
           if (post.isHidden) _buildHiddenNotice(),
+          if (showsGroup && post.isGroupPost) _buildGroupChip(),
           if (post.content != null && post.content!.trim().isNotEmpty)
             _buildContent(),
           if (post.hasImages) _PostImages(urls: post.imageUrls),
           if (post.attachedMeal != null) _buildMeal(context),
+          if (post.hasChallenge && onToggleChallenge != null)
+            ChallengeCard(
+              challenge: post.challenge!,
+              onToggleJoin: onToggleChallenge!,
+              onOpenLeaderboard: onOpenLeaderboard,
+              isBusy: isJoiningChallenge,
+            ),
           _buildActions(),
         ],
       ),
@@ -145,6 +179,46 @@ class PostCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Which group this was posted into.
+  ///
+  /// A line rather than a chip in the header row, which is already carrying a
+  /// name, a timestamp, a label and an overflow button.
+  Widget _buildGroupChip() {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(14.w, 0, 14.w, 10.h),
+      child: PressScale(
+        child: GestureDetector(
+          onTap: onOpenGroup,
+          behavior: HitTestBehavior.opaque,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.groups, color: AppColors.textGray, size: 12.sp),
+              SizedBox(width: 6.w),
+              Flexible(
+                child: Text(
+                  'post_in_group'.tr(namedArgs: {
+                    // A group post whose group could not be read still says it
+                    // is in one, without naming it. Silently rendering it as a
+                    // feed post would be the misleading option.
+                    'group': post.groupName ?? 'post_in_group_unknown'.tr(),
+                  }),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    color: AppColors.textGray,
+                    fontSize: 10.sp,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

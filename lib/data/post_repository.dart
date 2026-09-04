@@ -5,9 +5,13 @@ import '../models/meal.dart';
 import '../models/post.dart';
 import '../models/post_comment.dart';
 import '../models/post_draft.dart';
+import '../models/challenge.dart';
 import '../models/post_label.dart';
+import '../models/post_report.dart';
 import 'feed_cursor.dart';
+import 'challenge_repository.dart';
 import 'follow_repository.dart';
+import 'group_repository.dart';
 
 /// A photo waiting to go up with a post.
 ///
@@ -41,16 +45,31 @@ class PostImageUpload {
 /// Both page by keyset rather than OFFSET. See [FeedCursor] for why that is not
 /// a micro-optimisation.
 class PostRepository {
-  PostRepository({SupabaseClient? client, FollowRepository? followRepository})
-      : _client = client ?? Supabase.instance.client,
-        _follows = followRepository ?? FollowRepository(client: client);
+  PostRepository({
+    SupabaseClient? client,
+    FollowRepository? followRepository,
+    GroupRepository? groupRepository,
+    ChallengeRepository? challengeRepository,
+  })  : _client = client ?? Supabase.instance.client,
+        _follows = followRepository ?? FollowRepository(client: client),
+        _groups = groupRepository ?? GroupRepository(client: client),
+        _challenges =
+            challengeRepository ?? ChallengeRepository(client: client);
 
   final SupabaseClient _client;
 
-  /// Who the user follows, which is what For You is made of. Read through the
-  /// repository that owns the follow graph rather than queried here, so there
-  /// is one place that knows how follows are stored.
+  /// Who the user follows, which is half of what For You is made of. Read
+  /// through the repository that owns the follow graph rather than queried
+  /// here, so there is one place that knows how follows are stored.
   final FollowRepository _follows;
+
+  /// Which groups the user is in — the other half.
+  final GroupRepository _groups;
+
+  /// Challenges hanging off `challenge`-labelled posts, resolved a page at a
+  /// time rather than embedded, because `challenges` carries its own
+  /// participant aggregate and its own per-user join state.
+  final ChallengeRepository _challenges;
 
   /// Storage bucket holding post photos. Public-read, because a post has to
   /// render for everyone who can see it.
@@ -92,6 +111,7 @@ class PostRepository {
   static const String _postColumns = '*, '
       'users!posts_user_id_fkey(username, display_name, avatar_url), '
       'post_images(url, position), '
+      'groups!posts_group_id_fkey(id, name), '
       'meals!posts_attached_meal_id_fkey(*, '
       'users!meals_creator_id_fkey(username), '
       'source_author:users!meals_source_creator_id_fkey(username))';
@@ -112,8 +132,15 @@ class PostRepository {
     // render every post as somebody else's.
     final String? userId = _userId;
 
-    PostgrestFilterBuilder<List<Map<String, dynamic>>> query =
-        _client.from('posts').select(_postColumns).eq('is_hidden', false);
+    // `is_null('group_id')` and not just the policy: a post written into a
+    // group belongs to that group, and a public group's posts being readable
+    // is not the same as their belonging on the front page. RLS answers "may
+    // I see this"; the query answers "does it belong in this list".
+    PostgrestFilterBuilder<List<Map<String, dynamic>>> query = _client
+        .from('posts')
+        .select(_postColumns)
+        .eq('is_hidden', false)
+        .isFilter('group_id', null);
 
     if (label != null) {
       query = query.eq('label', label.column);
@@ -147,14 +174,37 @@ class PostRepository {
     final String? userId = _userId;
     if (userId == null) return const FeedPage.empty();
 
-    final List<String> authorIds = await _followedAuthorIds(userId);
-    if (authorIds.isEmpty) return const FeedPage.empty();
+    final results = await Future.wait([
+      _followedAuthorIds(userId),
+      _memberGroupIds(userId),
+    ]);
 
-    PostgrestFilterBuilder<List<Map<String, dynamic>>> query = _client
-        .from('posts')
-        .select(_postColumns)
-        .eq('is_hidden', false)
-        .inFilter('user_id', authorIds);
+    final List<String> authorIds = results[0];
+    final List<String> groupIds = results[1];
+
+    if (authorIds.isEmpty && groupIds.isEmpty) return const FeedPage.empty();
+
+    PostgrestFilterBuilder<List<Map<String, dynamic>>> query =
+        _client.from('posts').select(_postColumns).eq('is_hidden', false);
+
+    // "A feed post by someone I follow, or any post in a group I'm in" — one
+    // OR, because a post qualifies either way and two queries would have to be
+    // merged and re-sorted on the device, which breaks the keyset cursor.
+    //
+    // Note the `group_id.is.null` inside the first half. Without it, a post
+    // that someone you follow wrote into a *public group you are not in* would
+    // match on the author and land in your feed — readable, because the policy
+    // allows a public group's posts, but not yours to read here. A group post
+    // belongs to its group; following its author does not extend an invitation.
+    //
+    // A post in a group you *are* in, by someone you follow, matches both
+    // halves and still appears once: this filters rows, it does not union
+    // result sets.
+    query = query.or([
+      if (authorIds.isNotEmpty)
+        'and(group_id.is.null,user_id.in.(${authorIds.join(',')}))',
+      if (groupIds.isNotEmpty) 'group_id.in.(${groupIds.join(',')})',
+    ].join(','));
 
     if (label != null) {
       query = query.eq('label', label.column);
@@ -202,6 +252,95 @@ class PostRepository {
       debugPrint('Bulkr: could not read follows for For You — $error');
       return [userId];
     }
+  }
+
+  /// Which groups' posts belong in this user's For You.
+  ///
+  /// Empty on failure rather than falling back to anything, because the
+  /// author half of the query already guarantees the user sees their own
+  /// posts — so a failed group read narrows the feed instead of emptying it.
+  Future<List<String>> _memberGroupIds(String userId) async {
+    try {
+      return await _groups.memberGroupIds(userId);
+    } catch (error) {
+      debugPrint('Bulkr: could not read group membership for For You — $error');
+      return const [];
+    }
+  }
+
+  /// One group's posts, newest first.
+  ///
+  /// No `group_id is null` exclusion and no visibility filter — the whole
+  /// point is the posts in this group, and whether the reader may see them is
+  /// the policy's decision. A private group they are not in returns nothing,
+  /// which is correct and indistinguishable from an empty group, which is also
+  /// correct: confirming that a private group has posts is itself a leak.
+  Future<FeedPage> fetchGroupPosts(
+    String groupId, {
+    PostLabel? label,
+    FeedCursor? cursor,
+  }) async {
+    final String? userId = _userId;
+
+    PostgrestFilterBuilder<List<Map<String, dynamic>>> query = _client
+        .from('posts')
+        .select(_postColumns)
+        .eq('group_id', groupId)
+        .eq('is_hidden', false);
+
+    if (label != null) {
+      query = query.eq('label', label.column);
+    }
+
+    if (cursor != null) {
+      query = query.or(_keysetFilter(
+        column: 'created_at',
+        value: '"${cursor.asTimestamp}"',
+        id: cursor.id,
+      ));
+    }
+
+    final List<Map<String, dynamic>> rows = await query
+        .order('created_at', ascending: false)
+        .order('id', ascending: false)
+        .limit(pageSize);
+
+    return await _page(rows,
+        userId: userId, cursorBuilder: FeedCursor.byRecency);
+  }
+
+  /// Flags a post for review.
+  ///
+  /// One report per person per post — the primary key sees to that, and the
+  /// upsert turns a second attempt into a no-op rather than an error the user
+  /// has to read. The policy refuses reporting your own post.
+  ///
+  /// What happens next is the database's decision, not this method's: a
+  /// trigger recounts the reports and hides the post once enough distinct
+  /// accounts have flagged it. There is no admin panel, so the threshold is
+  /// the moderator.
+  Future<void> reportPost({
+    required String postId,
+    required PostReportReason reason,
+    String? note,
+  }) async {
+    final String? userId = _userId;
+    if (userId == null) {
+      throw StateError('Cannot report a post without a signed-in user');
+    }
+
+    final String? trimmed = note?.trim();
+
+    await _client.from('post_reports').upsert(
+          {
+            'post_id': postId,
+            'reporter_id': userId,
+            'reason': reason.column,
+            'note': (trimmed == null || trimmed.isEmpty) ? null : trimmed,
+          },
+          onConflict: 'post_id,reporter_id',
+          ignoreDuplicates: true,
+        );
   }
 
   /// One person's posts, newest first.
@@ -334,6 +473,36 @@ class PostRepository {
     // The insert above is not reflected in the row already read back, so the
     // URLs are carried over by hand rather than by a second round trip.
     return post.copyWith(imageUrls: urls);
+  }
+
+  /// Writes a post, and the challenge it is announcing.
+  ///
+  /// Two steps, because a challenge needs the post's id. The challenge is
+  /// allowed to fail without taking the post with it — the same rule the
+  /// images follow, and for the same reason: a written announcement is worth
+  /// keeping even when the machinery behind it did not attach.
+  ///
+  /// The returned post carries the challenge only when it was stored, which is
+  /// how the caller can tell a whole save from a partial one.
+  Future<Post> createPostWithChallenge({
+    required PostDraft draft,
+    List<PostImageUpload> images = const [],
+  }) async {
+    final Post post = await createPost(draft: draft, images: images);
+
+    final ChallengeDraft? challenge = draft.challenge;
+    if (challenge == null) return post;
+
+    try {
+      final Challenge created = await _challenges.createForPost(
+        postId: post.id,
+        draft: challenge,
+      );
+      return post.copyWith(challenge: created);
+    } catch (error) {
+      debugPrint('Bulkr: post saved but its challenge failed — $error');
+      return post;
+    }
   }
 
   /// Removes a post the user wrote.
@@ -563,7 +732,8 @@ class PostRepository {
 
     if (posts.isEmpty) return const FeedPage.empty();
 
-    final List<Post> marked = await _withMyEngagement(posts, userId: userId);
+    List<Post> marked = await _withMyEngagement(posts, userId: userId);
+    marked = await _withChallenges(marked);
 
     return FeedPage(
       posts: marked,
@@ -649,6 +819,35 @@ class PostRepository {
           .toList(growable: false);
     } catch (error) {
       debugPrint('Bulkr: could not resolve this user\'s engagement — $error');
+      return posts;
+    }
+  }
+
+  /// Attaches each `challenge`-labelled post's challenge.
+  ///
+  /// Only those posts are asked about, so a page with no challenges on it
+  /// costs nothing. Non-fatal, like the engagement lookup: a challenge card
+  /// that renders as a plain post is wrong in a way the next refresh fixes.
+  Future<List<Post>> _withChallenges(List<Post> posts) async {
+    final List<String> ids = [
+      for (final Post post in posts)
+        if (post.label == PostLabel.challenge) post.id,
+    ];
+
+    if (ids.isEmpty) return posts;
+
+    try {
+      final Map<String, Challenge> byPost =
+          await _challenges.fetchForPosts(ids);
+      if (byPost.isEmpty) return posts;
+
+      return posts
+          .map((post) => byPost.containsKey(post.id)
+              ? post.copyWith(challenge: byPost[post.id])
+              : post)
+          .toList(growable: false);
+    } catch (error) {
+      debugPrint('Bulkr: could not resolve challenges — $error');
       return posts;
     }
   }

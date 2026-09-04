@@ -13,6 +13,7 @@ class PostComposerState extends Equatable {
     this.errorDetail,
     this.mealsStatus = ComposerMealsStatus.initial,
     this.attachableMeals = const [],
+    this.groupName,
   });
 
   /// The post being written. A plain value object — every rule about when it
@@ -43,6 +44,15 @@ class PostComposerState extends Equatable {
   /// Meals the user could attach: their own, and only their own.
   final List<Meal> attachableMeals;
 
+  /// The name of the group being posted into, when there is one.
+  ///
+  /// Carried on the state rather than looked up, because the composer is
+  /// opened *from* the group and already knows it — and a header that says
+  /// "posting to …" needs the name, not the id.
+  final String? groupName;
+
+  bool get isGroupPost => draft.isGroupPost;
+
   bool get canSubmit => draft.canSubmit && !isSubmitting;
 
   bool get isDone => created != null;
@@ -62,6 +72,7 @@ class PostComposerState extends Equatable {
     bool clearError = false,
     ComposerMealsStatus? mealsStatus,
     List<Meal>? attachableMeals,
+    String? groupName,
   }) {
     return PostComposerState(
       draft: draft ?? this.draft,
@@ -71,6 +82,7 @@ class PostComposerState extends Equatable {
       errorDetail: clearError ? null : (errorDetail ?? this.errorDetail),
       mealsStatus: mealsStatus ?? this.mealsStatus,
       attachableMeals: attachableMeals ?? this.attachableMeals,
+      groupName: groupName ?? this.groupName,
     );
   }
 
@@ -86,5 +98,6 @@ class PostComposerState extends Equatable {
         errorDetail,
         mealsStatus,
         attachableMeals,
+        groupName,
       ];
 }
