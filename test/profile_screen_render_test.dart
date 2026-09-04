@@ -5,7 +5,7 @@ import 'package:bulkr/models/gender.dart';
 import 'package:bulkr/models/unit_system.dart';
 import 'package:bulkr/models/user_profile.dart';
 import 'package:bulkr/models/weight_entry.dart';
-import 'package:bulkr/screens/profile_screen.dart';
+import 'package:bulkr/screens/dashboard_screen.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';

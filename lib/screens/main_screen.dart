@@ -12,7 +12,7 @@ import '../widgets/animations/motion.dart';
 import '../widgets/animations/press_scale.dart';
 import 'feed_screen.dart';
 import 'meals_screen.dart';
-import 'profile_screen.dart';
+import 'dashboard_screen.dart';
 
 const Color _textMuted = Color(0xFF9CA3AF);
 
@@ -25,13 +25,15 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> {
-  int _currentIndex = 0;
+  int _currentIndex = 2;
 
   static const List<_NavDestination> _destinations = [
-    _NavDestination(Icons.dynamic_feed_sharp, 'Feed'),
+    _NavDestination(Icons.dashboard_sharp, 'Dashboard'),
     _NavDestination(Icons.restaurant_sharp, 'Meals'),
+    _NavDestination(Icons.dynamic_feed_sharp, 'Feed'),
     _NavDestination(Icons.electric_bolt_sharp, 'Tracker'),
     _NavDestination(Icons.person_sharp, 'profile'),
+
   ];
 
   @override
@@ -50,15 +52,14 @@ class _MainScreenState extends State<MainScreen> {
       backgroundColor: const Color(0xFF121212),
       body: SafeArea(
         bottom: false,
-        // IndexedStack keeps every tab alive, so scroll position and the
-        // profile's loaded data survive switching away and back.
         child: IndexedStack(
           index: _currentIndex,
           children: const [
-            FeedScreen(),
+            DashboardScreen(),
             MealsScreen(),
-            _ComingSoon(labelKey: 'progress'),
-            ProfileScreen(),
+            FeedScreen(),
+            _ComingSoon(labelKey: 'Tracker'),
+            _ComingSoon(labelKey: 'Profile'),
           ],
         ),
       ),
@@ -107,7 +108,7 @@ class _MainScreenState extends State<MainScreen> {
               Icon(
                 destination.icon,
                 color: isSelected ? Colors.black : _textMuted,
-                size: 22.sp,
+                size: 22.sp ,
               ),
               SizedBox(height: 4.h),
               Text(

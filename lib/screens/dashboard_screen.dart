@@ -29,8 +29,8 @@ import '../widgets/wheel_picker_sheet.dart';
 /// Split into a connected shell and a presentational view: the view takes a
 /// [UserProfile] and knows nothing about where it came from, which keeps it
 /// trivial to render for a test or a preview.
-class ProfileScreen extends StatelessWidget {
-  const ProfileScreen({super.key});
+class DashboardScreen extends StatelessWidget {
+  const DashboardScreen({super.key});
 
   // Theme constants, kept as aliases of the shared palette so this screen
   // can't drift away from the rest of the app.
@@ -229,8 +229,8 @@ class _ProfileView extends StatelessWidget {
         Expanded(
           child: RefreshIndicator(
             onRefresh: onRefresh,
-            color: ProfileScreen.accentColor,
-            backgroundColor: ProfileScreen.cardColor,
+            color: DashboardScreen.accentColor,
+            backgroundColor: DashboardScreen.cardColor,
             child: ListView(
               padding: EdgeInsets.all(16.w),
               children: staggered([
@@ -261,7 +261,7 @@ class _ProfileView extends StatelessWidget {
       padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
       decoration: const BoxDecoration(
         color: Color(0xFF0A0A0A),
-        border: Border(bottom: BorderSide(color: ProfileScreen.borderColor)),
+        border: Border(bottom: BorderSide(color: DashboardScreen.borderColor)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -273,17 +273,17 @@ class _ProfileView extends StatelessWidget {
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     border:
-                        Border.all(color: ProfileScreen.accentColor, width: 2.w),
+                        Border.all(color: DashboardScreen.accentColor, width: 2.w),
                   ),
                   child: CircleAvatar(
                     radius: 18.r,
-                    backgroundColor: ProfileScreen.borderColor,
+                    backgroundColor: DashboardScreen.borderColor,
                     backgroundImage: profile.avatarUrl == null
                         ? null
                         : NetworkImage(profile.avatarUrl!),
                     child: profile.avatarUrl == null
                         ? Icon(Icons.person,
-                            color: ProfileScreen.textMuted, size: 20.sp)
+                            color: DashboardScreen.textMuted, size: 20.sp)
                         : null,
                   ),
                 ),
@@ -310,7 +310,7 @@ class _ProfileView extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.inter(
-                          color: ProfileScreen.textMuted,
+                          color: DashboardScreen.textMuted,
                           fontSize: 11.sp,
                         ),
                       ),
@@ -327,7 +327,7 @@ class _ProfileView extends StatelessWidget {
               child: Padding(
                 padding: EdgeInsets.all(4.w),
                 child: Icon(Icons.settings_outlined,
-                    color: ProfileScreen.textMuted, size: 24.sp),
+                    color: DashboardScreen.textMuted, size: 24.sp),
               ),
             ),
           ),
@@ -340,13 +340,13 @@ class _ProfileView extends StatelessWidget {
     return Container(
       padding: EdgeInsets.all(2.w),
       decoration: BoxDecoration(
-        color: ProfileScreen.bgColor,
-        border: Border.all(color: ProfileScreen.borderColor, width: 1.5.w),
+        color: DashboardScreen.bgColor,
+        border: Border.all(color: DashboardScreen.borderColor, width: 1.5.w),
         borderRadius: BorderRadius.circular(10.r),
       ),
       child: Container(
         decoration: BoxDecoration(
-          color: fill ?? ProfileScreen.cardColor,
+          color: fill ?? DashboardScreen.cardColor,
           borderRadius: BorderRadius.circular(8.r),
         ),
         child: child,
@@ -387,7 +387,7 @@ class _ProfileView extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.inter(
-                      color: ProfileScreen.accentColor,
+                      color: DashboardScreen.accentColor,
                       fontSize: 10.sp,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 1.0,
@@ -463,7 +463,7 @@ class _ProfileView extends StatelessWidget {
             Text(
               reached ? 'target_reached'.tr() : 'progress_to_target'.tr(),
               style: GoogleFonts.inter(
-                color: ProfileScreen.textMuted,
+                color: DashboardScreen.textMuted,
                 fontSize: 10.sp,
                 fontWeight: FontWeight.bold,
                 letterSpacing: 1.2,
@@ -484,11 +484,11 @@ class _ProfileView extends StatelessWidget {
           borderRadius: BorderRadius.circular(3.r),
           child: Container(
             height: 6.h,
-            color: ProfileScreen.borderColor,
+            color: DashboardScreen.borderColor,
             child: FractionallySizedBox(
               alignment: Alignment.centerLeft,
               widthFactor: fraction ?? 0,
-              child: Container(color: ProfileScreen.accentColor),
+              child: Container(color: DashboardScreen.accentColor),
             ),
           ),
         ),
@@ -565,7 +565,7 @@ class _ProfileView extends StatelessWidget {
         Text(
           label.toUpperCase(),
           style: GoogleFonts.inter(
-            color: ProfileScreen.textMuted,
+            color: DashboardScreen.textMuted,
             fontSize: 9.sp,
             fontWeight: FontWeight.bold,
             letterSpacing: 1.2,
@@ -584,7 +584,7 @@ class _ProfileView extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: GoogleFonts.anton(
-                  color: value == null ? ProfileScreen.textMuted : Colors.white,
+                  color: value == null ? DashboardScreen.textMuted : Colors.white,
                   fontSize: 18.sp,
                   letterSpacing: 0.5,
                 ),
@@ -598,7 +598,7 @@ class _ProfileView extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.inter(
-                    color: ProfileScreen.textMuted,
+                    color: DashboardScreen.textMuted,
                     fontSize: 10.sp,
                     fontWeight: FontWeight.bold,
                   ),
@@ -666,7 +666,7 @@ class _ProfileView extends StatelessWidget {
           signed: true,
           accent: plan.isStale
               ? const Color(0xFFFF5722)
-              : ProfileScreen.accentColor,
+              : DashboardScreen.accentColor,
         ),
         if (plan.isStale) ...[
           SizedBox(height: 12.h),
@@ -706,7 +706,7 @@ class _ProfileView extends StatelessWidget {
         Text(
           label.toUpperCase(),
           style: GoogleFonts.inter(
-            color: ProfileScreen.textMuted,
+            color: DashboardScreen.textMuted,
             fontSize: 10.sp,
             fontWeight: FontWeight.bold,
             letterSpacing: 1.2,
@@ -714,7 +714,7 @@ class _ProfileView extends StatelessWidget {
         ),
         SizedBox(width: 8.w),
         Expanded(
-          child: Container(height: 1.h, color: ProfileScreen.borderColor),
+          child: Container(height: 1.h, color: DashboardScreen.borderColor),
         ),
         SizedBox(width: 8.w),
         Text(
@@ -791,9 +791,9 @@ class _ProfileView extends StatelessWidget {
                     onPicked: onLogWeight,
                   ),
           style: ElevatedButton.styleFrom(
-            backgroundColor: ProfileScreen.accentColor,
+            backgroundColor: DashboardScreen.accentColor,
             foregroundColor: Colors.black,
-            disabledBackgroundColor: ProfileScreen.borderColor,
+            disabledBackgroundColor: DashboardScreen.borderColor,
             elevation: 0,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(4.r),
@@ -860,7 +860,7 @@ class _ProfileView extends StatelessWidget {
   static String _chartDate(DateTime date) => DateFormat.MMMd().format(date);
 
   static TextStyle get _chartLabelStyle => GoogleFonts.inter(
-        color: ProfileScreen.textMuted,
+        color: DashboardScreen.textMuted,
         fontSize: 10.sp,
         fontWeight: FontWeight.bold,
         letterSpacing: 1.2,
@@ -982,7 +982,7 @@ class _ProfileView extends StatelessWidget {
                 child: Text(
                   label,
                   style: GoogleFonts.inter(
-                    color: ProfileScreen.textMuted,
+                    color: DashboardScreen.textMuted,
                     fontSize: 10.sp,
                     fontWeight: FontWeight.bold,
                     letterSpacing: 1.5,
@@ -992,7 +992,7 @@ class _ProfileView extends StatelessWidget {
               ),
               if (isEditable)
                 Icon(Icons.edit,
-                    color: ProfileScreen.textMuted, size: 14.sp),
+                    color: DashboardScreen.textMuted, size: 14.sp),
             ],
           ),
           SizedBox(height: 12.h),
@@ -1015,7 +1015,7 @@ class _ProfileView extends StatelessWidget {
               Text(
                 _unitLabel,
                 style: GoogleFonts.inter(
-                  color: ProfileScreen.textMuted,
+                  color: DashboardScreen.textMuted,
                   fontSize: 12.sp,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 1.0,
@@ -1030,7 +1030,7 @@ class _ProfileView extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: GoogleFonts.inter(
-                color: ProfileScreen.textMuted,
+                color: DashboardScreen.textMuted,
                 fontSize: 9.sp,
                 letterSpacing: 0.5,
               ),
@@ -1051,7 +1051,7 @@ class _ProfileView extends StatelessWidget {
             Text(
               'nutrition_plan'.tr(),
               style: GoogleFonts.inter(
-                color: ProfileScreen.textMuted,
+                color: DashboardScreen.textMuted,
                 fontSize: 10.sp,
                 fontWeight: FontWeight.bold,
                 letterSpacing: 1.5,
@@ -1093,7 +1093,7 @@ class _ProfileView extends StatelessWidget {
                   onPressed: isSaving ? null : () => onRecalculate(),
                   style: OutlinedButton.styleFrom(
                     side: BorderSide(
-                        color: ProfileScreen.accentColor, width: 2.w),
+                        color: DashboardScreen.accentColor, width: 2.w),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(4.r),
                     ),
@@ -1101,7 +1101,7 @@ class _ProfileView extends StatelessWidget {
                   child: Text(
                     'recalculate'.tr(),
                     style: GoogleFonts.inter(
-                      color: ProfileScreen.accentColor,
+                      color: DashboardScreen.accentColor,
                       fontSize: 14.sp,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 1.5,
@@ -1121,7 +1121,7 @@ class _ProfileView extends StatelessWidget {
   /// macro targets are the ones actually stored on the user's row.
   Widget _buildMacroTargets() {
     return _buildBorderedCard(
-      fill: ProfileScreen.bgColor,
+      fill: DashboardScreen.bgColor,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1233,7 +1233,7 @@ class _ProfileView extends StatelessWidget {
 
   Widget _buildMacroRow(String label, int grams, Color accent) {
     return Container(
-      color: ProfileScreen.cardColor,
+      color: DashboardScreen.cardColor,
       padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 16.h),
       child: Row(
         children: [
@@ -1284,14 +1284,14 @@ class _ProfileMessage extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 40.sp, color: ProfileScreen.textMuted),
+            Icon(icon, size: 40.sp, color: DashboardScreen.textMuted),
             SizedBox(height: 16.h),
             Text(
               message,
               textAlign: TextAlign.center,
               style: GoogleFonts.inter(
                 fontSize: 13.sp,
-                color: ProfileScreen.textMuted,
+                color: DashboardScreen.textMuted,
                 height: 1.5,
               ),
             ),
@@ -1300,7 +1300,7 @@ class _ProfileMessage extends StatelessWidget {
               child: OutlinedButton(
                 onPressed: onAction,
                 style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: ProfileScreen.accentColor),
+                  side: const BorderSide(color: DashboardScreen.accentColor),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(4.r),
                   ),
@@ -1308,7 +1308,7 @@ class _ProfileMessage extends StatelessWidget {
                 child: Text(
                   actionLabel.toUpperCase(),
                   style: GoogleFonts.inter(
-                    color: ProfileScreen.accentColor,
+                    color: DashboardScreen.accentColor,
                     fontSize: 12.sp,
                     fontWeight: FontWeight.bold,
                     letterSpacing: 1.5,
