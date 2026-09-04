@@ -4,11 +4,13 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../cubit/feed/feed_cubit.dart';
 import '../cubit/meals/meals_cubit.dart';
 import '../cubit/profile/profile_cubit.dart';
 import '../styles/app_color.dart';
 import '../widgets/animations/motion.dart';
 import '../widgets/animations/press_scale.dart';
+import 'feed_screen.dart';
 import 'meals_screen.dart';
 import 'profile_screen.dart';
 
@@ -39,6 +41,7 @@ class _MainScreenState extends State<MainScreen> {
     // moving between tabs doesn't re-hit the network.
     context.read<ProfileCubit>().load();
     context.read<MealsCubit>().load();
+    context.read<FeedCubit>().load();
   }
 
   @override
@@ -52,7 +55,7 @@ class _MainScreenState extends State<MainScreen> {
         child: IndexedStack(
           index: _currentIndex,
           children: const [
-            _ComingSoon(labelKey: 'dashboard'),
+            FeedScreen(),
             MealsScreen(),
             _ComingSoon(labelKey: 'progress'),
             ProfileScreen(),

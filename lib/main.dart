@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/config/supabase_config.dart';
 import 'cubit/auth/auth_cubit.dart';
+import 'cubit/feed/feed_cubit.dart';
 import 'cubit/meals/meals_cubit.dart';
 import 'cubit/onboarding/onboarding_cubit.dart';
 import 'cubit/profile/profile_cubit.dart';
@@ -14,6 +15,7 @@ import 'data/app_preferences.dart';
 import 'data/auth_repository.dart';
 import 'data/food_repository.dart';
 import 'data/meal_repository.dart';
+import 'data/post_repository.dart';
 import 'data/user_repository.dart';
 import 'go_router/router_config.dart';
 import 'styles/app_color.dart';
@@ -50,6 +52,7 @@ class _BulkrAppState extends State<BulkrApp> {
   late final UserRepository _userRepository;
   late final FoodRepository _foodRepository;
   late final MealRepository _mealRepository;
+  late final PostRepository _postRepository;
   late final GoRouter _router;
 
   @override
@@ -62,6 +65,7 @@ class _BulkrAppState extends State<BulkrApp> {
     // kept alive across searches rather than reopened per query.
     _foodRepository = FoodRepository();
     _mealRepository = MealRepository(foodRepository: _foodRepository);
+    _postRepository = PostRepository();
     // Built once: rebuilding a GoRouter throws away the navigation stack.
     _router = AppRouter.build(
       authRepository: _authRepository,
@@ -84,6 +88,9 @@ class _BulkrAppState extends State<BulkrApp> {
       providers: [
         RepositoryProvider.value(value: _mealRepository),
         RepositoryProvider.value(value: _foodRepository),
+        // The composer is pushed above the shell and builds its own cubit, so
+        // it reads both of these off the context rather than being handed them.
+        RepositoryProvider.value(value: _postRepository),
       ],
       child: MultiBlocProvider(
       // Above the router on purpose — onboarding answers have to survive
@@ -106,6 +113,9 @@ class _BulkrAppState extends State<BulkrApp> {
         ),
         BlocProvider(
           create: (_) => MealsCubit(mealRepository: _mealRepository),
+        ),
+        BlocProvider(
+          create: (_) => FeedCubit(postRepository: _postRepository),
         ),
       ],
       child: ScreenUtilInit(
