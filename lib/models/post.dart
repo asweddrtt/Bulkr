@@ -7,13 +7,12 @@ import 'post_label.dart';
 ///
 /// Same shape of object as [Meal], and for the same reason: the flags a feed
 /// card needs — did I like this, did I save it, is it mine — do not live on the
-/// post row. They come from `post_likes` and `post_saves`, and the repository
-/// resolves them once so a card never has to join anything in its head.
+/// post row. They come from `post_likes`, `post_saves` and the reader's own
+/// meal library, and the repository resolves them for a whole page at once so
+/// a card never has to join anything in its head.
 ///
-/// Those two tables are a later slice, so [isLiked] and [isSaved] are false for
-/// now. The field is here rather than added later because the card is built
-/// around it: the button has an on state from the first commit, it just has
-/// nothing turning it on yet.
+/// Saving a *post* is a bookmark, and is not the same act as taking the recipe
+/// off it — [attachedMealSaved] is that one.
 class Post extends Equatable {
   const Post({
     required this.id,
@@ -34,6 +33,7 @@ class Post extends Equatable {
     this.isLiked = false,
     this.isSaved = false,
     this.isHidden = false,
+    this.attachedMealSaved = false,
   });
 
   final String id;
@@ -93,8 +93,18 @@ class Post extends Equatable {
   /// report, since reporting your own post is not a thing anyone wants to do.
   final bool isMine;
 
+  /// This user has liked the post.
   final bool isLiked;
+
+  /// This user has bookmarked the post — a reading list, not a recipe.
   final bool isSaved;
+
+  /// This user already has a copy of [attachedMeal] in their library.
+  ///
+  /// Read from `meals.source_meal_id` rather than remembered in the UI, so the
+  /// button still says "saved" after a restart instead of offering to make a
+  /// second copy of something the user already took.
+  final bool attachedMealSaved;
 
   /// Pulled from the feed, by its author or by reports.
   ///
@@ -122,9 +132,17 @@ class Post extends Equatable {
 
   /// Whether the reader can put this post's meal in their own library.
   ///
-  /// Their own meal is already there, which is why this is not just
-  /// "attachedMeal != null".
-  bool get canSaveMeal => attachedMeal != null && !attachedMeal!.isMine;
+  /// Their own meal is already there, and a meal they have already copied is
+  /// too — which is why this is not just "attachedMeal != null".
+  bool get canSaveMeal =>
+      attachedMeal != null && !attachedMeal!.isMine && !attachedMealSaved;
+
+  /// Whether to show the attachment's saved state at all.
+  ///
+  /// The author of the meal gets neither a button nor a tick: it is their
+  /// recipe, and telling them they have it is noise.
+  bool get showsMealSavedState =>
+      attachedMeal != null && !attachedMeal!.isMine && attachedMealSaved;
 
   /// Total engagement, for the "N reactions" line and nothing else. Not the
   /// ranking — that is [hotScore], and it weights these three differently and
@@ -144,6 +162,7 @@ class Post extends Equatable {
     bool? isLiked,
     bool? isSaved,
     bool? isHidden,
+    bool? attachedMealSaved,
   }) {
     return Post(
       id: id,
@@ -165,6 +184,7 @@ class Post extends Equatable {
       isLiked: isLiked ?? this.isLiked,
       isSaved: isSaved ?? this.isSaved,
       isHidden: isHidden ?? this.isHidden,
+      attachedMealSaved: attachedMealSaved ?? this.attachedMealSaved,
     );
   }
 
@@ -293,5 +313,6 @@ class Post extends Equatable {
         isLiked,
         isSaved,
         isHidden,
+        attachedMealSaved,
       ];
 }

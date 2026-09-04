@@ -5,6 +5,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../cubit/feed/feed_cubit.dart';
+import '../cubit/meals/meals_cubit.dart';
 import '../models/post.dart';
 import '../styles/app_color.dart';
 import '../widgets/animations/motion.dart';
@@ -12,6 +13,7 @@ import '../widgets/animations/press_scale.dart';
 import '../widgets/post_actions_sheet.dart';
 import '../widgets/post_card.dart';
 import '../widgets/post_label_chip.dart';
+import 'post_comments_sheet.dart';
 import 'post_composer_screen.dart';
 
 /// The feed.
@@ -25,11 +27,28 @@ class FeedScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocListener<FeedCubit, FeedState>(
-      listenWhen: (previous, current) =>
-          current.actionErrorKey != null &&
-          previous.actionErrorKey != current.actionErrorKey,
-      listener: (context, state) => _showError(context, state),
+    return MultiBlocListener(
+      listeners: [
+        BlocListener<FeedCubit, FeedState>(
+          listenWhen: (previous, current) =>
+              current.actionErrorKey != null &&
+              previous.actionErrorKey != current.actionErrorKey,
+          listener: (context, state) => _showNotice(
+            context,
+            state.actionErrorDetail ?? state.actionErrorKey!.tr(),
+          ),
+        ),
+        // Kept separate from the failure listener rather than folded in behind
+        // a flag: confusing the two means telling someone a failure went
+        // through.
+        BlocListener<FeedCubit, FeedState>(
+          listenWhen: (previous, current) =>
+              current.actionMessageKey != null &&
+              previous.actionMessageKey != current.actionMessageKey,
+          listener: (context, state) =>
+              _showNotice(context, state.actionMessageKey!.tr()),
+        ),
+      ],
       child: Scaffold(
         // Transparent so the shell's background shows through: this screen
         // lives inside MainScreen's IndexedStack, and its own Scaffold exists
@@ -60,19 +79,19 @@ class FeedScreen extends StatelessWidget {
     );
   }
 
-  static void _showError(BuildContext context, FeedState state) {
+  static void _showNotice(BuildContext context, String message) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
           backgroundColor: const Color(0xFF2A2A2A),
           content: Text(
-            state.actionErrorDetail ?? state.actionErrorKey!.tr(),
+            message,
             style: GoogleFonts.inter(color: Colors.white, fontSize: 12.sp),
           ),
         ),
       );
-    context.read<FeedCubit>().clearActionError();
+    context.read<FeedCubit>().clearNotice();
   }
 }
 
@@ -271,7 +290,7 @@ class _FeedListState extends State<_FeedList> {
               onRefresh: () => context.read<FeedCubit>().refresh(),
               child: slice.posts.isEmpty
                   ? _buildEmpty(context, state)
-                  : _buildList(context, slice),
+                  : _buildList(context, slice, busyPostId: state.busyPostId),
             );
         }
       },
@@ -326,7 +345,11 @@ class _FeedListState extends State<_FeedList> {
     );
   }
 
-  Widget _buildList(BuildContext context, FeedSlice slice) {
+  Widget _buildList(
+    BuildContext context,
+    FeedSlice slice, {
+    String? busyPostId,
+  }) {
     return ListView.builder(
       controller: _controller,
       physics: const AlwaysScrollableScrollPhysics(),
@@ -337,6 +360,7 @@ class _FeedListState extends State<_FeedList> {
         if (index >= slice.posts.length) return _buildTail(slice);
 
         final Post post = slice.posts[index];
+        final bool isSavingMeal = busyPostId == post.id;
 
         return PostCard(
           // Keyed by post id, not by index. Without it, deleting a post makes
@@ -347,9 +371,11 @@ class _FeedListState extends State<_FeedList> {
           post: post,
           onShowActions: () => _showActions(context, post),
           onLabelTap: () => context.read<FeedCubit>().selectLabel(post.label),
-          // Like, comment and save are deliberately not passed: the tables
-          // behind them are the next slice, and PostCard renders a null
-          // callback as a dimmed, inert button rather than pretending.
+          onLike: () => context.read<FeedCubit>().toggleLike(post),
+          onSave: () => context.read<FeedCubit>().toggleSave(post),
+          onComment: () => _openComments(context, post),
+          onSaveMeal: post.canSaveMeal ? () => _saveMeal(context, post) : null,
+          isSavingMeal: isSavingMeal,
         );
       },
     );
@@ -371,6 +397,29 @@ class _FeedListState extends State<_FeedList> {
     );
   }
 
+  /// Opens the thread, and takes the new comment count back to the card.
+  ///
+  /// The sheet resolves to the count as it closes rather than the feed
+  /// refetching the post: the sheet already knows the number, and a round trip
+  /// to learn something you were just told is a round trip too many.
+  Future<void> _openComments(BuildContext context, Post post) async {
+    final FeedCubit cubit = context.read<FeedCubit>();
+    final int? count = await PostCommentsSheet.show(context, post);
+
+    if (count != null) cubit.setCommentCount(post.id, count);
+  }
+
+  /// Copies the post's meal into the reader's library, and refreshes the Meals
+  /// tab so it is there when they look.
+  Future<void> _saveMeal(BuildContext context, Post post) async {
+    final MealsCubit meals = context.read<MealsCubit>();
+
+    await context.read<FeedCubit>().saveMeal(
+          post,
+          onSaved: (_) => meals.refresh(),
+        );
+  }
+
   Future<void> _showActions(BuildContext context, Post post) async {
     final FeedCubit cubit = context.read<FeedCubit>();
     final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
@@ -383,12 +432,15 @@ class _FeedListState extends State<_FeedList> {
         await cubit.deletePost(post);
 
       case PostAction.hide:
+        await cubit.setHidden(post, isHidden: true);
+
       case PostAction.unhide:
+        await cubit.setHidden(post, isHidden: false);
+
       case PostAction.report:
-        // Hiding and reporting both write to columns this slice added but
-        // nothing yet maintains — `is_hidden` has no UI path in and
-        // `report_count` has no reports table behind it. Said plainly rather
-        // than shown as a success that changed nothing.
+        // `report_count` exists as a column but has no reports table behind it
+        // yet, so there is nowhere for a report to go. Said plainly rather than
+        // shown as a success that recorded nothing.
         messenger
           ..hideCurrentSnackBar()
           ..showSnackBar(

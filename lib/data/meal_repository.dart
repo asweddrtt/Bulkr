@@ -36,8 +36,12 @@ class MealRepository {
   ///
   /// `daily_logs` is a second such path, so this does not get less ambiguous
   /// over time.
-  static const String _mealColumns =
-      '*, users!meals_creator_id_fkey(username)';
+  static const String _mealColumns = '*, '
+      'users!meals_creator_id_fkey(username), '
+      // Aliased, because `meals` points at `users` twice — `creator_id` and
+      // `source_creator_id`. Two unaliased embeds of the same table would both
+      // land under the key `users` and one would win.
+      'source_author:users!meals_source_creator_id_fkey(username)';
 
   /// How many meals a library page holds. Well beyond what anyone curates by
   /// hand, and it keeps a runaway account from pulling thousands of rows.
@@ -289,6 +293,126 @@ class MealRepository {
       ingredients: ingredients,
       totalGrams: draft.totalGrams,
     );
+  }
+
+  /// Copies a meal off someone's post into this user's library.
+  ///
+  /// A copy, not a reference. `saved_meals` already offers the reference — one
+  /// row pointing at the original — and it is the wrong shape for something
+  /// taken off a feed: the original's author can edit the recipe under you, or
+  /// delete it, and the FK cascade takes your library entry with it. A recipe
+  /// someone cooked from and kept should not be able to change or vanish
+  /// because its author had second thoughts.
+  ///
+  /// So the row is duplicated, and `source_meal_id` / `source_creator_id`
+  /// carry the credit forward. What is *not* duplicated is the photo: the new
+  /// row points at the same file in the `meal-images` bucket. Copying the
+  /// bytes would mean downloading and re-uploading someone else's image on a
+  /// phone, and the bucket is public-read, so the URL resolves for everyone
+  /// either way. The consequence is honest and worth knowing: if the original
+  /// author deletes their meal and its image, the copy keeps the recipe and
+  /// loses the picture.
+  ///
+  /// Returns the new meal. Throws if [meal] is already this user's — copying
+  /// your own meal from your own post is a duplicate nobody asked for, and the
+  /// UI does not offer it.
+  Future<Meal> copyFromPost(Meal meal) async {
+    final String? userId = _userId;
+    if (userId == null) {
+      throw StateError('Cannot save a meal without a signed-in user');
+    }
+
+    if (meal.creatorId == userId) {
+      throw StateError('That meal is already yours');
+    }
+
+    // Credit and identity both chain to the root of the copy, not to whoever
+    // happened to pass it on. Copying someone's copy of a recipe still points
+    // at the recipe and still names the person who wrote it — otherwise credit
+    // decays one hop at a time until it is gone.
+    final String rootMealId = meal.sourceMealId ?? meal.id;
+    final String rootCreatorId = meal.sourceCreatorId ?? meal.creatorId;
+
+    // Already taken. Returned rather than duplicated, so a second tap on a
+    // card whose button did not get the news is a no-op instead of a second
+    // identical meal in the library — and, because the check is on the root,
+    // so is taking the same recipe from two different people's posts.
+    final List<Map<String, dynamic>> existing = await _client
+        .from('meals')
+        .select(_mealColumns)
+        .eq('creator_id', userId)
+        .eq('source_meal_id', rootMealId)
+        .limit(1);
+
+    if (existing.isNotEmpty) {
+      return Meal.fromRow(existing.first, currentUserId: userId);
+    }
+
+    final Map<String, dynamic> row = await _client
+        .from('meals')
+        .insert({
+          'creator_id': userId,
+          'title': meal.title,
+          'description': meal.description,
+          'image_url': meal.imageUrl,
+          'total_calories': meal.totals.caloriesRounded,
+          'total_protein_g': meal.totals.proteinRounded,
+          'total_carbs_g': meal.totals.carbsRounded,
+          'total_fat_g': meal.totals.fatRounded,
+          // A copy starts private. The user took it for their own cooking; if
+          // they want to share it on a post of their own, that is a decision
+          // they make there, and the composer will publish it then.
+          'is_public': false,
+          'source_meal_id': rootMealId,
+          'source_creator_id': rootCreatorId,
+        })
+        .select(_mealColumns)
+        .single();
+
+    final Meal copy = Meal.fromRow(row, currentUserId: userId);
+
+    // The ingredients are the recipe. They are allowed to fail without taking
+    // the meal with it — the totals are already on the row above, so a copy
+    // that lands un-itemised still logs the right calories — but a save that
+    // silently dropped them would leave the user with a meal they cannot see
+    // inside.
+    try {
+      // Copied from the meal in hand, not from the root: the root may have
+      // been deleted, and this is the version the user is actually looking at.
+      await _copyIngredients(fromMealId: meal.id, toMealId: copy.id);
+    } catch (error) {
+      debugPrint('Bulkr: meal copied but its ingredients failed — $error');
+      return copy;
+    }
+
+    return copy;
+  }
+
+  /// Duplicates the ingredient rows of one meal onto another.
+  ///
+  /// The rows point at `cached_off_foods`, a table shared by every user, so
+  /// the copy reuses the same food rows rather than re-fetching anything. One
+  /// read and one write regardless of how many ingredients there are.
+  Future<void> _copyIngredients({
+    required String fromMealId,
+    required String toMealId,
+  }) async {
+    final List<Map<String, dynamic>> rows = await _client
+        .from('meal_ingredients')
+        .select('cached_food_id, amount_g')
+        .eq('meal_id', fromMealId)
+        .order('created_at', ascending: true);
+
+    if (rows.isEmpty) return;
+
+    await _client.from('meal_ingredients').insert([
+      for (final Map<String, dynamic> row in rows)
+        {
+          'meal_id': toMealId,
+          'cached_food_id': row['cached_food_id'],
+          'amount_g': row['amount_g'],
+        },
+    ]);
   }
 
   /// Writes [draft] over an existing meal the user owns.

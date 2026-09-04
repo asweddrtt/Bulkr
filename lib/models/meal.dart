@@ -34,6 +34,9 @@ class Meal extends Equatable {
     this.ingredients = const [],
     this.totalGrams,
     this.isLoggedToday = false,
+    this.sourceMealId,
+    this.sourceCreatorId,
+    this.sourceCreatorUsername,
   });
 
   final String id;
@@ -82,6 +85,32 @@ class Meal extends Equatable {
   /// tab switch, a refresh and a restart — the card is showing what today's log
   /// actually contains, not what this session happened to tap.
   final bool isLoggedToday;
+
+  /// The meal this one was copied from, when it was taken off someone's post.
+  ///
+  /// Saving a meal from the feed copies it rather than referencing it: the
+  /// saver gets a row of their own that they can edit and that its original
+  /// author can neither change nor delete from under them. The cost is that
+  /// `creator_id` becomes the saver, so this is what remembers where the
+  /// recipe actually came from.
+  final String? sourceMealId;
+
+  /// Id of whoever wrote the original.
+  ///
+  /// Carried as well as the handle because copying a copy has to credit the
+  /// person who wrote the recipe, not the last person to pass it on — and
+  /// that needs an id to write, not a name to display.
+  final String? sourceCreatorId;
+
+  /// Handle of whoever wrote the original, when the meal was read with
+  /// `source_creator_id` joined.
+  ///
+  /// Not the same as [creatorUsername], which on a copy is the saver — this is
+  /// the person owed the credit.
+  final String? sourceCreatorUsername;
+
+  /// Whether this meal came from someone else's post.
+  bool get isCopy => sourceMealId != null;
 
   /// Summed ingredient grams, when known.
   ///
@@ -141,6 +170,9 @@ class Meal extends Equatable {
     double? totalGrams,
     String? creatorUsername,
     bool? isLoggedToday,
+    String? sourceMealId,
+    String? sourceCreatorId,
+    String? sourceCreatorUsername,
   }) {
     return Meal(
       id: id,
@@ -159,6 +191,10 @@ class Meal extends Equatable {
       ingredients: ingredients ?? this.ingredients,
       totalGrams: totalGrams ?? this.totalGrams,
       isLoggedToday: isLoggedToday ?? this.isLoggedToday,
+      sourceMealId: sourceMealId ?? this.sourceMealId,
+      sourceCreatorId: sourceCreatorId ?? this.sourceCreatorId,
+      sourceCreatorUsername:
+          sourceCreatorUsername ?? this.sourceCreatorUsername,
     );
   }
 
@@ -200,7 +236,23 @@ class Meal extends Equatable {
       isSaved: isSaved,
       isFavorite: isFavorite,
       savedAt: savedAt,
+      sourceMealId: row['source_meal_id'] as String?,
+      sourceCreatorId: row['source_creator_id'] as String?,
+      // Aliased in the query, and it has to be: `meals` points at `users`
+      // twice now, so two embeds of the same table would collide on the key
+      // `users` if neither were renamed.
+      sourceCreatorUsername: _embeddedUsername(row['source_author']),
     );
+  }
+
+  /// A `username` out of an embedded `users` row, whatever shape it arrived in.
+  static String? _embeddedUsername(Object? embedded) {
+    if (embedded is Map<String, dynamic>) return embedded['username'] as String?;
+    if (embedded is List && embedded.isNotEmpty) {
+      final Object? first = embedded.first;
+      if (first is Map<String, dynamic>) return first['username'] as String?;
+    }
+    return null;
   }
 
   @override
@@ -218,5 +270,8 @@ class Meal extends Equatable {
         ingredients,
         totalGrams,
         isLoggedToday,
+        sourceMealId,
+        sourceCreatorId,
+        sourceCreatorUsername,
       ];
 }

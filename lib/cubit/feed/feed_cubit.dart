@@ -4,7 +4,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../data/feed_cursor.dart';
+import '../../data/meal_repository.dart';
 import '../../data/post_repository.dart';
+import '../../models/meal.dart';
 import '../../models/post.dart';
 import '../../models/post_label.dart';
 
@@ -18,14 +20,26 @@ part 'feed_state.dart';
 /// two feel like two screens, and would lose the reader's place in whichever
 /// one they came from.
 class FeedCubit extends Cubit<FeedState> {
-  FeedCubit({required PostRepository postRepository})
-      : _posts = postRepository,
+  FeedCubit({
+    required PostRepository postRepository,
+    required MealRepository mealRepository,
+  })  : _posts = postRepository,
+        _meals = mealRepository,
         super(const FeedState());
 
   final PostRepository _posts;
 
+  /// Taking a meal off a post is a write to the meal library, not to the feed,
+  /// so it goes through the repository that owns meals rather than being
+  /// reimplemented here.
+  final MealRepository _meals;
+
   /// Translation key for a failed write, matching `MealsCubit`'s convention.
   static const String _actionFailedKey = 'feed_action_failed';
+
+  /// Confirmation that a meal landed in the library. Worth saying out loud:
+  /// the copy appears on a screen the user is not currently looking at.
+  static const String _mealSavedKey = 'post_meal_saved';
 
   /// Loads the visible tab if it has nothing yet.
   ///
@@ -161,6 +175,147 @@ class FeedCubit extends Cubit<FeedState> {
     }
   }
 
+  /// Likes a post, or takes the like back.
+  ///
+  /// Optimistic, and the count moves with the heart. A like is the cheapest
+  /// gesture in the app and the one people repeat fastest, so it cannot wait on
+  /// a round trip — and the whole cost of being wrong is putting one number
+  /// back.
+  ///
+  /// The count is adjusted locally rather than refetched. It will disagree with
+  /// the server by however many other people liked the post in the same second,
+  /// which is a number no reader is checking; the next refresh reconciles it.
+  Future<void> toggleLike(Post post) async {
+    final bool next = !post.isLiked;
+
+    _replaceEverywhere(post.copyWith(
+      isLiked: next,
+      likeCount: (post.likeCount + (next ? 1 : -1)).clamp(0, 1 << 30),
+    ));
+
+    try {
+      await _posts.setLiked(postId: post.id, isLiked: next);
+    } catch (error) {
+      if (isClosed) return;
+
+      final String detail = _describe(error);
+      debugPrint('Bulkr: like failed — $detail');
+
+      // Put the card back exactly as it was, rather than un-toggling what is
+      // on screen now: the user may have tapped twice while this was in
+      // flight, and the truth is the state before this attempt.
+      _replaceEverywhere(post, actionErrorDetail: detail);
+    }
+  }
+
+  /// Bookmarks a post, or removes the bookmark.
+  ///
+  /// A bookmark, not a recipe. Taking the meal off a post is [saveMeal], and
+  /// the two are separate on purpose — someone can want to reread a post
+  /// without wanting its food in their library, and far more often the other
+  /// way round.
+  Future<void> toggleSave(Post post) async {
+    final bool next = !post.isSaved;
+
+    _replaceEverywhere(post.copyWith(
+      isSaved: next,
+      saveCount: (post.saveCount + (next ? 1 : -1)).clamp(0, 1 << 30),
+    ));
+
+    try {
+      await _posts.setSaved(postId: post.id, isSaved: next);
+    } catch (error) {
+      if (isClosed) return;
+
+      final String detail = _describe(error);
+      debugPrint('Bulkr: save failed — $detail');
+
+      _replaceEverywhere(post, actionErrorDetail: detail);
+    }
+  }
+
+  /// Copies the meal on a post into the user's own library.
+  ///
+  /// Not optimistic, unlike liking. This one writes a row the user will go
+  /// looking for in their Meals tab, and a button that said "saved" for a meal
+  /// that is not there is a worse lie than half a second of waiting. Same
+  /// reasoning as `MealsCubit.toggleLoggedToday`.
+  ///
+  /// [onSaved] fires once the copy exists, so the caller can refresh the meal
+  /// library it is sitting next to. The cubit does not reach into `MealsCubit`
+  /// itself — one cubit calling another is how two sources of truth start.
+  Future<void> saveMeal(Post post, {void Function(Meal copy)? onSaved}) async {
+    final Meal? meal = post.attachedMeal;
+    if (meal == null || !post.canSaveMeal) return;
+    if (state.busyPostId != null) return;
+
+    emit(state.copyWith(busyPostId: post.id, clearActionError: true));
+
+    try {
+      final Meal copy = await _meals.copyFromPost(meal);
+      if (isClosed) return;
+
+      _replaceEverywhere(
+        post.copyWith(attachedMealSaved: true),
+        clearBusy: true,
+        actionMessageKey: _mealSavedKey,
+      );
+
+      onSaved?.call(copy);
+    } catch (error) {
+      if (isClosed) return;
+
+      final String detail = _describe(error);
+      debugPrint('Bulkr: meal copy failed — $detail');
+
+      emit(state.copyWith(
+        clearBusy: true,
+        actionErrorKey: _actionFailedKey,
+        actionErrorDetail: detail,
+      ));
+    }
+  }
+
+  /// Applies a comment count that a thread has just changed.
+  ///
+  /// The comments sheet owns the conversation; the card only shows how long it
+  /// is. Passing the number back rather than refetching the post keeps the two
+  /// in step without a round trip for a value the sheet already knows.
+  void setCommentCount(String postId, int count) {
+    final Post? post = _find(postId);
+    if (post == null || post.commentCount == count) return;
+
+    _replaceEverywhere(post.copyWith(commentCount: count));
+  }
+
+  /// Takes one of the user's own posts off the feed, or puts it back.
+  ///
+  /// Not a delete. The row stays, the author keeps seeing it — the RLS policy
+  /// makes an exception for `auth.uid() = user_id` — and it can be undone,
+  /// which is the whole difference between unpublishing and losing something.
+  ///
+  /// Optimistic, and the card stays where it is rather than disappearing: the
+  /// author needs to see the "hidden" marker land to know it worked, and a post
+  /// that vanishes from your own feed the moment you hide it looks like a
+  /// delete you did not mean to do.
+  Future<void> setHidden(Post post, {required bool isHidden}) async {
+    if (!post.isMine) return;
+
+    emit(state.copyWith(clearActionError: true));
+    _replaceEverywhere(post.copyWith(isHidden: isHidden));
+
+    try {
+      await _posts.setHidden(postId: post.id, isHidden: isHidden);
+    } catch (error) {
+      if (isClosed) return;
+
+      final String detail = _describe(error);
+      debugPrint('Bulkr: hide failed — $detail');
+
+      _replaceEverywhere(post, actionErrorDetail: detail);
+    }
+  }
+
   /// Deletes one of the user's own posts, taking it off both feeds first.
   ///
   /// Optimistic, unlike logging a meal: the card is gone from the screen before
@@ -195,8 +350,14 @@ class FeedCubit extends Cubit<FeedState> {
     }
   }
 
-  void clearActionError() {
-    if (state.actionErrorKey == null) return;
+  /// Forgets whatever the last snack bar said.
+  ///
+  /// Clears the success message as well as the failure, and has to: the screen
+  /// only shows a notice when the key *changes*, so a message left set would
+  /// make the second identical one — a second meal saved — show nothing at
+  /// all.
+  void clearNotice() {
+    if (state.actionErrorKey == null && state.actionMessageKey == null) return;
     emit(state.copyWith(clearActionError: true));
   }
 
@@ -264,6 +425,42 @@ class FeedCubit extends Cubit<FeedState> {
       FeedTab.forYou => state.copyWith(forYou: slice),
       FeedTab.discover => state.copyWith(discover: slice),
     };
+  }
+
+  /// Puts an updated post into both feeds at once.
+  ///
+  /// The same post can be sitting in For You and in Discover simultaneously,
+  /// and both copies have to move together — otherwise a heart filled in on
+  /// one tab is still empty when the user switches to the other, and tapping
+  /// it there sends a second like for something already liked.
+  ///
+  /// [FeedSlice.withPost] is a no-op on a feed that does not hold the post, so
+  /// this does not need to know which feed the tap came from.
+  void _replaceEverywhere(
+    Post post, {
+    bool clearBusy = false,
+    String? actionErrorDetail,
+    String? actionMessageKey,
+  }) {
+    emit(state.copyWith(
+      forYou: state.forYou.withPost(post),
+      discover: state.discover.withPost(post),
+      clearBusy: clearBusy,
+      clearActionError: actionErrorDetail == null && actionMessageKey == null,
+      actionErrorKey: actionErrorDetail == null ? null : _actionFailedKey,
+      actionErrorDetail: actionErrorDetail,
+      actionMessageKey: actionMessageKey,
+    ));
+  }
+
+  /// The post with this id, from whichever feed holds it.
+  Post? _find(String postId) {
+    for (final FeedSlice slice in [state.forYou, state.discover]) {
+      for (final Post post in slice.posts) {
+        if (post.id == postId) return post;
+      }
+    }
+    return null;
   }
 
   /// [existing] followed by whatever in [incoming] is not already there.

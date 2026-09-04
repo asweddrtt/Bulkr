@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/meal.dart';
 import '../models/post.dart';
+import '../models/post_comment.dart';
 import '../models/post_draft.dart';
 import '../models/post_label.dart';
 import 'feed_cursor.dart';
@@ -59,16 +60,22 @@ class PostRepository {
   /// scrolling.
   static const int pageSize = 15;
 
+  /// How many comments one post's thread will load.
+  ///
+  /// The whole conversation, not a page of it — a thread is read top to bottom
+  /// and half of one is a reply with no parent. High enough that hitting it
+  /// means something unusual is going on under that post.
+  static const int commentLimit = 300;
+
   /// Columns of `posts`, with everything a card needs to render already joined.
   ///
-  /// Every foreign key is named explicitly. That is not stylistic — it is the
-  /// same PGRST201 trap `MealRepository._mealColumns` documents. `post_likes`
-  /// and `post_saves` arrive in the next slice holding foreign keys to both
+  /// Every foreign key is named explicitly, and it is now load-bearing rather
+  /// than defensive. `post_likes` and `post_saves` hold foreign keys to both
   /// `posts` and `users` and nothing else of their own, which is exactly what
-  /// PostgREST reads as a junction table. The moment they exist, a bare
-  /// `users(...)` here becomes ambiguous between "the author" and "everyone who
-  /// liked it" and starts failing. Naming the key now means that slice does not
-  /// break this one.
+  /// PostgREST reads as a junction table — so a bare `users(...)` here is
+  /// ambiguous between "the author" and "everyone who liked it" and answers
+  /// PGRST201. The same goes for the nested meal: `meals` points at `users`
+  /// twice now, through `creator_id` and `source_creator_id`.
   ///
   /// The attached meal is embedded with its own author nested inside it, so a
   /// meal saved off a post keeps its credit. It comes back null when the meal
@@ -78,8 +85,9 @@ class PostRepository {
   static const String _postColumns = '*, '
       'users!posts_user_id_fkey(username, display_name, avatar_url), '
       'post_images(url, position), '
-      'meals!posts_attached_meal_id_fkey('
-      '*, users!meals_creator_id_fkey(username))';
+      'meals!posts_attached_meal_id_fkey(*, '
+      'users!meals_creator_id_fkey(username), '
+      'source_author:users!meals_source_creator_id_fkey(username))';
 
   String? get _userId => _client.auth.currentUser?.id;
 
@@ -117,7 +125,8 @@ class PostRepository {
         .order('id', ascending: false)
         .limit(pageSize);
 
-    return _page(rows, userId: userId, cursorBuilder: FeedCursor.byHotScore);
+    return await _page(rows,
+        userId: userId, cursorBuilder: FeedCursor.byHotScore);
   }
 
   /// Posts from the people the user follows, newest first.
@@ -166,7 +175,8 @@ class PostRepository {
         .order('id', ascending: false)
         .limit(pageSize);
 
-    return _page(rows, userId: userId, cursorBuilder: FeedCursor.byRecency);
+    return await _page(rows,
+        userId: userId, cursorBuilder: FeedCursor.byRecency);
   }
 
   /// Whose posts belong in this user's For You.
@@ -312,23 +322,288 @@ class PostRepository {
         .eq('user_id', userId);
   }
 
+  /// Likes a post, or takes the like back.
+  ///
+  /// An insert and a delete, with nothing to reconcile: `post_likes` is keyed
+  /// on `(post_id, user_id)`, so liking twice is refused by the primary key
+  /// rather than counted twice, and unliking something never liked deletes
+  /// nothing. The counter on the post row is the trigger's job.
+  ///
+  /// Returns nothing. The caller already moved its own UI — a heart that waits
+  /// on a round trip feels broken — and the authority on the count is the next
+  /// read, not an answer computed here from a number that may already be stale.
+  Future<void> setLiked({required String postId, required bool isLiked}) async {
+    final String? userId = _userId;
+    if (userId == null) {
+      throw StateError('Cannot like a post without a signed-in user');
+    }
+
+    if (isLiked) {
+      // Upsert rather than insert: two taps racing would otherwise make the
+      // second one a 23505 the user has to see, for the outcome they wanted.
+      await _client.from('post_likes').upsert(
+            {'post_id': postId, 'user_id': userId},
+            onConflict: 'post_id,user_id',
+            ignoreDuplicates: true,
+          );
+    } else {
+      await _client
+          .from('post_likes')
+          .delete()
+          .eq('post_id', postId)
+          .eq('user_id', userId);
+    }
+  }
+
+  /// Bookmarks a post, or removes the bookmark.
+  ///
+  /// Saving a *post* is not saving the meal on it. This is a reading list —
+  /// come back to this — and it leaves the user's meal library untouched.
+  /// Taking the recipe is [MealRepository.copyFromPost], a different action
+  /// with a different button.
+  Future<void> setSaved({required String postId, required bool isSaved}) async {
+    final String? userId = _userId;
+    if (userId == null) {
+      throw StateError('Cannot save a post without a signed-in user');
+    }
+
+    if (isSaved) {
+      await _client.from('post_saves').upsert(
+            {'post_id': postId, 'user_id': userId},
+            onConflict: 'post_id,user_id',
+            ignoreDuplicates: true,
+          );
+    } else {
+      await _client
+          .from('post_saves')
+          .delete()
+          .eq('post_id', postId)
+          .eq('user_id', userId);
+    }
+  }
+
+  /// The posts this user has bookmarked, most recently saved first.
+  ///
+  /// Ordered by when they saved it rather than when it was written, which is
+  /// how a reading list is read.
+  Future<List<Post>> fetchSavedPosts() async {
+    final String? userId = _userId;
+    if (userId == null) return const [];
+
+    final List<Map<String, dynamic>> rows = await _client
+        .from('post_saves')
+        .select('post_id, created_at, posts($_postColumns)')
+        .eq('user_id', userId)
+        .order('created_at', ascending: false)
+        .limit(200);
+
+    final List<Post> posts = [];
+    for (final Map<String, dynamic> row in rows) {
+      final Object? embedded = row['posts'];
+      final Map<String, dynamic>? postRow = embedded is Map<String, dynamic>
+          ? embedded
+          : (embedded is List &&
+                  embedded.isNotEmpty &&
+                  embedded.first is Map<String, dynamic>
+              ? embedded.first as Map<String, dynamic>
+              : null);
+
+      // A save whose post has since been deleted or hidden. Skipped rather
+      // than rendered as a blank card.
+      if (postRow == null) continue;
+
+      posts.add(Post.fromRow(postRow, currentUserId: userId, isSaved: true));
+    }
+
+    return _withMyEngagement(posts, userId: userId);
+  }
+
+  /// A post's comments, oldest first, arranged into threads.
+  ///
+  /// The whole conversation in one read rather than a page of it. A thread is
+  /// read top to bottom and a partial one makes no sense — a reply without its
+  /// parent is a non-sequitur — and the cap is high enough that reaching it
+  /// means something unusual is happening on that post.
+  Future<List<PostComment>> fetchComments(
+    String postId, {
+    String? postAuthorId,
+  }) async {
+    final List<Map<String, dynamic>> rows = await _client
+        .from('post_comments')
+        .select(
+          '*, users!post_comments_user_id_fkey(username, display_name, avatar_url)',
+        )
+        .eq('post_id', postId)
+        .order('created_at', ascending: true)
+        .limit(commentLimit);
+
+    final List<PostComment> flat = rows
+        .map((row) => PostComment.fromRow(
+              row,
+              currentUserId: _userId,
+              postAuthorId: postAuthorId,
+            ))
+        .toList(growable: false);
+
+    return PostComment.thread(flat);
+  }
+
+  /// Writes a comment, or a reply to one.
+  ///
+  /// The trigger on `post_comments` refuses a reply to a reply, so passing a
+  /// [parentId] that is itself a reply fails at the database rather than
+  /// quietly creating a third level the UI cannot draw.
+  Future<PostComment> addComment({
+    required String postId,
+    required String content,
+    String? parentId,
+    String? postAuthorId,
+  }) async {
+    final String? userId = _userId;
+    if (userId == null) {
+      throw StateError('Cannot comment without a signed-in user');
+    }
+
+    final String trimmed = content.trim();
+    if (trimmed.isEmpty) {
+      throw StateError('Cannot post an empty comment');
+    }
+
+    final Map<String, dynamic> row = await _client
+        .from('post_comments')
+        .insert({
+          'post_id': postId,
+          'user_id': userId,
+          'parent_comment_id': parentId,
+          'content': trimmed,
+        })
+        .select(
+          '*, users!post_comments_user_id_fkey(username, display_name, avatar_url)',
+        )
+        .single();
+
+    return PostComment.fromRow(
+      row,
+      currentUserId: userId,
+      postAuthorId: postAuthorId,
+    );
+  }
+
+  /// Removes a comment.
+  ///
+  /// No ownership filter on the query, unlike [deletePost]. Two people are
+  /// allowed to delete a comment — whoever wrote it and whoever owns the post
+  /// it is on — and expressing that here would mean duplicating the policy in
+  /// a place that can drift from it. The policy is the authority; a delete the
+  /// user is not entitled to removes nothing.
+  Future<void> deleteComment(String commentId) async {
+    if (_userId == null) {
+      throw StateError('Cannot delete a comment without a signed-in user');
+    }
+
+    await _client.from('post_comments').delete().eq('id', commentId);
+  }
+
   /// Turns rows into a page, and works out where the next one starts.
-  FeedPage _page(
+  Future<FeedPage> _page(
     List<Map<String, dynamic>> rows, {
     required String? userId,
     required FeedCursor Function(Post) cursorBuilder,
-  }) {
+  }) async {
     final List<Post> posts = rows
         .map((row) => Post.fromRow(row, currentUserId: userId))
         .toList(growable: false);
 
     if (posts.isEmpty) return const FeedPage.empty();
 
+    final List<Post> marked = await _withMyEngagement(posts, userId: userId);
+
     return FeedPage(
-      posts: posts,
+      posts: marked,
+      // Built from the unmarked list on purpose: the cursor is about position
+      // in the ordering, and `_withMyEngagement` preserves order but has no
+      // business being trusted with it.
       nextCursor: cursorBuilder(posts.last),
       hasMore: rows.length >= pageSize,
     );
+  }
+
+  /// Marks what this user has already done to each of [posts]: liked it, saved
+  /// it, and taken a copy of the meal on it.
+  ///
+  /// Three queries for the whole page rather than one per card, and they run
+  /// together. The obvious alternative — asking PostgREST to embed
+  /// `post_likes` filtered to this user — turns into an inner join that drops
+  /// every post the user has *not* liked, which is most of them.
+  ///
+  /// Non-fatal, all of it. A feed that renders with every heart empty is wrong
+  /// in a way the next refresh fixes; a feed that fails to render because a
+  /// lookup of who-liked-what timed out is wrong in a way the reader can do
+  /// nothing about.
+  Future<List<Post>> _withMyEngagement(
+    List<Post> posts, {
+    required String? userId,
+  }) async {
+    if (userId == null || posts.isEmpty) return posts;
+
+    final List<String> ids = posts.map((post) => post.id).toList();
+
+    // Only posts carrying someone else's meal can be asked about — the user's
+    // own needs no lookup, and a page with no attachments should not spend a
+    // round trip discovering that.
+    final List<String> attachedMealIds = [
+      for (final Post post in posts)
+        if (post.attachedMeal != null && !post.attachedMeal!.isMine)
+          post.attachedMeal!.id,
+    ];
+
+    try {
+      final results = await Future.wait([
+        _client
+            .from('post_likes')
+            .select('post_id')
+            .eq('user_id', userId)
+            .inFilter('post_id', ids),
+        _client
+            .from('post_saves')
+            .select('post_id')
+            .eq('user_id', userId)
+            .inFilter('post_id', ids),
+        // Matched on `source_meal_id`, which is how a copy remembers what it
+        // was copied from. Empty in, empty out — no query worth making.
+        if (attachedMealIds.isEmpty)
+          Future<List<Map<String, dynamic>>>.value(const [])
+        else
+          _client
+              .from('meals')
+              .select('source_meal_id')
+              .eq('creator_id', userId)
+              .inFilter('source_meal_id', attachedMealIds),
+      ]);
+
+      final Set<String> liked = {
+        for (final Map<String, dynamic> row in results[0]) '${row['post_id']}',
+      };
+      final Set<String> saved = {
+        for (final Map<String, dynamic> row in results[1]) '${row['post_id']}',
+      };
+      final Set<String> copiedMeals = {
+        for (final Map<String, dynamic> row in results[2])
+          '${row['source_meal_id']}',
+      };
+
+      return posts
+          .map((post) => post.copyWith(
+                isLiked: liked.contains(post.id),
+                isSaved: saved.contains(post.id),
+                attachedMealSaved: post.attachedMeal != null &&
+                    copiedMeals.contains(post.attachedMeal!.id),
+              ))
+          .toList(growable: false);
+    } catch (error) {
+      debugPrint('Bulkr: could not resolve this user\'s engagement — $error');
+      return posts;
+    }
   }
 
   /// The PostgREST spelling of `(column, id) < (value, id)`.

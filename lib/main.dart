@@ -115,7 +115,12 @@ class _BulkrAppState extends State<BulkrApp> {
           create: (_) => MealsCubit(mealRepository: _mealRepository),
         ),
         BlocProvider(
-          create: (_) => FeedCubit(postRepository: _postRepository),
+          create: (_) => FeedCubit(
+            postRepository: _postRepository,
+            // Taking a meal off a post writes to the meal library, so the feed
+            // needs the repository that owns it.
+            mealRepository: _mealRepository,
+          ),
         ),
       ],
       child: ScreenUtilInit(

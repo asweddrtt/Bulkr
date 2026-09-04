@@ -301,5 +301,20 @@
   "time_weeks": "{count}w",
   "post_create_meal": "Create a new meal",
   "post_create_meal_helper": "Ingredients, macros, photo and recipe.",
-  "post_meal_will_publish": "Posting this shares the meal publicly, so readers can open and save it."
+  "post_meal_will_publish": "Posting this shares the meal publicly, so readers can open and save it.",
+  "post_meal_saved": "Saved to your meals.",
+  "post_meal_in_library": "Saved",
+  "post_meal_credit": "recipe by @{username}",
+  "comments_title": "Comments",
+  "comments_title_count": "{count} comments",
+  "comments_load_failed": "The comments didn't load",
+  "comments_empty": "No comments yet. Say something.",
+  "comments_empty_question": "No answers yet. If you know, tell them.",
+  "comment_action_failed": "That didn't go through",
+  "comment_hint": "Add a comment",
+  "comment_reply_hint": "Write a reply",
+  "comment_reply": "Reply",
+  "comment_delete": "Delete",
+  "comment_replying_to": "Replying to {name}",
+  "comment_too_long": "Comments top out at {max} characters."
 }

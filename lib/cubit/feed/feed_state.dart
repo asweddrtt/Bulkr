@@ -100,8 +100,10 @@ class FeedState extends Equatable {
     this.label,
     this.forYou = const FeedSlice(),
     this.discover = const FeedSlice(),
+    this.busyPostId,
     this.actionErrorKey,
     this.actionErrorDetail,
+    this.actionMessageKey,
   });
 
   /// Which feed is showing.
@@ -118,11 +120,27 @@ class FeedState extends Equatable {
   final FeedSlice forYou;
   final FeedSlice discover;
 
+  /// A post mid-write, so its own card can show a spinner while the rest of
+  /// the feed stays interactive.
+  ///
+  /// Only the slow actions take it. Liking and saving are optimistic and never
+  /// busy — a heart that spins is a heart that feels broken — while copying a
+  /// meal writes rows the user will go looking for elsewhere and is worth
+  /// waiting on visibly.
+  final String? busyPostId;
+
   /// A failed write, for a snack bar. Keyed the way `MealsState` does it: a
   /// translation key plus the raw detail, so the message can be specific
   /// without every failure needing its own string.
   final String? actionErrorKey;
   final String? actionErrorDetail;
+
+  /// A write that succeeded and is worth saying so, for the same snack bar.
+  ///
+  /// Kept apart from the error keys rather than folded in with a flag, because
+  /// the two are shown differently and confusing them means telling someone a
+  /// failure went through.
+  final String? actionMessageKey;
 
   FeedSlice get current => sliceFor(tab);
 
@@ -148,8 +166,11 @@ class FeedState extends Equatable {
     bool clearLabel = false,
     FeedSlice? forYou,
     FeedSlice? discover,
+    String? busyPostId,
+    bool clearBusy = false,
     String? actionErrorKey,
     String? actionErrorDetail,
+    String? actionMessageKey,
     bool clearActionError = false,
   }) {
     return FeedState(
@@ -157,15 +178,27 @@ class FeedState extends Equatable {
       label: clearLabel ? null : (label ?? this.label),
       forYou: forYou ?? this.forYou,
       discover: discover ?? this.discover,
+      busyPostId: clearBusy ? null : (busyPostId ?? this.busyPostId),
       actionErrorKey:
           clearActionError ? null : (actionErrorKey ?? this.actionErrorKey),
       actionErrorDetail: clearActionError
           ? null
           : (actionErrorDetail ?? this.actionErrorDetail),
+      actionMessageKey: clearActionError
+          ? null
+          : (actionMessageKey ?? this.actionMessageKey),
     );
   }
 
   @override
-  List<Object?> get props =>
-      [tab, label, forYou, discover, actionErrorKey, actionErrorDetail];
+  List<Object?> get props => [
+        tab,
+        label,
+        forYou,
+        discover,
+        busyPostId,
+        actionErrorKey,
+        actionErrorDetail,
+        actionMessageKey,
+      ];
 }

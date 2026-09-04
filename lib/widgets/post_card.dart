@@ -11,16 +11,13 @@ import 'post_label_chip.dart';
 
 /// One post in the feed.
 ///
-/// ## The inert action row
+/// [onLike], [onComment] and [onSave] stay nullable: a null callback renders
+/// the button dimmed and unresponsive rather than hiding it, which is how a
+/// card in a context that cannot act on it — a preview, a deep link opened
+/// before the feed exists — keeps the same shape as one in the feed.
 ///
-/// [onLike], [onComment] and [onSave] are nullable, and in this slice the feed
-/// passes none of them: `post_likes`, `comments` and `post_saves` do not exist
-/// yet. A null callback renders the button dimmed and unresponsive rather than
-/// hiding it, so the card's shape is settled now and the slice that adds those
-/// tables changes nothing here but what gets passed in.
-///
-/// The counts come off the post row either way. They are all zero today, and
-/// zero is the truth — nothing has been liked because nothing can be.
+/// The counts come off the post row, maintained by triggers, rather than being
+/// counted per card.
 class PostCard extends StatelessWidget {
   const PostCard({
     super.key,
@@ -32,6 +29,7 @@ class PostCard extends StatelessWidget {
     this.onOpenAuthor,
     this.onSaveMeal,
     this.onLabelTap,
+    this.isSavingMeal = false,
   });
 
   final Post post;
@@ -48,6 +46,9 @@ class PostCard extends StatelessWidget {
 
   /// Copies the attached meal into the reader's own library.
   final VoidCallback? onSaveMeal;
+
+  /// This card's meal copy is in flight.
+  final bool isSavingMeal;
 
   /// Filters the feed to this post's label.
   final VoidCallback? onLabelTap;
@@ -261,10 +262,67 @@ class PostCard extends StatelessWidget {
                     fontSize: 10.sp,
                   ),
                 ),
+                // Whoever wrote the recipe, when this is someone's copy of it.
+                // Copying a meal makes the saver its `creator_id`, so without
+                // this the original author disappears from their own work.
+                if (meal.sourceCreatorUsername != null) ...[
+                  SizedBox(height: 2.h),
+                  Text(
+                    'post_meal_credit'.tr(namedArgs: {
+                      'username': meal.sourceCreatorUsername!,
+                    }),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                      color: AppColors.textGray,
+                      fontSize: 9.sp,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
-          if (post.canSaveMeal && onSaveMeal != null)
+          if (isSavingMeal)
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 10.w),
+              child: SizedBox(
+                width: 14.w,
+                height: 14.w,
+                child: const CircularProgressIndicator(
+                  color: AppColors.primaryNeon,
+                  strokeWidth: 2,
+                ),
+              ),
+            )
+          // Already taken. A tick rather than a disabled button: the state is
+          // worth showing, and a greyed-out "save" invites a tap that would do
+          // nothing.
+          else if (post.showsMealSavedState)
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 6.w),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.check,
+                    color: AppColors.primaryNeon,
+                    size: 13.sp,
+                  ),
+                  SizedBox(width: 4.w),
+                  Text(
+                    'post_meal_in_library'.tr().toUpperCase(),
+                    style: GoogleFonts.inter(
+                      color: AppColors.primaryNeon,
+                      fontSize: 9.sp,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else if (post.canSaveMeal && onSaveMeal != null)
             PressScale(
               child: GestureDetector(
                 onTap: onSaveMeal,
@@ -469,9 +527,8 @@ class _Photo extends StatelessWidget {
 
 /// One of the three things you can do to a post.
 ///
-/// A null [onTap] dims it and stops it responding, which is how this slice
-/// renders like, comment and save — present, so the card's shape is final, and
-/// plainly not yet working.
+/// A null [onTap] dims it and stops it responding, for a card shown somewhere
+/// that cannot act on it.
 class _ActionButton extends StatelessWidget {
   const _ActionButton({
     required this.icon,
