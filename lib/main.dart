@@ -111,6 +111,9 @@ class _BulkrAppState extends State<BulkrApp> {
         RepositoryProvider.value(value: _followRepository),
         RepositoryProvider.value(value: _groupRepository),
         RepositoryProvider.value(value: _challengeRepository),
+        // The profile's edit sheet writes name and bio, so it needs the
+        // repository that owns `users`.
+        RepositoryProvider.value(value: _userRepository),
       ],
       child: MultiBlocProvider(
       // Above the router on purpose — onboarding answers have to survive

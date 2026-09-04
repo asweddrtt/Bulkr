@@ -170,6 +170,37 @@ class UserRepository {
     }).eq('id', userId);
   }
 
+  /// Writes the two things a person says about themselves.
+  ///
+  /// The only columns on `users` a profile screen edits. Everything else on
+  /// that row is a number the calorie engine derives things from, and belongs
+  /// to the dashboard's own flows — changing a target weight recalculates a
+  /// plan, and doing that from a bio field would be a surprise.
+  ///
+  /// A blank display name clears it rather than storing `''`, so
+  /// [UserProfile.preferredName] falls back to the handle the way it does for
+  /// someone who never set one. Same for the bio, so "has no about" is one
+  /// value in the database instead of two.
+  Future<void> updateProfile({
+    String? displayName,
+    String? bio,
+  }) async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) return;
+
+    final String? name = displayName?.trim();
+    final String? about = bio?.trim();
+
+    await _client.from('users').update({
+      // Only the fields the caller passed. A null argument means "leave it
+      // alone"; an empty string means "clear it", and those are different
+      // instructions that would otherwise both arrive as null.
+      if (displayName != null)
+        'display_name': (name == null || name.isEmpty) ? null : name,
+      if (bio != null) 'bio': (about == null || about.isEmpty) ? null : about,
+    }).eq('id', userId);
+  }
+
   /// Writes a freshly calculated plan over the stored targets.
   Future<void> applyPlan({required NutritionPlan plan}) async {
     final userId = _client.auth.currentUser?.id;

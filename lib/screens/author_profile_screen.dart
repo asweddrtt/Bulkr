@@ -390,6 +390,21 @@ class _ProfileHeader extends StatelessWidget {
               ),
             ],
           ),
+          // Their About, when they have written one. Same placement as on the
+          // user's own profile, so a profile reads the same whoever is looking
+          // at it — the only differences are the follow button and the back
+          // arrow.
+          if (person.hasBio) ...[
+            SizedBox(height: 14.h),
+            Text(
+              person.bio!.trim(),
+              style: GoogleFonts.inter(
+                color: Colors.white,
+                fontSize: 12.sp,
+                height: 1.55,
+              ),
+            ),
+          ],
           SizedBox(height: 18.h),
           Row(
             children: [

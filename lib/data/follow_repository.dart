@@ -29,7 +29,7 @@ class FollowRepository {
   /// not, and `feed_follows.sql` says so — but because a query that does not
   /// ask for someone's weight cannot accidentally render it.
   static const String _personColumns = 'id, username, display_name, '
-      'avatar_url, is_trainer, '
+      'avatar_url, bio, is_trainer, '
       'followers:follows!follows_followee_id_fkey(count), '
       'following:follows!follows_follower_id_fkey(count), '
       'posts!posts_user_id_fkey(count)';

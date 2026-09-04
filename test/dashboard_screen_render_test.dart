@@ -115,7 +115,7 @@ void main() {
             ),
             home: BlocProvider.value(
               value: cubit,
-              child: const ProfileScreen(),
+              child: const DashboardScreen(),
             ),
           ),
         ),

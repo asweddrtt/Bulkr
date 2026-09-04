@@ -16,6 +16,7 @@ class Person extends Equatable {
     required this.username,
     this.displayName,
     this.avatarUrl,
+    this.bio,
     this.isTrainer = false,
     this.followerCount = 0,
     this.followingCount = 0,
@@ -29,6 +30,13 @@ class Person extends Equatable {
   final String username;
   final String? displayName;
   final String? avatarUrl;
+
+  /// What they wrote about themselves, or null when they have written nothing.
+  ///
+  /// Null and empty mean the same thing here and are treated the same way: the
+  /// About section is absent rather than showing a placeholder. An empty bio is
+  /// a fact about the person, not a gap to apologise for.
+  final String? bio;
 
   /// They have marked themselves a trainer.
   ///
@@ -84,7 +92,11 @@ class Person extends Equatable {
   /// Whether a follow button belongs on this person's row.
   bool get isFollowable => !isMe;
 
+  /// Whether there is an About worth showing.
+  bool get hasBio => (bio?.trim().isNotEmpty) ?? false;
+
   Person copyWith({
+    String? bio,
     bool? isTrainer,
     int? followerCount,
     int? followingCount,
@@ -97,6 +109,7 @@ class Person extends Equatable {
       username: username,
       displayName: displayName,
       avatarUrl: avatarUrl,
+      bio: bio ?? this.bio,
       isTrainer: isTrainer ?? this.isTrainer,
       followerCount: followerCount ?? this.followerCount,
       followingCount: followingCount ?? this.followingCount,
@@ -125,6 +138,7 @@ class Person extends Equatable {
       username: '${row['username'] ?? ''}',
       displayName: row['display_name'] as String?,
       avatarUrl: row['avatar_url'] as String?,
+      bio: row['bio'] as String?,
       isTrainer: row['is_trainer'] == true,
       followerCount: _aggregate(row['followers']),
       followingCount: _aggregate(row['following']),
@@ -165,6 +179,7 @@ class Person extends Equatable {
         username,
         displayName,
         avatarUrl,
+        bio,
         isTrainer,
         followerCount,
         followingCount,

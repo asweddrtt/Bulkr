@@ -12,6 +12,7 @@ import '../widgets/animations/motion.dart';
 import '../widgets/animations/press_scale.dart';
 import 'feed_screen.dart';
 import 'meals_screen.dart';
+import 'profile_screen.dart';
 import 'dashboard_screen.dart';
 
 const Color _textMuted = Color(0xFF9CA3AF);
@@ -59,7 +60,7 @@ class _MainScreenState extends State<MainScreen> {
             MealsScreen(),
             FeedScreen(),
             _ComingSoon(labelKey: 'Tracker'),
-            _ComingSoon(labelKey: 'Profile'),
+            ProfileScreen(),
           ],
         ),
       ),

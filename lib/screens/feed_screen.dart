@@ -19,8 +19,7 @@ import '../widgets/post_label_chip.dart';
 import 'author_profile_screen.dart';
 import 'challenge_leaderboard_sheet.dart';
 import 'group_screen.dart';
-import 'groups_screen.dart';
-import 'find_people_screen.dart';
+import 'search_screen.dart';
 import 'post_comments_sheet.dart';
 import 'post_composer_screen.dart';
 
@@ -129,30 +128,20 @@ class _FeedHeader extends StatelessWidget {
                 ),
               ),
               const _FeedTabs(),
+              // One icon, not two. People and groups used to have one each,
+              // which made the header a menu of the app's data model rather
+              // than of what anyone wants to do — and "find the thing I am
+              // thinking of" does not know which kind it is.
               PressScale(
                 child: GestureDetector(
-                  onTap: () => GroupsScreen.open(context),
+                  onTap: () => SearchScreen.open(context),
                   behavior: HitTestBehavior.opaque,
                   child: Padding(
                     padding: EdgeInsets.only(left: 6.w),
                     child: Icon(
-                      Icons.groups_outlined,
+                      Icons.search,
                       color: AppColors.textGray,
-                      size: 20.sp,
-                    ),
-                  ),
-                ),
-              ),
-              PressScale(
-                child: GestureDetector(
-                  onTap: () => FindPeopleScreen.open(context),
-                  behavior: HitTestBehavior.opaque,
-                  child: Padding(
-                    padding: EdgeInsets.only(left: 4.w),
-                    child: Icon(
-                      Icons.person_add_alt_1_outlined,
-                      color: AppColors.textGray,
-                      size: 20.sp,
+                      size: 21.sp,
                     ),
                   ),
                 ),
@@ -369,7 +358,7 @@ class _FeedListState extends State<_FeedList> {
             title: 'feed_empty_for_you'.tr(),
             body: 'feed_empty_for_you_body'.tr(),
             actionLabel: 'feed_find_people'.tr(),
-            onAction: () => FindPeopleScreen.open(context),
+            onAction: () => SearchScreen.open(context),
             secondaryLabel: 'feed_browse_discover'.tr(),
             onSecondary: () =>
                 context.read<FeedCubit>().selectTab(FeedTab.discover),
