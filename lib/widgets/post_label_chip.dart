@@ -64,9 +64,15 @@ class PostLabelChip extends StatelessWidget {
 
 /// The row of label filters above the feed.
 ///
-/// All six plus "all", always visible, never scrolling. That is what caps the
-/// label set at six: a filter bar you have to scroll is one whose last option
-/// nobody knows exists.
+/// Icons only, and one fixed row that never scrolls. Seven controls with their
+/// names spelled out do not fit across a phone, and the version that scrolled
+/// hid its last options behind a swipe nobody makes — a filter you cannot see
+/// is a filter you do not use. Dropping the words is what buys every category
+/// a place on screen.
+///
+/// The names are not gone, only quiet: each chip carries its label as a
+/// tooltip and as its semantics label, so a long press names it and a screen
+/// reader announces it rather than reading out an icon.
 class PostLabelFilterBar extends StatelessWidget {
   const PostLabelFilterBar({
     super.key,
@@ -82,32 +88,36 @@ class PostLabelFilterBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 34.h,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: EdgeInsets.symmetric(horizontal: 20.w),
-        // Horizontally scrollable even though it is meant to fit, because
-        // "fits" depends on the text: a translation with longer words, or a
-        // large system font, must overflow into a scroll rather than off the
-        // edge of the screen.
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: 20.w),
+      child: Row(
+        // Every chip takes an equal share of the width rather than its own
+        // intrinsic size. Intrinsic sizing fits at the design scale and stops
+        // fitting the moment the system font is turned up — the icons are
+        // sized in `.sp`, so seven of them grow together and overflow the row.
+        // Sharing the width means the chips get narrower instead, which is the
+        // whole point of dropping the text: all seven on screen, always.
         children: [
-          _FilterChip(
-            icon: Icons.all_inclusive_sharp,
-            text: 'post_label_all'.tr(),
-            accent: AppColors.primaryNeon,
-            isSelected: selected == null,
-            onTap: () => onSelected(null),
+          Expanded(
+            child: _FilterChip(
+              icon: Icons.all_inclusive_sharp,
+              name: 'post_label_all'.tr(),
+              accent: AppColors.primaryNeon,
+              isSelected: selected == null,
+              onTap: () => onSelected(null),
+            ),
           ),
           for (final PostLabel label in PostLabel.values)
-            _FilterChip(
-              icon: label.icon,
-              text: label.labelKey.tr(),
-              accent: label.accent,
-              isSelected: selected == label,
-              // Tapping the active filter clears it. A chip that is already on
-              // is the most obvious place to reach for to turn it off.
-              onTap: () => onSelected(selected == label ? null : label),
+            Expanded(
+              child: _FilterChip(
+                icon: label.icon,
+                name: label.labelKey.tr(),
+                accent: label.accent,
+                isSelected: selected == label,
+                // Tapping the active filter clears it. A chip that is already
+                // on is the most obvious place to reach for to turn it off.
+                onTap: () => onSelected(selected == label ? null : label),
+              ),
             ),
         ],
       ),
@@ -115,60 +125,60 @@ class PostLabelFilterBar extends StatelessWidget {
   }
 }
 
+/// One icon in the filter row.
 class _FilterChip extends StatelessWidget {
   const _FilterChip({
     required this.icon,
-    required this.text,
+    required this.name,
     required this.accent,
     required this.isSelected,
     required this.onTap,
   });
 
   final IconData icon;
-  final String text;
+
+  /// The label's name. Never drawn — it is the tooltip and the semantics
+  /// label, which is how an icon-only control stays nameable.
+  final String name;
+
   final Color accent;
   final bool isSelected;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return PressScale(
-      child: GestureDetector(
-        onTap: onTap,
-        behavior: HitTestBehavior.opaque,
-        child: AnimatedContainer(
-          duration: Motion.scaled(context, Motion.fast),
-          curve: Motion.enter,
-          margin: EdgeInsets.only(right: 8.w),
-          padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 7.h),
-          decoration: BoxDecoration(
-            color: isSelected ? accent : Colors.transparent,
-            borderRadius: BorderRadius.circular(6.r),
-            border: Border.all(
-              color: isSelected ? accent : AppColors.darkBorder,
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
+    return Tooltip(
+      message: name,
+      child: Semantics(
+        label: name,
+        button: true,
+        selected: isSelected,
+        child: PressScale(
+          child: GestureDetector(
+            onTap: onTap,
+            behavior: HitTestBehavior.opaque,
+            child: AnimatedContainer(
+              duration: Motion.scaled(context, Motion.fast),
+              curve: Motion.enter,
+              // Margin outside the border so the chips have air between them
+              // while the tap target still fills its whole share of the row.
+              margin: EdgeInsets.symmetric(horizontal: 3.w),
+              padding: EdgeInsets.symmetric(vertical: 9.h),
+              decoration: BoxDecoration(
+                color: isSelected ? accent : Colors.transparent,
+                borderRadius: BorderRadius.circular(6.r),
+                border: Border.all(
+                  color: isSelected ? accent : AppColors.darkBorder,
+                ),
+              ),
+              child: Icon(
                 icon,
                 // Black on the filled chip: every label accent is a light
                 // colour, chosen so this stays legible.
                 color: isSelected ? Colors.black : AppColors.textGray,
-                size: 13.sp,
+                size: 17.sp,
               ),
-              SizedBox(width: 6.w),
-              Text(
-                text.toUpperCase(),
-                style: GoogleFonts.inter(
-                  color: isSelected ? Colors.black : AppColors.textGray,
-                  fontSize: 10.sp,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.8,
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),

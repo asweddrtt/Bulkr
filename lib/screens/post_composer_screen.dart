@@ -9,6 +9,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../cubit/feed/feed_cubit.dart';
+import '../cubit/meals/meals_cubit.dart';
 import '../cubit/post_composer/post_composer_cubit.dart';
 import '../data/meal_repository.dart';
 import '../data/post_repository.dart';
@@ -19,6 +20,7 @@ import '../styles/app_color.dart';
 import '../widgets/animations/press_scale.dart';
 import '../widgets/image_source_sheet.dart';
 import '../widgets/sheet_action_row.dart';
+import 'meal_editor_screen.dart';
 
 /// Writing a post.
 ///
@@ -687,13 +689,57 @@ class _MealAttachment extends StatelessWidget {
               ),
             ),
             SizedBox(height: 10.h),
-            if (meal == null)
-              _AttachMealButton(onTap: () => _pickMeal(context))
-            else
+            if (meal == null) ...[
+              // Two ways in, not one. Picking from the library is the quick
+              // path when the meal already exists; writing one is the path
+              // that matters for a first-time poster, whose library is empty
+              // and who would otherwise hit a dead end being told to go build
+              // one somewhere else first.
+              _AttachMealButton(
+                icon: Icons.restaurant_sharp,
+                label: 'post_attach_meal'.tr(),
+                onTap: () => _pickMeal(context),
+              ),
+              SizedBox(height: 8.h),
+              _AttachMealButton(
+                icon: Icons.add_circle_outline,
+                label: 'post_create_meal'.tr(),
+                onTap: () => _createMeal(context),
+              ),
+            ] else ...[
               _AttachedMealRow(
                 meal: meal,
                 onRemove: () => context.read<PostComposerCubit>().removeMeal(),
               ),
+              // Said before posting, not after. Attaching publishes the meal —
+              // `PostRepository.createPost` flips `is_public` so readers can
+              // actually open the attachment — and a private meal becoming
+              // public is not something to discover from the result.
+              if (!meal.isPublic) ...[
+                SizedBox(height: 8.h),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.public,
+                      color: AppColors.textGray,
+                      size: 12.sp,
+                    ),
+                    SizedBox(width: 6.w),
+                    Expanded(
+                      child: Text(
+                        'post_meal_will_publish'.tr(),
+                        style: GoogleFonts.inter(
+                          color: AppColors.textGray,
+                          fontSize: 10.sp,
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ],
           ],
         );
       },
@@ -719,13 +765,64 @@ class _MealAttachment extends StatelessWidget {
       ),
     );
 
-    if (picked != null) cubit.attachMeal(picked);
+    if (picked == null) return;
+
+    // The sheet returns the sentinel rather than closing itself and then asking
+    // the caller to guess: "create a new one" is a choice made inside the
+    // picker, and it has to run after the sheet is gone so the editor is not
+    // pushed underneath it.
+    if (picked.id == _MealPickerSheet.createSentinelId) {
+      if (!context.mounted) return;
+      await _createMeal(context);
+      return;
+    }
+
+    cubit.attachMeal(picked);
+  }
+
+  /// Writes a new meal and attaches it.
+  ///
+  /// The real editor, not a cut-down version of it: ingredients off Open Food
+  /// Facts, the barcode scanner, a photo, the recipe, hand-typed macros. It is
+  /// the same screen the Meals tab pushes, so a meal written for a post is a
+  /// meal in every sense — it lands in the user's library too, which is where
+  /// they will look for it again.
+  ///
+  /// Opened with the public switch already on, because a meal nobody else can
+  /// read renders as no attachment at all.
+  static Future<void> _createMeal(BuildContext context) async {
+    final PostComposerCubit cubit = context.read<PostComposerCubit>();
+    // Read before the await: the library refresh below happens after this
+    // route may have been popped, and reading a cubit off a dead context
+    // throws.
+    final MealsCubit meals = context.read<MealsCubit>();
+
+    final Meal? created = await Navigator.of(context).push<Meal>(
+      MaterialPageRoute(
+        builder: (_) => const MealEditorScreen(initialIsPublic: true),
+      ),
+    );
+
+    if (created == null) return;
+
+    cubit.attachMeal(created);
+
+    // The meal is a real row in the user's library, not something that exists
+    // only on this post, so the Meals tab has to know about it. Silent, so a
+    // library the user is not looking at does not blank itself out behind them.
+    meals.refresh();
   }
 }
 
 class _AttachMealButton extends StatelessWidget {
-  const _AttachMealButton({required this.onTap});
+  const _AttachMealButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
 
+  final IconData icon;
+  final String label;
   final VoidCallback onTap;
 
   @override
@@ -743,15 +840,11 @@ class _AttachMealButton extends StatelessWidget {
           ),
           child: Row(
             children: [
-              Icon(
-                Icons.restaurant_sharp,
-                color: AppColors.primaryNeon,
-                size: 18.sp,
-              ),
+              Icon(icon, color: AppColors.primaryNeon, size: 18.sp),
               SizedBox(width: 12.w),
               Expanded(
                 child: Text(
-                  'post_attach_meal'.tr(),
+                  label,
                   style: GoogleFonts.inter(
                     color: Colors.white,
                     fontSize: 12.sp,
@@ -844,6 +937,22 @@ class _AttachedMealRow extends StatelessWidget {
 class _MealPickerSheet extends StatelessWidget {
   const _MealPickerSheet();
 
+  /// Id of the meal this sheet returns to mean "none of these — write a new
+  /// one".
+  ///
+  /// A sentinel rather than a second return type, so the sheet stays a
+  /// `showModalBottomSheet<Meal>` and the caller keeps one thing to check. The
+  /// value cannot collide with a real meal: `meals.id` is a uuid, and this is
+  /// not one.
+  static const String createSentinelId = 'create-new-meal';
+
+  static Meal get _createSentinel => Meal(
+        id: createSentinelId,
+        creatorId: '',
+        title: '',
+        createdAt: DateTime.fromMillisecondsSinceEpoch(0),
+      );
+
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<PostComposerCubit, PostComposerState>(
@@ -901,22 +1010,36 @@ class _MealPickerSheet extends StatelessWidget {
 
       case ComposerMealsStatus.ready:
         if (state.attachableMeals.isEmpty) {
-          return Padding(
-            padding: EdgeInsets.symmetric(vertical: 24.h),
-            child: Text(
-              'post_no_meals'.tr(),
-              style:
-                  GoogleFonts.inter(color: AppColors.textGray, fontSize: 12.sp),
-            ),
+          // An empty library used to be a dead end that explained itself and
+          // offered nothing. The way out is right here.
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: EdgeInsets.only(bottom: 14.h),
+                child: Text(
+                  'post_no_meals'.tr(),
+                  style: GoogleFonts.inter(
+                    color: AppColors.textGray,
+                    fontSize: 12.sp,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+              _buildCreateRow(context),
+            ],
           );
         }
 
         return ListView.separated(
           shrinkWrap: true,
-          itemCount: state.attachableMeals.length,
+          // One extra row at the top for writing a new meal.
+          itemCount: state.attachableMeals.length + 1,
           separatorBuilder: (_, __) => SizedBox(height: 8.h),
           itemBuilder: (context, index) {
-            final Meal meal = state.attachableMeals[index];
+            if (index == 0) return _buildCreateRow(context);
+
+            final Meal meal = state.attachableMeals[index - 1];
 
             return SheetActionRow(
               icon: Icons.restaurant_sharp,
@@ -930,5 +1053,16 @@ class _MealPickerSheet extends StatelessWidget {
           },
         );
     }
+  }
+
+  Widget _buildCreateRow(BuildContext context) {
+    return SheetActionRow(
+      icon: Icons.add_circle_outline,
+      label: 'post_create_meal'.tr(),
+      helper: 'post_create_meal_helper'.tr(),
+      // Closes the sheet and lets the caller push the editor, rather than
+      // pushing it from under a sheet that is still on screen.
+      onTap: () => Navigator.of(context).pop(_createSentinel),
+    );
   }
 }

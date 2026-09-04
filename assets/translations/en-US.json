@@ -275,7 +275,7 @@
   "post_meal_prompt": "Attach a meal",
   "post_attach_meal": "Pick one of your meals",
   "post_pick_meal": "Your meals",
-  "post_no_meals": "You haven't created a meal yet. Meals you save from others can't be attached — post your own copy.",
+  "post_no_meals": "No meals in your library yet.",
   "post_meals_failed": "Your meals didn't load.",
   "post_discard_title": "Discard this post?",
   "post_discard_confirm": "Discard",
@@ -298,5 +298,8 @@
   "time_minutes": "{count}m",
   "time_hours": "{count}h",
   "time_days": "{count}d",
-  "time_weeks": "{count}w"
+  "time_weeks": "{count}w",
+  "post_create_meal": "Create a new meal",
+  "post_create_meal_helper": "Ingredients, macros, photo and recipe.",
+  "post_meal_will_publish": "Posting this shares the meal publicly, so readers can open and save it."
 }

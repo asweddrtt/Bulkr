@@ -229,6 +229,26 @@ class PostRepository {
       );
     }
 
+    // A private meal on a public post is an attachment nobody can open. The
+    // meals policy shows a meal to its creator or to everyone, so the author
+    // would see their own card and every other reader would see the post with
+    // no meal on it at all — which reads as a bug rather than as a permission.
+    //
+    // Attaching your own meal to a post is an unambiguous decision to share
+    // the recipe, so the flag follows the intent. Done before the insert so
+    // the row read back below already carries the published meal, and scoped
+    // to `creator_id` so it can only ever publish something this user wrote.
+    //
+    // The composer says so in as many words before this point is reached; this
+    // is the invariant, not the notice.
+    if (meal != null && !meal.isPublic) {
+      await _client
+          .from('meals')
+          .update({'is_public': true})
+          .eq('id', meal.id)
+          .eq('creator_id', userId);
+    }
+
     final List<String> urls = await _uploadImages(
       userId: userId,
       images: images.take(PostDraft.maxImages).toList(),

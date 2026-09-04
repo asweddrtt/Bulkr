@@ -25,11 +25,12 @@ class MealEditorCubit extends Cubit<MealEditorState> {
     required MealRepository mealRepository,
     required FoodRepository foodRepository,
     Meal? editing,
+    bool initialIsPublic = false,
   })  : _meals = mealRepository,
         _foods = foodRepository,
         super(
           editing == null
-              ? const MealEditorState()
+              ? MealEditorState(draft: MealDraft(isPublic: initialIsPublic))
               : MealEditorState(
                   status: MealEditorStatus.hydrating,
                   editing: editing,

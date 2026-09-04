@@ -27,10 +27,23 @@ import '../widgets/macro_bar.dart';
 /// to write a new one. Pops with the saved [Meal] so the library can show it
 /// without waiting for a refetch, or with null if the user backed out.
 class MealEditorScreen extends StatelessWidget {
-  const MealEditorScreen({super.key, this.meal});
+  const MealEditorScreen({
+    super.key,
+    this.meal,
+    this.initialIsPublic = false,
+  });
 
   /// The meal to open. Null writes a new one.
   final Meal? meal;
+
+  /// What the "share publicly" switch starts on for a *new* meal.
+  ///
+  /// Defaults to off, which is the right default for a meal written for the
+  /// user's own library. The post composer opens the editor with it on: a meal
+  /// attached to a post that nobody else can read renders as no attachment at
+  /// all, because the meals RLS policy only shows a meal to its creator or to
+  /// everyone. Ignored when editing, where the meal's own setting wins.
+  final bool initialIsPublic;
 
   @override
   Widget build(BuildContext context) {
@@ -39,6 +52,7 @@ class MealEditorScreen extends StatelessWidget {
         mealRepository: context.read<MealRepository>(),
         foodRepository: context.read<FoodRepository>(),
         editing: meal,
+        initialIsPublic: initialIsPublic,
       ),
       child: const _MealEditorView(),
     );
