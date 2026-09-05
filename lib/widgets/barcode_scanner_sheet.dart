@@ -94,10 +94,11 @@ class _BarcodeScannerSheetState extends State<BarcodeScannerSheet> {
                   // A denied permission or a device with no usable camera is a
                   // normal outcome, not a crash — the user can still search by
                   // name, which is what the message says.
-                  // Three parameters, not two: the builder is handed the
-                  // preview it would have wrapped, which is null while the
-                  // camera never started.
-                  errorBuilder: (context, error, child) => _buildError(error),
+                  //
+                  // Two parameters as of mobile_scanner 7. The third used to be
+                  // the preview this would have wrapped, which was null in
+                  // every case that reached here anyway.
+                  errorBuilder: (context, error) => _buildError(error),
                 ),
                 IgnorePointer(child: CustomPaint(painter: _ReticlePainter())),
               ],

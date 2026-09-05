@@ -34,7 +34,16 @@ require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelpe
 flutter_ios_podfile_setup
 
 target 'Runner' do
-  use_frameworks!
+  # Static linkage, which is what Firebase asks for on Flutter and what stops
+  # two pods each bringing their own copy of a shared dependency and one of
+  # them winning at runtime.
+  #
+  # This app hit exactly that: mobile_scanner pulls in Google ML Kit, Firebase
+  # pulls in GoogleUtilities, and with dynamic frameworks ML Kit ended up
+  # calling a GULUserDefaults method that the version Firebase needs no longer
+  # has. It crashed at launch, inside GeneratedPluginRegistrant, before any
+  # Dart ran — see the note on mobile_scanner in pubspec.yaml.
+  use_frameworks! :linkage => :static
 
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 

@@ -58,7 +58,12 @@ dependencies:
 
   # Barcode scanning for the ingredient picker. A scanned code is the one input
   # that identifies a packaged food exactly, with no spelling and no ranking.
-  mobile_scanner: ^5.2.3
+  # 7.x, and the floor matters. Older releases bundle a Google ML Kit that
+  # calls `-[GULUserDefaults synchronize]`, which GoogleUtilities 8 — the
+  # version firebase_core requires — removed. The app launched, ML Kit's
+  # analytics logger ran during plugin registration, and it died on an
+  # unrecognized selector before a single line of Dart executed.
+  mobile_scanner: ^7.0.0
 
   # Remembering where launch should go. Already present transitively — both
   # easy_localization and supabase_flutter use it — and declared here because

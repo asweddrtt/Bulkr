@@ -217,3 +217,4 @@ already has, so you never have to touch `pubspec.yaml`.
 | `The bundle version must be higher than the previously uploaded version` | A build with that number already exists; re-run, the counter moves |
 | Pod install fails on a deployment target | A new dependency wants more than iOS 13 — raise it in `ios/Podfile` *and* in Xcode's `IPHONEOS_DEPLOYMENT_TARGET` |
 | Google sign-in opens and returns nothing | Step 2 was skipped |
+| Crash at launch in `MLKAnalyticsLogger` / `unrecognized selector ... synchronize` | ML Kit and Firebase disagreeing about GoogleUtilities. Fixed by mobile_scanner 7 plus static linkage in the Podfile; if it comes back, a new pod has brought an old GoogleUtilities with it |
