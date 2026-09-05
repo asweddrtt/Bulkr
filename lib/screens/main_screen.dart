@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../cubit/conversations/conversations_cubit.dart';
 import '../cubit/feed/feed_cubit.dart';
 import '../cubit/meals/meals_cubit.dart';
 import '../cubit/profile/profile_cubit.dart';
@@ -16,30 +17,62 @@ import 'dashboard_screen.dart';
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
 
+  /// The five tabs, in order.
+  ///
+  /// Public so a test can check that every label is a key the translations
+  /// actually carry. Four of these used to be the English word itself, which
+  /// easy_localization renders by handing back the key it could not find — so
+  /// the bar read correctly in English and read English in every other locale,
+  /// silently, with nothing to notice unless you switched language.
+  static const List<NavDestination> destinations = [
+    NavDestination(Icons.dashboard_sharp, 'nav_dashboard'),
+    NavDestination(Icons.restaurant_sharp, 'nav_meals'),
+    NavDestination(Icons.dynamic_feed_sharp, 'nav_feed'),
+    NavDestination(Icons.electric_bolt_sharp, 'nav_tracker'),
+    NavDestination(Icons.person_sharp, 'nav_profile'),
+  ];
+
   @override
   State<MainScreen> createState() => _MainScreenState();
 }
 
-class _MainScreenState extends State<MainScreen> {
+class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   int _currentIndex = 2;
-
-  static const List<NavDestination> _destinations = [
-    NavDestination(Icons.dashboard_sharp, 'Dashboard'),
-    NavDestination(Icons.restaurant_sharp, 'Meals'),
-    NavDestination(Icons.dynamic_feed_sharp, 'Feed'),
-    NavDestination(Icons.electric_bolt_sharp, 'Tracker'),
-    NavDestination(Icons.person_sharp, 'profile'),
-  ];
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // Fetched once when the shell mounts rather than on each tab switch, so
     // moving between tabs doesn't re-hit the network.
     context.read<ProfileCubit>().load();
     context.read<MealsCubit>().load();
     context.read<FeedCubit>().load();
     context.read<TrackerCubit>().load();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  /// Two things that go stale while the app is not being looked at.
+  ///
+  /// Coming back is the moment they matter and the moment nobody minds a
+  /// request, so this is where they are caught rather than on a timer. A timer
+  /// would be asking a server the same two questions all day for a user who is
+  /// not there — the pattern that makes a small app expensive to run.
+  ///
+  /// Both are cheap and neither blanks anything: the unread count is one call
+  /// that only moves a dot, and the tracker returns immediately unless the day
+  /// has actually turned over.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+
+    context.read<ConversationsCubit>().refresh();
+    context.read<TrackerCubit>().refreshIfDayChanged();
   }
 
   /// Index of the Tracker tab, which needs a nudge the others do not.
@@ -80,7 +113,7 @@ class _MainScreenState extends State<MainScreen> {
         ),
       ),
       bottomNavigationBar: BulkrNavBar(
-        destinations: _destinations,
+        destinations: MainScreen.destinations,
         currentIndex: _currentIndex,
         onSelected: _select,
       ),

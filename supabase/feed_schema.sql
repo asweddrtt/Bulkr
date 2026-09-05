@@ -355,11 +355,11 @@ begin
 end;
 $$;
 
--- To run it hourly, once pg_cron is enabled for the project (Dashboard ->
--- Database -> Extensions -> pg_cron). Left commented because enabling an
--- extension is a project-level decision, and Discover is correct without it —
--- just increasingly stale at the top. Every posts_* index above is on the
--- stored column, so the sweep is what keeps them meaningful.
+-- Scheduling this is `maintenance_cron.sql`, which enables pg_cron and sets it
+-- to run hourly. Kept in its own file because enabling an extension is a
+-- project-level decision, and Discover is correct without it — just
+-- increasingly stale at the top. Every posts_* index above is on the stored
+-- column, so the sweep is what keeps them meaningful.
 --
 --   select cron.schedule(
 --     'refresh-post-hot-scores',

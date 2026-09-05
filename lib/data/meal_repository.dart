@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../core/storage_cache.dart';
 import '../models/daily_log_entry.dart';
 import '../models/food_item.dart';
 import '../models/macros.dart';
@@ -604,6 +605,9 @@ class MealRepository {
           fileOptions: FileOptions(
             contentType: _contentTypeFor(extension),
             upsert: false,
+            // The path is unique and never rewritten, so the file behind this
+            // URL cannot change — see StorageCache.
+            cacheControl: StorageCache.immutable,
           ),
         );
 

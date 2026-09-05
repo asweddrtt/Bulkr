@@ -15,6 +15,7 @@ import '../models/macros.dart';
 import '../models/meal.dart';
 import '../models/meal_ingredient.dart';
 import '../styles/app_color.dart';
+import '../widgets/bulkr_image.dart';
 import '../widgets/visibility_picker.dart';
 import '../widgets/animations/press_scale.dart';
 import '../widgets/barcode_scanner_sheet.dart';
@@ -229,10 +230,9 @@ class _PhotoPicker extends StatelessWidget {
                           if (bytes != null)
                             Image.memory(bytes, fit: BoxFit.cover)
                           else
-                            Image.network(
-                              storedUrl!,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => _buildPrompt(),
+                            BulkrImage(
+                              url: storedUrl!,
+                              fallback: _buildPrompt(),
                             ),
                           Positioned(
                             right: 8.w,

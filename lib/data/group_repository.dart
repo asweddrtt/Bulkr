@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../core/storage_cache.dart';
 import '../models/group.dart';
 
 /// Reads and writes groups and who is in them.
@@ -279,6 +280,9 @@ class GroupRepository {
           fileOptions: FileOptions(
             contentType: _contentTypeFor(extension),
             upsert: false,
+            // The path is unique and never rewritten, so the file behind this
+            // URL cannot change — see StorageCache.
+            cacheControl: StorageCache.immutable,
           ),
         );
 

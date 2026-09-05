@@ -13,6 +13,7 @@ import '../models/plan_breakdown.dart';
 import '../models/user_profile.dart';
 import '../models/weight_entry.dart';
 import '../styles/app_color.dart';
+import '../widgets/bulkr_image.dart';
 import '../widgets/bulkr_nav_bar.dart';
 import '../widgets/animations/entrance.dart';
 import '../widgets/animations/press_scale.dart';
@@ -255,7 +256,7 @@ class _ProfileView extends StatelessWidget {
                     backgroundColor: DashboardScreen.borderColor,
                     backgroundImage: profile.avatarUrl == null
                         ? null
-                        : NetworkImage(profile.avatarUrl!),
+                        : BulkrImage.provider(profile.avatarUrl!),
                     child: profile.avatarUrl == null
                         ? Icon(Icons.person,
                             color: DashboardScreen.textMuted, size: 20.sp)

@@ -64,6 +64,7 @@ dependencies:
   # easy_localization and supabase_flutter use it — and declared here because
   # AppPreferences calls it directly.
   shared_preferences: ^2.3.2
+  cached_network_image: ^4.0.0
   # NOTE: `intl` (DateFormat/NumberFormat) is not listed here on purpose —
   # easy_localization re-exports it, which is how NumberFormat is already used
   # in the reveal screen. Adding it explicitly risks a resolution conflict with

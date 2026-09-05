@@ -5,7 +5,9 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../core/relative_time.dart';
 import '../models/post.dart';
+import '../screens/photo_viewer_screen.dart';
 import '../styles/app_color.dart';
+import 'bulkr_image.dart';
 import 'animations/press_scale.dart';
 import 'challenge_card.dart';
 import 'person_row.dart';
@@ -310,10 +312,12 @@ class PostCard extends StatelessWidget {
                         size: 18.sp,
                       ),
                     )
-                  : Image.network(
-                      meal.imageUrl!,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => ColoredBox(
+                  : BulkrImage(
+                      url: meal.imageUrl!,
+                      width: 44.w,
+                      height: 44.w,
+                      placeholderColor: _imageColor,
+                      fallback: ColoredBox(
                         color: _imageColor,
                         child: Icon(
                           Icons.restaurant_sharp,
@@ -494,6 +498,14 @@ class _PostImagesState extends State<_PostImages> {
     super.dispose();
   }
 
+  /// Opens the photo full size. The crop below is a layout decision, and this
+  /// is how the reader sees past it.
+  void _openViewer(int index) => PhotoViewerScreen.open(
+        context,
+        urls: widget.urls,
+        initialIndex: index,
+      );
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -503,12 +515,15 @@ class _PostImagesState extends State<_PostImages> {
           // a progress post cropped to landscape loses the part it is about.
           aspectRatio: 4 / 5,
           child: widget.urls.length == 1
-              ? _Photo(url: widget.urls.first)
+              ? _Photo(url: widget.urls.first, onTap: () => _openViewer(0))
               : PageView.builder(
                   controller: _controller,
                   itemCount: widget.urls.length,
                   onPageChanged: (page) => setState(() => _page = page),
-                  itemBuilder: (_, index) => _Photo(url: widget.urls[index]),
+                  itemBuilder: (_, index) => _Photo(
+                    url: widget.urls[index],
+                    onTap: () => _openViewer(index),
+                  ),
                 ),
         ),
         if (widget.urls.length > 1)
@@ -538,26 +553,30 @@ class _PostImagesState extends State<_PostImages> {
 }
 
 class _Photo extends StatelessWidget {
-  const _Photo({required this.url});
+  const _Photo({required this.url, this.onTap});
 
   final String url;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return ColoredBox(
-      color: const Color(0xFF232323),
-      child: Image.network(
-        url,
-        fit: BoxFit.cover,
-        // A grey block while it loads, not a spinner. A feed of spinners
-        // flickers; a feed of placeholders just fills in.
-        loadingBuilder: (_, child, progress) =>
-            progress == null ? child : const SizedBox.shrink(),
-        errorBuilder: (_, __, ___) => Center(
-          child: Icon(
-            Icons.image_not_supported_outlined,
-            color: AppColors.textGray,
-            size: 22.sp,
+    return GestureDetector(
+      onTap: onTap,
+      child: ColoredBox(
+        color: const Color(0xFF232323),
+        // No decode width: this one is as wide as the screen, so there is
+        // nothing to shrink it to. The grey block while it loads is the same
+        // one behind it — a feed of spinners flickers, a feed of blocks fills
+        // in.
+        child: BulkrImage(
+          url: url,
+          placeholderColor: const Color(0xFF232323),
+          fallback: Center(
+            child: Icon(
+              Icons.image_not_supported_outlined,
+              color: AppColors.textGray,
+              size: 22.sp,
+            ),
           ),
         ),
       ),

@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/chat_message.dart';
@@ -47,24 +46,6 @@ class ChatRepository {
         .whereType<Map<String, dynamic>>()
         .map(Conversation.fromRow)
         .toList();
-  }
-
-  /// Total unread across every conversation, for the badge on the nav.
-  Future<int> unreadTotal() async {
-    try {
-      final List<Conversation> conversations = await fetchConversations();
-
-      int total = 0;
-      for (final Conversation conversation in conversations) {
-        total += conversation.unreadCount;
-      }
-      return total;
-    } catch (error) {
-      // A badge is not worth an error state. Zero reads as "nothing new",
-      // which is what an unreachable server looks like anyway.
-      debugPrint('Bulkr: unread count unavailable — $error');
-      return 0;
-    }
   }
 
   // --- One thread ----------------------------------------------------------

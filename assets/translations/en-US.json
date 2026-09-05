@@ -546,5 +546,10 @@
   "chat_unsend_failed": "Couldn't unsend that message.",
   "chat_unsend_title": "Unsend?",
   "chat_unsend_body": "This removes the message for both of you.",
-  "chat_unsend_action": "Unsend"
+  "chat_unsend_action": "Unsend",
+  "nav_dashboard": "Dashboard",
+  "nav_meals": "Meals",
+  "nav_feed": "Feed",
+  "nav_tracker": "Tracker",
+  "nav_profile": "Profile"
 }
