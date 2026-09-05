@@ -63,6 +63,8 @@ dependencies:
   # version firebase_core requires — removed. The app launched, ML Kit's
   # analytics logger ran during plugin registration, and it died on an
   # unrecognized selector before a single line of Dart executed.
+  #
+  # Android was never affected: its ML Kit does not go through GoogleUtilities.
   mobile_scanner: ^7.0.0
 
   # Remembering where launch should go. Already present transitively — both

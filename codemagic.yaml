@@ -23,7 +23,6 @@ workflows:
     environment:
       flutter: stable
       xcode: latest
-      cocoapods: default
 
       groups:
         # Codemagic -> Environment variables. See ios/TESTFLIGHT.md for what
@@ -94,10 +93,6 @@ workflows:
       - name: Work out the build number
         script: |
           echo "BUILD_NUMBER=$(($(app-store-connect get-latest-testflight-build-number "$APP_STORE_APP_ID" 2>/dev/null || echo 0) + 1))" >> $CM_ENV
-
-      - name: Install pods
-        script: |
-          find . -name "Podfile" -execdir pod install \;
 
       - name: Analyze and test
         script: |

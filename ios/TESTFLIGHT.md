@@ -14,7 +14,7 @@ These were genuine blockers, not paperwork:
 
 | | |
 | --- | --- |
-| `ios/Podfile` | Was absent, so a cloud build would generate its own with whatever deployment target Flutter's template defaults to. Committed, pinned to iOS 13, which is what the Firebase pods need. |
+| ~~`ios/Podfile`~~ | Added, then removed. Flutter now resolves every iOS plugin through Swift Package Manager, and a hand-written Podfile is what stops it finishing that migration — it reports "your project uses a non-standard Podfile" and then archives against a Pods sandbox that no longer matches. There is no Podfile now, on purpose. |
 | `ios/Runner/Runner.entitlements` | Without `aps-environment`, iOS never hands the app an APNs token — `getToken()` returns null and nothing says why. Added and wired into all three build configurations. |
 | Google Sign-In URL scheme | The Google SDK redirects back to the *reversed* client id. Without the scheme the picker opens, you choose an account, and nothing comes back. Added to `Info.plist` — **you must replace the placeholder**, see step 2. |
 
@@ -215,6 +215,7 @@ already has, so you never have to touch `pubspec.yaml`.
 | `App Store Connect integration "bulkr_asc" does not exist` | The API key is not registered in Codemagic under that exact name |
 | `Provisioning profile doesn't match the entitlements` | Push Notifications not ticked on the App ID |
 | `The bundle version must be higher than the previously uploaded version` | A build with that number already exists; re-run, the counter moves |
-| Pod install fails on a deployment target | A new dependency wants more than iOS 13 — raise it in `ios/Podfile` *and* in Xcode's `IPHONEOS_DEPLOYMENT_TARGET` |
+| `The sandbox is not in sync with the Podfile.lock` | Something reintroduced a Podfile. All plugins are Swift Packages; there should not be one |
+| A pod wants a higher deployment target | Raise `IPHONEOS_DEPLOYMENT_TARGET` in `project.pbxproj` and `MinimumOSVersion` in `ios/Flutter/AppFrameworkInfo.plist` — both, or Flutter rewrites them mid-build |
 | Google sign-in opens and returns nothing | Step 2 was skipped |
 | Crash at launch in `MLKAnalyticsLogger` / `unrecognized selector ... synchronize` | ML Kit and Firebase disagreeing about GoogleUtilities. Fixed by mobile_scanner 7 plus static linkage in the Podfile; if it comes back, a new pod has brought an old GoogleUtilities with it |
