@@ -113,9 +113,14 @@ To read the generated secret back out for the next step:
 (Get-Content supabase\.env | Select-String '^PUSH_WEBHOOK_SECRET=').Line -replace '^PUSH_WEBHOOK_SECRET=', ''
 ```
 
-## 5. Dashboard — the webhook
+## 5. The webhook
 
-Database → **Webhooks** → Create a new hook:
+Newer dashboards moved this out of Database. It is under **Integrations ->
+Database Webhooks**:
+
+    https://supabase.com/dashboard/project/<your ref>/integrations/webhooks/overview
+
+Enable webhooks if prompted, then create the hook:
 
 | Field | Value |
 | --- | --- |
@@ -123,12 +128,15 @@ Database → **Webhooks** → Create a new hook:
 | Events | Insert |
 | Type | Supabase Edge Functions |
 | Edge Function | `send-push` |
-| HTTP headers | `x-push-secret` : *the value from step 4* |
+| HTTP headers | `x-push-secret` : *the value from step 3* |
 
-A trigger calling out directly would hold a transaction open across the
-network, so a slow FCM would turn "somebody liked your post" into a like that
-takes four seconds to record. The webhook fires after commit — the like is
-saved whatever happens next.
+If that page will not cooperate, `supabase/push_webhook.sql` sets up the same
+thing in SQL you can read: replace two values at the top and run it.
+
+Either route ends up as a trigger calling `net.http_post`, which is
+asynchronous — pg_net queues the request and a background worker drains it, so
+the insert never waits on the network. The like is recorded whether or not FCM
+is reachable.
 
 ## 6. The app
 
