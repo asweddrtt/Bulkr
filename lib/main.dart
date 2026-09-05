@@ -30,6 +30,7 @@ import 'data/meal_repository.dart';
 import 'data/post_repository.dart';
 import 'data/user_repository.dart';
 import 'go_router/router_config.dart';
+import 'screens/boot_screen.dart';
 import 'screens/startup_failure_screen.dart';
 import 'styles/app_color.dart';
 
@@ -45,6 +46,17 @@ const Duration _startupBudget = Duration(seconds: 15);
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Painted before anything is awaited, so the app is never white.
+  //
+  // Nothing in Bulkr is white — the theme is black, the splash and the failure
+  // screen are #121212 — so a white screen is the *native* launch screen still
+  // showing, which means Dart never produced a frame. Drawing here, first,
+  // turns that into a question with two answers instead of a mystery: if this
+  // appears, the engine is fine and the problem is in what follows; if it does
+  // not, the problem is below Dart entirely and nothing in `main` could have
+  // caught it.
+  runApp(BootScreen.app());
 
   // Named so a failure can say which one. On a device you cannot attach a
   // debugger to — which is most devices, and every TestFlight tester — "it
