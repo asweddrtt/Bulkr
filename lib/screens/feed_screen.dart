@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../cubit/conversations/conversations_cubit.dart';
 import '../cubit/feed/feed_cubit.dart';
 import '../cubit/meals/meals_cubit.dart';
 import '../core/post_link.dart';
@@ -20,6 +21,7 @@ import '../widgets/post_label_chip.dart';
 import 'author_profile_screen.dart';
 import 'challenge_leaderboard_sheet.dart';
 import 'group_screen.dart';
+import 'conversations_screen.dart';
 import 'search_screen.dart';
 import 'post_comments_sheet.dart';
 import 'post_composer_screen.dart';
@@ -135,6 +137,7 @@ class _FeedHeader extends StatelessWidget {
                 ),
               ),
               const _FeedTabs(),
+              const _InboxButton(),
               // One icon, not two. People and groups used to have one each,
               // which made the header a menu of the app's data model rather
               // than of what anyone wants to do — and "find the thing I am
@@ -165,6 +168,75 @@ class _FeedHeader extends StatelessWidget {
         ),
         SizedBox(height: 12.h),
       ],
+    );
+  }
+}
+
+/// The way into direct messages, with a count of what is waiting.
+///
+/// Stateful only to kick the first load: [ConversationsCubit] lives above the
+/// router and is deliberately lazy, so something signed-in has to ask it for
+/// the list once. The feed is the first signed-in screen anybody sees, which
+/// makes it the honest place to do that.
+class _InboxButton extends StatefulWidget {
+  const _InboxButton();
+
+  @override
+  State<_InboxButton> createState() => _InboxButtonState();
+}
+
+class _InboxButtonState extends State<_InboxButton> {
+  @override
+  void initState() {
+    super.initState();
+    final ConversationsCubit cubit = context.read<ConversationsCubit>();
+    if (cubit.state.status == ConversationsStatus.initial) cubit.load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<ConversationsCubit, ConversationsState>(
+      buildWhen: (previous, current) =>
+          previous.unreadTotal != current.unreadTotal,
+      builder: (context, state) {
+        final int unread = state.unreadTotal;
+
+        return PressScale(
+          child: GestureDetector(
+            onTap: () => ConversationsScreen.open(context),
+            behavior: HitTestBehavior.opaque,
+            child: Padding(
+              padding: EdgeInsets.only(left: 10.w),
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Icon(
+                    Icons.mail_outline_rounded,
+                    color: AppColors.textGray,
+                    size: 21.sp,
+                  ),
+                  // A dot rather than a number: at this size a two-digit count
+                  // is unreadable, and the inbox itself is one tap away with
+                  // the real numbers on it.
+                  if (unread > 0)
+                    Positioned(
+                      top: -1.h,
+                      right: -1.w,
+                      child: Container(
+                        width: 8.w,
+                        height: 8.w,
+                        decoration: const BoxDecoration(
+                          color: AppColors.primaryNeon,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

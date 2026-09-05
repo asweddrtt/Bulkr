@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/config/supabase_config.dart';
 import 'cubit/auth/auth_cubit.dart';
+import 'cubit/conversations/conversations_cubit.dart';
 import 'cubit/feed/feed_cubit.dart';
 import 'cubit/meals/meals_cubit.dart';
 import 'cubit/onboarding/onboarding_cubit.dart';
@@ -16,6 +17,7 @@ import 'data/app_preferences.dart';
 import 'data/auth_repository.dart';
 import 'data/challenge_repository.dart';
 import 'data/follow_repository.dart';
+import 'data/chat_repository.dart';
 import 'data/food_repository.dart';
 import 'data/group_repository.dart';
 import 'data/moderation_repository.dart';
@@ -61,6 +63,7 @@ class _BulkrAppState extends State<BulkrApp> {
   late final GroupRepository _groupRepository;
   late final ChallengeRepository _challengeRepository;
   late final ModerationRepository _moderationRepository;
+  late final ChatRepository _chatRepository;
   late final PostRepository _postRepository;
   late final GoRouter _router;
 
@@ -78,6 +81,7 @@ class _BulkrAppState extends State<BulkrApp> {
     _groupRepository = GroupRepository();
     _challengeRepository = ChallengeRepository();
     _moderationRepository = ModerationRepository();
+    _chatRepository = ChatRepository();
     // For You is "posts by people you follow, plus posts in your groups", and
     // a challenge post carries a challenge — so the post repository reads all
     // three through the repositories that own them rather than querying their
@@ -124,6 +128,11 @@ class _BulkrAppState extends State<BulkrApp> {
         // The profile's edit sheet writes name and bio, so it needs the
         // repository that owns `users`.
         RepositoryProvider.value(value: _userRepository),
+        // Direct messages. Held here rather than created per thread because a
+        // thread screen and the inbox behind it must talk to the same client —
+        // and because the realtime channel a thread opens is torn down by the
+        // cubit, not by the repository.
+        RepositoryProvider.value(value: _chatRepository),
       ],
       child: MultiBlocProvider(
       // Above the router on purpose — onboarding answers have to survive
@@ -154,6 +163,12 @@ class _BulkrAppState extends State<BulkrApp> {
             // measured against — see the note on the cubit.
             userRepository: _userRepository,
           ),
+        ),
+        // App-wide so the unread badge in the feed header and the inbox
+        // itself are the same list. Loaded lazily: `lazy: false` would fire a
+        // request before anybody is signed in.
+        BlocProvider(
+          create: (_) => ConversationsCubit(chatRepository: _chatRepository),
         ),
         BlocProvider(
           create: (_) => FeedCubit(

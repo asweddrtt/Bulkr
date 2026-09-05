@@ -24,6 +24,7 @@ import '../widgets/person_row.dart';
 import '../widgets/post_actions_sheet.dart';
 import '../widgets/post_card.dart';
 import '../widgets/report_sheet.dart';
+import 'chat_screen.dart';
 import 'people_list_screen.dart';
 import 'post_comments_sheet.dart';
 
@@ -765,21 +766,68 @@ class _ProfileHeader extends StatelessWidget {
           ),
           if (person.isFollowable) ...[
             SizedBox(height: 18.h),
-            SizedBox(
-              width: double.infinity,
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: FollowButton(
+            Row(
+              children: [
+                FollowButton(
                   isFollowing: person.isFollowedByMe,
                   isBusy: state.isFollowWriting,
                   onTap: () => context.read<AuthorCubit>().toggleFollow(),
                 ),
-              ),
+                // Not shown while a block is in place. The server refuses the
+                // conversation either way, and offering a button that can only
+                // fail is worse than not offering it — the block sheet in the
+                // corner is where that gets taken back.
+                if (!state.isBlocked) ...[
+                  SizedBox(width: 10.w),
+                  _MessageButton(person: person),
+                ],
+              ],
             ),
           ],
           SizedBox(height: 8.h),
           Divider(color: AppColors.darkBorder, height: 1),
         ],
+      ),
+    );
+  }
+}
+
+/// Opens a direct thread with the person whose profile this is.
+///
+/// Outlined rather than filled: following is the call to action on a profile,
+/// and two solid buttons side by side would make neither of them the point.
+class _MessageButton extends StatelessWidget {
+  const _MessageButton({required this.person});
+
+  final Person person;
+
+  @override
+  Widget build(BuildContext context) {
+    return PressScale(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => ChatScreen.openWith(
+          context,
+          personId: person.id,
+          name: person.name,
+          avatarUrl: person.avatarUrl,
+        ),
+        child: Container(
+          padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 10.h),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(6.r),
+            border: Border.all(color: AppColors.darkBorder),
+          ),
+          child: Text(
+            'chat_message_action'.tr().toUpperCase(),
+            style: GoogleFonts.inter(
+              color: Colors.white,
+              fontSize: 11.sp,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.9,
+            ),
+          ),
+        ),
       ),
     );
   }

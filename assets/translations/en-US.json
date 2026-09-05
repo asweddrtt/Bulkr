@@ -530,5 +530,21 @@
   "profile_tab_meals": "Meals",
   "profile_no_meals": "No meals to show.",
   "profile_no_meals_body": "They may not have shared any, or theirs may be private.",
-  "profile_no_meals_mine": "You haven't created any meals yet."
+  "profile_no_meals_mine": "You haven't created any meals yet.",
+  "chat_inbox_title": "Messages",
+  "chat_inbox_empty": "No messages yet. Open someone's profile and tap Message to start.",
+  "chat_inbox_failed": "Couldn't load your messages.",
+  "chat_inbox_no_messages": "No messages yet.",
+  "chat_inbox_from_you": "You: {body}",
+  "chat_message_action": "Message",
+  "chat_person_gone": "Deleted account",
+  "chat_unavailable": "You can't message that person.",
+  "chat_load_failed": "Couldn't load this conversation.",
+  "chat_empty": "Nothing here yet. Say something.",
+  "chat_hint": "Message",
+  "chat_send_failed": "That message didn't send.",
+  "chat_unsend_failed": "Couldn't unsend that message.",
+  "chat_unsend_title": "Unsend?",
+  "chat_unsend_body": "This removes the message for both of you.",
+  "chat_unsend_action": "Unsend"
 }

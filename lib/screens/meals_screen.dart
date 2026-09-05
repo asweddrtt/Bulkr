@@ -282,7 +282,7 @@ class _TabButton extends StatelessWidget {
 }
 
 class _MealsList extends StatelessWidget {
-  const _MealsList({super.key, required this.state, required this.viewTab});
+  const _MealsList({required this.state, required this.viewTab});
 
   final MealsState state;
   final MealsTab viewTab;
@@ -568,7 +568,7 @@ class _CreateMealButton extends StatelessWidget {
 }
 class _MealsSwipeView extends StatefulWidget {
   final MealsState state;
-  const _MealsSwipeView({super.key, required this.state});
+  const _MealsSwipeView({required this.state});
 
   @override
   State<_MealsSwipeView> createState() => _MealsSwipeViewState();
