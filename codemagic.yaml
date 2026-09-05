@@ -25,10 +25,6 @@ workflows:
       xcode: latest
       cocoapods: default
 
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.alimahmoud.bulkr
-
       groups:
         # Codemagic -> Environment variables. See ios/TESTFLIGHT.md for what
         # goes in it.
@@ -38,6 +34,33 @@ workflows:
         BUNDLE_ID: com.alimahmoud.bulkr
 
     scripts:
+      # Signing, done explicitly rather than through the `ios_signing:` block.
+      #
+      # That block fetches whatever profiles already exist and fails with "No
+      # matching profiles found for bundle identifier ... and distribution type
+      # app_store" when there are none — which is the state every project is in
+      # before its first build. `--create` is the difference: it issues the
+      # distribution certificate and the provisioning profile if they are
+      # missing, and reuses them every time after.
+      #
+      # This needs the App Store Connect key to be a **Team Key** with App
+      # Manager or Admin access. A key scoped to an individual app cannot
+      # manage certificates at all, and fails here rather than at the point
+      # where it was created.
+      - name: Fetch or create the signing files
+        script: |
+          app-store-connect fetch-signing-files "$BUNDLE_ID" --type IOS_APP_STORE --create
+
+      - name: Load them into a keychain
+        script: |
+          keychain initialize
+          keychain add-certificates
+
+      # Rewrites the Xcode project to point at the profile just fetched, and
+      # writes the export options plist the ipa build reads.
+      - name: Point Xcode at the profile
+        script: xcode-project use-profiles
+
       - name: Fetch packages
         script: flutter pub get
 
@@ -62,7 +85,7 @@ workflows:
           flutter build ipa --release \
             --build-number=$BUILD_NUMBER \
             --dart-define=GOOGLE_IOS_CLIENT_ID="$GOOGLE_IOS_CLIENT_ID" \
-            --export-options-plist=/Users/builder/export_options.plist
+            --export-options-plist=$HOME/export_options.plist
 
     artifacts:
       - build/ios/ipa/*.ipa

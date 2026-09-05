@@ -88,6 +88,13 @@ Users and Access → **Integrations** → App Store Connect API → **+**
 
 <https://codemagic.io> — sign in with GitHub, add the `Bulkr` repository.
 
+**The API key must be a Team Key**, created under Users and Access →
+Integrations → **Team Keys**, with **App Manager** or **Admin** access. A key
+made under *Individual Keys* is scoped to one app and cannot manage
+certificates or profiles at all — and it does not say so when you create it. It
+says so here, as "No matching profiles found", which reads like the profile is
+missing rather than like the key cannot make one.
+
 **Teams → Integrations → Developer Portal → Add key:**
 
 | Field | Value |
@@ -158,6 +165,7 @@ already has, so you never have to touch `pubspec.yaml`.
 
 | Message | Cause |
 | --- | --- |
+| `No matching profiles found for bundle identifier ... app_store` | There is no App Store profile yet, which is normal before the first build. The workflow creates one with `--create`; if it still fails, the App Store Connect key is the cause — see below |
 | `No profiles for 'com.alimahmoud.bulkr' were found` | The App ID or the App Store Connect app record does not exist yet — steps 3 and 4 |
 | `Provisioning profile doesn't match the entitlements` | Push Notifications not ticked on the App ID |
 | `The bundle version must be higher than the previously uploaded version` | A build with that number already exists; re-run, the counter moves |
