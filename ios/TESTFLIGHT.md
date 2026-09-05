@@ -101,8 +101,13 @@ Users and Access → **Integrations** → App Store Connect API → **+**
 
 | Name | Value | Secure |
 | --- | --- | --- |
-| `GOOGLE_IOS_CLIENT_ID` | `CLIENT_ID` from `GoogleService-Info.plist` | no |
+| `GOOGLE_IOS_CLIENT_ID` | the iOS OAuth client id from step 2, un-reversed | no |
 | `APP_STORE_APP_ID` | the Apple ID number from step 4 | no |
+
+Not from `GoogleService-Info.plist`, which has no `CLIENT_ID` in it — the two
+are different Google Cloud projects, and the plist even says so: its
+`GCM_SENDER_ID` is 848696099138 while the OAuth client is 482455223938.
+Firebase sends pushes; the other project owns sign-in.
 
 `GOOGLE_IOS_CLIENT_ID` is a `--dart-define` — see
 `lib/core/config/supabase_config.dart`. Without it, Google sign-in on iOS
