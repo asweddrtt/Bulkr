@@ -13,6 +13,7 @@ class ChatState extends Equatable {
     this.errorMessage,
     this.actionErrorKey,
     this.actionErrorDetail,
+    this.otherLastReadAt,
   });
 
   final String conversationId;
@@ -33,7 +34,31 @@ class ChatState extends Equatable {
   final String? actionErrorKey;
   final String? actionErrorDetail;
 
+  /// When the other person last opened this thread.
+  ///
+  /// Null when they never have, when there is nobody else in it, or when the
+  /// read failed — all three show no receipt, because a tick that appeared
+  /// because a query errored would be worse than no tick at all.
+  final DateTime? otherLastReadAt;
+
   bool get isEmpty => messages.isEmpty;
+
+  /// The last message this user sent, if it is the kind a receipt can be shown
+  /// under: theirs, stored, and older than the other person's last read.
+  ///
+  /// One receipt at the bottom rather than a tick on every bubble. Read
+  /// receipts are cumulative — reading a thread reads everything above — so a
+  /// column of identical ticks says nothing the last one does not.
+  ChatMessage? get lastSeenMessage {
+    final DateTime? seenAt = otherLastReadAt;
+    if (seenAt == null) return null;
+
+    for (final ChatMessage message in messages.reversed) {
+      if (!message.isMine || message.isPending) continue;
+      return message.createdAt.isAfter(seenAt) ? null : message;
+    }
+    return null;
+  }
 
   ChatState copyWith({
     ChatStatus? status,
@@ -46,6 +71,7 @@ class ChatState extends Equatable {
     String? actionErrorKey,
     String? actionErrorDetail,
     bool clearActionError = false,
+    DateTime? otherLastReadAt,
   }) {
     return ChatState(
       conversationId: conversationId,
@@ -60,6 +86,7 @@ class ChatState extends Equatable {
       actionErrorDetail: clearActionError
           ? null
           : (actionErrorDetail ?? this.actionErrorDetail),
+      otherLastReadAt: otherLastReadAt ?? this.otherLastReadAt,
     );
   }
 
@@ -74,5 +101,6 @@ class ChatState extends Equatable {
         errorMessage,
         actionErrorKey,
         actionErrorDetail,
+        otherLastReadAt,
       ];
 }

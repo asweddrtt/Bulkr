@@ -63,6 +63,50 @@ class ChallengeRepository {
     return resolved.first;
   }
 
+  /// Every challenge this user has joined, newest first.
+  ///
+  /// The leaderboard used to be reachable from exactly one place: a challenge
+  /// post, while it was still on screen. Scroll past it and the challenge you
+  /// had joined was gone — the standings, the deadline, all of it — until the
+  /// post happened to come round again.
+  ///
+  /// Two queries rather than an embed. `challenge_participants` points at both
+  /// `challenges` and `users` and has nothing else of its own, which is the
+  /// exact shape PostgREST reads as a junction table, so embedding from that
+  /// side is where PGRST201 comes from. Asking for the ids and then the rows
+  /// is one more round trip and no ambiguity.
+  Future<List<Challenge>> fetchMine() async {
+    final String? userId = _userId;
+    if (userId == null) return const <Challenge>[];
+
+    final List<Map<String, dynamic>> joins = await _client
+        .from('challenge_participants')
+        .select('challenge_id')
+        .eq('user_id', userId);
+
+    final List<String> ids = [
+      for (final Map<String, dynamic> row in joins) '${row['challenge_id']}',
+    ];
+
+    if (ids.isEmpty) return const <Challenge>[];
+
+    final List<Map<String, dynamic>> rows = await _client
+        .from('challenges')
+        .select(_challengeColumns)
+        .inFilter('id', ids)
+        // Live ones first, then the most recently finished. Someone opening
+        // this is almost always looking at something still running.
+        .order('ends_at', ascending: false);
+
+    return rows
+        .map((row) => Challenge.fromRow(row, currentUserId: userId))
+        // Every one of these came out of this user's own participation rows,
+        // so joining is already established and `_withMyParticipation` would
+        // be a third query to learn what the first one said.
+        .map((challenge) => challenge.copyWith(hasJoined: true))
+        .toList();
+  }
+
   /// Attaches a challenge to a post the user wrote.
   ///
   /// The policy checks the same thing — only a post's author may attach one —

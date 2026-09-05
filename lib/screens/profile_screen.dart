@@ -35,6 +35,7 @@ import '../widgets/report_sheet.dart';
 import 'author_profile_screen.dart';
 import 'group_screen.dart';
 import 'groups_screen.dart';
+import 'my_challenges_screen.dart';
 import 'saved_posts_screen.dart';
 import 'people_list_screen.dart';
 import 'blocked_people_screen.dart';
@@ -418,6 +419,7 @@ class _Header extends StatelessWidget {
       onEditProfile: person == null ? null : () => _edit(context, person),
       onSavedPosts: () => SavedPostsScreen.open(context),
       onCreateGroup: () => _createGroup(context),
+      onChallenges: () => MyChallengesScreen.open(context),
       onManageBlocked: () => BlockedPeopleScreen.open(context),
       onDeleteAccount: () => _deleteAccount(context, auth, router, users),
     );

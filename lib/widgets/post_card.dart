@@ -303,7 +303,7 @@ class PostCard extends StatelessWidget {
             child: SizedBox(
               width: 44.w,
               height: 44.w,
-              child: meal.imageUrl == null
+              child: meal.smallImageUrl == null
                   ? ColoredBox(
                       color: _imageColor,
                       child: Icon(
@@ -313,7 +313,7 @@ class PostCard extends StatelessWidget {
                       ),
                     )
                   : BulkrImage(
-                      url: meal.imageUrl!,
+                      url: meal.smallImageUrl!,
                       width: 44.w,
                       height: 44.w,
                       placeholderColor: _imageColor,

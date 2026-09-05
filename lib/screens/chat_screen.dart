@@ -253,7 +253,16 @@ class _ThreadState extends State<_Thread> {
                   );
                 }
 
-                return _Bubble(message: newestFirst[index]);
+                final ChatMessage message = newestFirst[index];
+
+                return _Bubble(
+                  message: message,
+                  // Only under the last one they have seen. Read receipts are
+                  // cumulative — opening a thread reads everything above — so
+                  // a column of identical ticks would say nothing this one
+                  // does not.
+                  isSeen: state.lastSeenMessage?.id == message.id,
+                );
               },
             );
         }
@@ -263,14 +272,40 @@ class _ThreadState extends State<_Thread> {
 }
 
 class _Bubble extends StatelessWidget {
-  const _Bubble({required this.message});
+  const _Bubble({required this.message, this.isSeen = false});
 
   final ChatMessage message;
+
+  /// This is the newest message the other person has read. Drawn as a line
+  /// under the bubble rather than as a tick inside it: the receipt is about
+  /// the conversation reaching them, not about the words.
+  final bool isSeen;
 
   @override
   Widget build(BuildContext context) {
     final bool mine = message.isMine;
 
+    return Column(
+      crossAxisAlignment:
+          mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      children: [
+        _bubble(context, mine),
+        if (isSeen)
+          Padding(
+            padding: EdgeInsets.only(top: 2.h, right: 4.w, bottom: 2.h),
+            child: Text(
+              'chat_seen'.tr(),
+              style: GoogleFonts.inter(
+                color: AppColors.textGray,
+                fontSize: 9.sp,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _bubble(BuildContext context, bool mine) {
     return Align(
       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
       child: GestureDetector(

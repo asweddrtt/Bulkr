@@ -11,6 +11,7 @@ class Group extends Equatable {
     required this.name,
     this.description,
     this.imageUrl,
+    this.imageThumbUrl,
     required this.ownerId,
     this.isPrivate = false,
     required this.createdAt,
@@ -24,6 +25,12 @@ class Group extends Equatable {
   final String name;
   final String? description;
   final String? imageUrl;
+
+  /// The small copy, for the row in a list. Null on anything uploaded before
+  /// thumbnails existed — read it through [smallImageUrl].
+  final String? imageThumbUrl;
+
+  String? get smallImageUrl => imageThumbUrl ?? imageUrl;
   final String ownerId;
 
   /// Invisible to non-members, posts included.
@@ -61,6 +68,7 @@ class Group extends Equatable {
     String? name,
     String? description,
     String? imageUrl,
+    String? imageThumbUrl,
     bool? isPrivate,
     int? memberCount,
     int? postCount,
@@ -72,6 +80,7 @@ class Group extends Equatable {
       name: name ?? this.name,
       description: description ?? this.description,
       imageUrl: imageUrl ?? this.imageUrl,
+      imageThumbUrl: imageThumbUrl ?? this.imageThumbUrl,
       ownerId: ownerId,
       isPrivate: isPrivate ?? this.isPrivate,
       createdAt: createdAt,
@@ -96,6 +105,7 @@ class Group extends Equatable {
       name: '${row['name'] ?? ''}',
       description: row['description'] as String?,
       imageUrl: row['image_url'] as String?,
+      imageThumbUrl: row['image_thumb_url'] as String?,
       ownerId: ownerId,
       isPrivate: row['is_private'] == true,
       createdAt: DateTime.tryParse('${row['created_at']}')?.toLocal() ??
@@ -137,6 +147,7 @@ class Group extends Equatable {
         name,
         description,
         imageUrl,
+        imageThumbUrl,
         ownerId,
         isPrivate,
         memberCount,
@@ -208,6 +219,7 @@ class GroupDraft extends Equatable {
   Map<String, dynamic> toRowValues({
     required String ownerId,
     String? imageUrl,
+    String? imageThumbUrl,
   }) {
     return {
       'owner_id': ownerId,
@@ -215,6 +227,7 @@ class GroupDraft extends Equatable {
       'description': trimmedDescription.isEmpty ? null : trimmedDescription,
       'is_private': isPrivate,
       'image_url': imageUrl,
+      'image_thumb_url': imageThumbUrl,
     };
   }
 

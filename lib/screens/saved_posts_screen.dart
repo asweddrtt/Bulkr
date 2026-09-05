@@ -277,7 +277,9 @@ class _SavedTile extends StatelessWidget {
                   children: [
                     if (post.hasImages)
                       BulkrImage(
-                        url: post.imageUrls.first,
+                        // The grid is three across, so this reads the small
+                        // copy; the post itself still opens the full size.
+                        url: post.imageThumbUrls.first,
                         // A third of the screen: the grid is three across, and
                         // decoding a 1600px photo into it was most of what made
                         // scrolling this screen expensive.

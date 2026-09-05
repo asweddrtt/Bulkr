@@ -18,6 +18,7 @@ class AccountSheet extends StatelessWidget {
     required this.onDeleteAccount,
     required this.onSavedPosts,
     required this.onCreateGroup,
+    required this.onChallenges,
     this.onEditProfile,
   });
 
@@ -37,6 +38,11 @@ class AccountSheet extends StatelessWidget {
   /// somebody who does not know the icon is there.
   final VoidCallback onCreateGroup;
 
+  /// The challenges this user has joined. Here because the only other way in
+  /// is a challenge post being on screen — scroll past it and the thing you
+  /// joined is gone.
+  final VoidCallback onChallenges;
+
   /// Name and about. Null until the profile row has loaded, which is what
   /// keeps this row out rather than opening a sheet with empty fields in it.
   final VoidCallback? onEditProfile;
@@ -54,6 +60,7 @@ class AccountSheet extends StatelessWidget {
     required VoidCallback onDeleteAccount,
     required VoidCallback onSavedPosts,
     required VoidCallback onCreateGroup,
+    required VoidCallback onChallenges,
     VoidCallback? onEditProfile,
   }) {
     return showModalBottomSheet<void>(
@@ -67,6 +74,7 @@ class AccountSheet extends StatelessWidget {
         onDeleteAccount: onDeleteAccount,
         onSavedPosts: onSavedPosts,
         onCreateGroup: onCreateGroup,
+        onChallenges: onChallenges,
         onEditProfile: onEditProfile,
       ),
     );
@@ -152,6 +160,16 @@ class AccountSheet extends StatelessWidget {
                     onTap: () {
                       Navigator.of(context).pop();
                       onSavedPosts();
+                    },
+                  ),
+                  SizedBox(height: 10.h),
+                  SheetActionRow(
+                    icon: Icons.emoji_events_outlined,
+                    label: 'account_challenges'.tr(),
+                    helper: 'account_challenges_helper'.tr(),
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      onChallenges();
                     },
                   ),
                   SizedBox(height: 10.h),

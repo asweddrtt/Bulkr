@@ -19,7 +19,9 @@ import '../widgets/animations/press_scale.dart';
 import '../widgets/calorie_ring.dart';
 import '../widgets/food_search_sheet.dart';
 import '../widgets/sheet_action_row.dart';
+import '../widgets/repeat_day_sheet.dart';
 import '../widgets/slot_picker_sheet.dart';
+import '../widgets/weekly_recap_sheet.dart';
 import '../widgets/water_card.dart';
 
 const Color _cardColor = Color(0xFF1A1A1A);
@@ -112,6 +114,12 @@ class _TrackerView extends StatelessWidget {
         children: staggered(
           [
             _DayStrip(state: state),
+            // Between the date and the ring on purpose: it is about the days
+            // around this one, not about this one's calories.
+            if (state.hasStreak) ...[
+              SizedBox(height: 12.h),
+              _StreakRow(streak: state.streak),
+            ],
             SizedBox(height: 12.h),
             _CalorieHeadline(state: state),
             SizedBox(height: 18.h),
@@ -147,8 +155,132 @@ class _TrackerView extends StatelessWidget {
               SizedBox(height: 14.h),
               _WeightRow(state: state),
             ],
+            SizedBox(height: 14.h),
+            const _WeekRow(),
           ],
           step: const Duration(milliseconds: 55),
+        ),
+      ),
+    );
+  }
+}
+
+/// Days in a row with something logged.
+///
+/// Only drawn past one, because one day is not a streak, it is a Tuesday.
+/// Deliberately not a number that resets at midnight: the count still stands
+/// if yesterday was logged, so opening the app in the morning does not show
+/// someone a zero for a day that has not happened yet.
+class _StreakRow extends StatelessWidget {
+  const _StreakRow({required this.streak});
+
+  final int streak;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 10.h),
+      decoration: BoxDecoration(
+        color: _cardColor,
+        borderRadius: BorderRadius.circular(12.r),
+        border: Border.all(color: AppColors.darkBorder),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.local_fire_department_rounded,
+            color: AppColors.primaryNeon,
+            size: 20.sp,
+          ),
+          SizedBox(width: 10.w),
+          Expanded(
+            child: Text(
+              'tracker_streak'.tr(namedArgs: {'days': '$streak'}),
+              style: GoogleFonts.inter(
+                color: Colors.white,
+                fontSize: 12.sp,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The two things that look backwards: the week, and a day worth repeating.
+class _WeekRow extends StatelessWidget {
+  const _WeekRow();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: _FooterButton(
+            icon: Icons.insights_rounded,
+            labelKey: 'recap_open',
+            onTap: () => WeeklyRecapSheet.show(context),
+          ),
+        ),
+        SizedBox(width: 10.w),
+        Expanded(
+          child: _FooterButton(
+            icon: Icons.replay_rounded,
+            labelKey: 'repeat_day_open',
+            onTap: () => showRepeatDaySheet(context),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _FooterButton extends StatelessWidget {
+  const _FooterButton({
+    required this.icon,
+    required this.labelKey,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String labelKey;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return PressScale(
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          padding: EdgeInsets.symmetric(vertical: 13.h),
+          decoration: BoxDecoration(
+            color: _cardColor,
+            borderRadius: BorderRadius.circular(12.r),
+            border: Border.all(color: AppColors.darkBorder),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: AppColors.textGray, size: 16.sp),
+              SizedBox(width: 8.w),
+              Flexible(
+                child: Text(
+                  labelKey.tr().toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    color: Colors.white,
+                    fontSize: 10.sp,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

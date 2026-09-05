@@ -1,11 +1,12 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../core/storage_cache.dart';
+import 'image_uploader.dart';
 import '../models/daily_log_entry.dart';
 import '../models/food_item.dart';
 import '../models/macros.dart';
 import '../models/meal.dart';
+import '../models/weekly_recap.dart';
 import '../models/meal_draft.dart';
 import '../models/meal_ingredient.dart';
 import '../models/meal_slot.dart';
@@ -29,6 +30,10 @@ class MealRepository {
   /// Storage bucket holding the users' own meal photos. Public-read, because
   /// a meal attached to a feed post has to render for everyone who sees it.
   static const String imageBucket = 'meal-images';
+
+  /// Both sizes of every meal photo, and the deletes that go with them.
+  late final ImageUploader _images =
+      ImageUploader(client: _client, bucket: imageBucket);
 
   /// Columns of `meals`, plus the author's handle for meals saved from the feed.
   ///
@@ -283,10 +288,10 @@ class MealRepository {
 
     final Macros totals = draft.totals;
 
-    String? imageUrl;
+    UploadedImage? uploaded;
     if (imageBytes != null) {
-      imageUrl = await _uploadImage(
-        userId: userId,
+      uploaded = await _images.upload(
+        ownerId: userId,
         bytes: imageBytes,
         extension: imageExtension,
       );
@@ -299,7 +304,8 @@ class MealRepository {
           'title': draft.title.trim(),
           'description':
               draft.recipe.trim().isEmpty ? null : draft.recipe.trim(),
-          'image_url': imageUrl,
+          'image_url': uploaded?.url,
+          'thumb_url': uploaded?.thumbUrl,
           'total_calories': totals.caloriesRounded,
           'total_protein_g': totals.proteinRounded,
           'total_carbs_g': totals.carbsRounded,
@@ -381,22 +387,35 @@ class MealRepository {
       return Meal.fromRow(existing.first, currentUserId: userId);
     }
 
+    // Read fresh rather than copied off the model the caller was holding.
+    //
+    // A meal reached from the feed arrives without its recipe: the feed's
+    // embed leaves `description` out, because it is the largest column on the
+    // table and no card renders it. Copying from that model would have
+    // silently produced a recipe-less copy.
+    //
+    // It is also the more correct read. A meal is copied as it is now, not as
+    // it was when the page it was seen on happened to load.
+    final Meal source = await _fetchForCopy(meal);
+
     final Map<String, dynamic> row = await _client
         .from('meals')
         .insert({
           'creator_id': userId,
-          'title': meal.title,
-          'description': meal.description,
-          'image_url': meal.imageUrl,
+          'title': source.title,
+          'description': source.description,
+          'image_url': source.imageUrl,
+          // The same two files, pointed at by a second row. A copy is a new
+          // meal, not a new photo — re-uploading the bytes would double the
+          // storage to no end.
+          'thumb_url': source.thumbUrl,
           'total_calories': meal.totals.caloriesRounded,
           'total_protein_g': meal.totals.proteinRounded,
           'total_carbs_g': meal.totals.carbsRounded,
           'total_fat_g': meal.totals.fatRounded,
-          // A copy starts private. The user took it for their own cooking; if
-          // they want to share it on a post of their own, that is a decision
-          // they make there, and the composer will publish it then.
-          // A copy starts private whatever the original was. Saving somebody
-          // else's meal is taking it for your own use, not republishing it.
+          // A copy starts private whatever the original was. The user took it
+          // for their own cooking; if they want to share it on a post of their
+          // own, that is a decision they make there.
           'visibility': ContentVisibility.private.dbValue,
           'source_meal_id': rootMealId,
           'source_creator_id': rootCreatorId,
@@ -487,12 +506,21 @@ class MealRepository {
     final String? previousUrl = meal.imageUrl;
     String? imageUrl = draft.existingImageUrl;
 
+    String? thumbUrl = meal.thumbUrl;
+
     if (imageBytes != null) {
-      imageUrl = await _uploadImage(
-        userId: userId,
+      final UploadedImage uploaded = await _images.upload(
+        ownerId: userId,
         bytes: imageBytes,
         extension: imageExtension,
       );
+      imageUrl = uploaded.url;
+      thumbUrl = uploaded.thumbUrl;
+    } else if (imageUrl != meal.imageUrl) {
+      // The photo was removed rather than replaced, so the thumbnail of the
+      // one that is gone must go with it — otherwise the card falls back to a
+      // small copy of a picture the meal no longer has.
+      thumbUrl = null;
     }
 
     final Macros totals = draft.totals;
@@ -504,6 +532,7 @@ class MealRepository {
           'description':
               draft.recipe.trim().isEmpty ? null : draft.recipe.trim(),
           'image_url': imageUrl,
+          'thumb_url': thumbUrl,
           'total_calories': totals.caloriesRounded,
           'total_protein_g': totals.proteinRounded,
           'total_carbs_g': totals.carbsRounded,
@@ -520,7 +549,7 @@ class MealRepository {
     // Only once the row no longer points at it. An orphaned file costs a few
     // kilobytes; deleting one the meal still references costs the photo.
     if (previousUrl != null && previousUrl != imageUrl) {
-      await _deleteStoredImage(previousUrl);
+      await _images.remove([previousUrl, meal.thumbUrl]);
     }
 
     return Meal.fromRow(row, currentUserId: userId).copyWith(
@@ -560,15 +589,80 @@ class MealRepository {
     }
   }
 
-  /// Best-effort removal of a photo no meal points at any more.
-  Future<void> _deleteStoredImage(String publicUrl) async {
-    final String? path = storagePathFor(publicUrl);
-    if (path == null) return;
+  // --- Insights -------------------------------------------------------------
+
+  /// How many days in a row this user has logged something.
+  ///
+  /// One integer off `logging_streak()`, rather than every date they have ever
+  /// logged coming back to be counted here — a read that would grow without
+  /// bound and get slower for exactly the people who use the app most.
+  ///
+  /// Yesterday still counts as standing: someone opening the app at nine in
+  /// the morning has not broken anything yet. See the note in
+  /// `tracker_insights.sql`.
+  ///
+  /// Zero on any failure, including the migration not having been run. A
+  /// streak is an encouragement, and a missing one is an absent card rather
+  /// than an error.
+  Future<int> fetchStreak() async {
+    if (_userId == null) return 0;
 
     try {
-      await _client.storage.from(imageBucket).remove([path]);
+      final Object? value = await _client.rpc('logging_streak');
+      if (value is int) return value;
+      return int.tryParse('${value ?? ''}') ?? 0;
     } catch (error) {
-      debugPrint('Bulkr: old meal photo not removed — $error');
+      debugPrint('Bulkr: streak unavailable — $error');
+      return 0;
+    }
+  }
+
+  /// The last seven days, reduced to one row by `weekly_recap()`.
+  ///
+  /// Null on failure, which the screen shows as "not available" rather than as
+  /// a week in which nothing happened — a recap of zeroes is a claim, and the
+  /// wrong one.
+  Future<WeeklyRecap?> fetchWeeklyRecap() async {
+    if (_userId == null) return null;
+
+    try {
+      final Object? result = await _client.rpc('weekly_recap');
+
+      // A `returns table` function comes back as a list of one.
+      final Map<String, dynamic>? row = result is List
+          ? result.whereType<Map<String, dynamic>>().firstOrNull
+          : (result is Map<String, dynamic> ? result : null);
+
+      if (row == null) return null;
+      return WeeklyRecap.fromRow(row);
+    } catch (error) {
+      debugPrint('Bulkr: weekly recap unavailable — $error');
+      return null;
+    }
+  }
+
+  /// The meal being copied, read in full.
+  ///
+  /// A meal reached from the feed is missing `description` — see
+  /// `PostRepository._attachedMealColumns` — so the row is re-read before its
+  /// contents are written into somebody else's library.
+  ///
+  /// Falls back to the model in hand when the read fails. A copy without its
+  /// recipe is a worse copy; a copy that did not happen because a second
+  /// request timed out is no copy at all, and the totals that make it usable
+  /// in the tracker are already on the model.
+  Future<Meal> _fetchForCopy(Meal meal) async {
+    try {
+      final Map<String, dynamic> row = await _client
+          .from('meals')
+          .select(_mealColumns)
+          .eq('id', meal.id)
+          .single();
+
+      return Meal.fromRow(row, currentUserId: _userId);
+    } catch (error) {
+      debugPrint('Bulkr: copying a meal without re-reading it — $error');
+      return meal;
     }
   }
 
@@ -585,46 +679,6 @@ class MealRepository {
       for (var i = 0; i < draft.ingredients.length; i++)
         draft.ingredients[i].copyWith(food: cached[i]),
     ];
-  }
-
-  /// Uploads the user's photo and returns its public URL.
-  ///
-  /// Pathed under the owner's id so a storage policy can scope writes to
-  /// `auth.uid()`, the same shape as the table policies.
-  Future<String> _uploadImage({
-    required String userId,
-    required Uint8List bytes,
-    required String extension,
-  }) async {
-    final String path =
-        '$userId/${DateTime.now().toUtc().microsecondsSinceEpoch}.$extension';
-
-    await _client.storage.from(imageBucket).uploadBinary(
-          path,
-          bytes,
-          fileOptions: FileOptions(
-            contentType: _contentTypeFor(extension),
-            upsert: false,
-            // The path is unique and never rewritten, so the file behind this
-            // URL cannot change — see StorageCache.
-            cacheControl: StorageCache.immutable,
-          ),
-        );
-
-    return _client.storage.from(imageBucket).getPublicUrl(path);
-  }
-
-  static String _contentTypeFor(String extension) {
-    switch (extension.toLowerCase()) {
-      case 'png':
-        return 'image/png';
-      case 'webp':
-        return 'image/webp';
-      case 'heic':
-        return 'image/heic';
-      default:
-        return 'image/jpeg';
-    }
   }
 
   /// Deletes a meal the user created, and its photo.
@@ -648,8 +702,7 @@ class MealRepository {
 
     await _client.from('meals').delete().eq('id', meal.id);
 
-    final String? imageUrl = meal.imageUrl;
-    if (imageUrl != null) await _deleteStoredImage(imageUrl);
+    await _images.remove([meal.imageUrl, meal.thumbUrl]);
   }
 
   /// Drops someone else's meal out of this user's library.
@@ -672,18 +725,8 @@ class MealRepository {
   /// Returns null for a meal with no photo, and for a URL that does not belong
   /// to this bucket — an image hosted anywhere else is not ours to delete.
   @visibleForTesting
-  static String? storagePathFor(String? publicUrl) {
-    if (publicUrl == null || publicUrl.isEmpty) return null;
-
-    const String marker = '/public/$imageBucket/';
-    final int start = publicUrl.indexOf(marker);
-    if (start < 0) return null;
-
-    // Query strings appear on signed and transformed URLs, never on the object
-    // path itself.
-    final String path = publicUrl.substring(start + marker.length).split('?').first;
-    return path.isEmpty ? null : Uri.decodeComponent(path);
-  }
+  static String? storagePathFor(String? publicUrl) =>
+      ImageUploader.storagePathFor(publicUrl, bucket: imageBucket);
 
   /// Marks a meal as a favourite, or clears the mark.
   ///
@@ -870,6 +913,61 @@ class MealRepository {
         // the statement is worth more than one that constrains only the
         // policy: a wrong id here updates nothing instead of erroring.
         .eq('user_id', userId);
+  }
+
+  /// Copies a past day's entries onto [to].
+  ///
+  /// Most people eat the same five breakfasts. Re-entering Tuesday on
+  /// Thursday, item by item, is the friction that makes a tracker get
+  /// abandoned in week three — so this is the one action that turns a day, or
+  /// one slot of it, back into rows.
+  ///
+  /// Returns how many entries were copied, so the caller can say so. Zero when
+  /// the source day was empty, and nothing is written in that case.
+  ///
+  /// The copies carry the macros that were recorded then, not recomputed from
+  /// today's version of the meal. A log is a record of what was eaten, and a
+  /// meal whose recipe has since changed did not retroactively change what was
+  /// on the plate. `meal_id` and `cached_food_id` still point where they
+  /// pointed, so the entry keeps its provenance and its picture.
+  ///
+  /// One insert for the whole day rather than one per entry.
+  Future<int> repeatDay({
+    required DateTime from,
+    required DateTime to,
+    MealSlot? slot,
+  }) async {
+    final String? userId = _userId;
+    if (userId == null) return 0;
+
+    final List<DailyLogEntry> source = await fetchDayLog(from);
+
+    final List<DailyLogEntry> wanted = slot == null
+        ? source
+        : source.where((entry) => entry.slot == slot).toList();
+
+    if (wanted.isEmpty) return 0;
+
+    await _client.from('daily_logs').insert([
+      for (final DailyLogEntry entry in wanted)
+        {
+          'user_id': userId,
+          'log_date': _asDate(to),
+          'meal_id': entry.mealId,
+          'cached_food_id': entry.cachedFoodId,
+          // Into the same slot it came from, even when one slot was asked for
+          // — copying breakfast onto a day puts it at breakfast.
+          'meal_type': entry.slot?.dbValue,
+          'item_name': entry.itemName,
+          'quantity_g': entry.quantityG,
+          'calories_logged': entry.macros.caloriesRounded,
+          'protein_logged_g': entry.macros.proteinRounded,
+          'carbs_logged_g': entry.macros.carbsRounded,
+          'fat_logged_g': entry.macros.fatRounded,
+        },
+    ]);
+
+    return wanted.length;
   }
 
   /// Removes one entry from the log.

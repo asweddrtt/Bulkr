@@ -8,6 +8,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../cubit/conversations/conversations_cubit.dart';
 import '../cubit/feed/feed_cubit.dart';
 import '../cubit/meals/meals_cubit.dart';
+import '../cubit/notifications/notifications_cubit.dart';
 import '../core/post_link.dart';
 import '../models/post.dart';
 import '../styles/app_color.dart';
@@ -22,6 +23,7 @@ import 'author_profile_screen.dart';
 import 'challenge_leaderboard_sheet.dart';
 import 'group_screen.dart';
 import 'conversations_screen.dart';
+import 'notifications_screen.dart';
 import 'search_screen.dart';
 import 'post_comments_sheet.dart';
 import 'post_composer_screen.dart';
@@ -137,6 +139,7 @@ class _FeedHeader extends StatelessWidget {
                 ),
               ),
               const _FeedTabs(),
+              const _BellButton(),
               const _InboxButton(),
               // One icon, not two. People and groups used to have one each,
               // which made the header a menu of the app's data model rather
@@ -168,6 +171,70 @@ class _FeedHeader extends StatelessWidget {
         ),
         SizedBox(height: 12.h),
       ],
+    );
+  }
+}
+
+/// Follows, likes and comments.
+///
+/// Stateful only to kick the first badge read, the same way [_InboxButton] is:
+/// [NotificationsCubit] lives above the router and is lazy, so the first
+/// signed-in screen has to ask it once. This asks for the *count* rather than
+/// the list — one number for a dot, not a screenful of joins for a screen
+/// nobody has opened.
+class _BellButton extends StatefulWidget {
+  const _BellButton();
+
+  @override
+  State<_BellButton> createState() => _BellButtonState();
+}
+
+class _BellButtonState extends State<_BellButton> {
+  @override
+  void initState() {
+    super.initState();
+    context.read<NotificationsCubit>().refreshBadge();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<NotificationsCubit, NotificationsState>(
+      buildWhen: (previous, current) =>
+          previous.hasUnread != current.hasUnread,
+      builder: (context, state) {
+        return PressScale(
+          child: GestureDetector(
+            onTap: () => NotificationsScreen.open(context),
+            behavior: HitTestBehavior.opaque,
+            child: Padding(
+              padding: EdgeInsets.only(left: 10.w),
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Icon(
+                    Icons.notifications_none_rounded,
+                    color: AppColors.textGray,
+                    size: 21.sp,
+                  ),
+                  if (state.hasUnread)
+                    Positioned(
+                      top: -1.h,
+                      right: 0,
+                      child: Container(
+                        width: 8.w,
+                        height: 8.w,
+                        decoration: const BoxDecoration(
+                          color: AppColors.primaryNeon,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

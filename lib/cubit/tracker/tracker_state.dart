@@ -26,6 +26,7 @@ class TrackerState extends Equatable {
     this.actionErrorKey,
     this.actionErrorDetail,
     this.waterErrorDetail,
+    this.streak = 0,
   });
 
   /// The local day being shown, truncated to midnight. Every read and write is
@@ -62,6 +63,16 @@ class TrackerState extends Equatable {
   /// loads without it — but an empty glass and a table that does not exist are
   /// not the same thing and must not look the same.
   final String? waterErrorDetail;
+
+  /// Consecutive days with something logged, ending today or yesterday.
+  ///
+  /// Zero also means "not available" — the migration not run, or the read
+  /// failed. Both render as no card rather than as a broken one, which is the
+  /// right outcome for an encouragement.
+  final int streak;
+
+  /// Worth drawing. One day is not a streak; it is a Tuesday.
+  bool get hasStreak => streak > 1;
 
   bool get isLoading => status == TrackerStatus.loading;
 
@@ -218,6 +229,7 @@ class TrackerState extends Equatable {
     bool clearActionError = false,
     String? waterErrorDetail,
     bool clearWaterError = false,
+    int? streak,
   }) {
     return TrackerState(
       day: day ?? this.day,
@@ -235,6 +247,7 @@ class TrackerState extends Equatable {
       waterErrorDetail: clearWaterError
           ? null
           : (waterErrorDetail ?? this.waterErrorDetail),
+      streak: streak ?? this.streak,
     );
   }
 
@@ -250,5 +263,6 @@ class TrackerState extends Equatable {
         actionErrorKey,
         actionErrorDetail,
         waterErrorDetail,
+        streak,
       ];
 }

@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../core/storage_cache.dart';
+import 'image_uploader.dart';
 import '../models/meal.dart';
 import '../models/post.dart';
 import '../models/post_comment.dart';
@@ -102,6 +102,10 @@ class PostRepository {
   /// still sitting in someone's library.
   static const String imageBucket = 'post-images';
 
+  /// Both sizes of every photo on a post. See [ImageUploader].
+  late final ImageUploader _images =
+      ImageUploader(client: _client, bucket: imageBucket);
+
   /// How many posts a page holds.
   ///
   /// Small, because every row drags an author, its images and possibly a whole
@@ -131,13 +135,33 @@ class PostRepository {
   /// is neither public nor the reader's own — the meals RLS policy sees to
   /// that — which is correct: a post can mention a meal the reader is not
   /// allowed to look at, and the card simply shows no attachment.
-  static const String _postColumns = '*, '
+  /// Named rather than `*`, on both the post and the meal inside it.
+  ///
+  /// The post's own list is only a few columns shorter than `*` — but the
+  /// meal's is shorter by `description`, which is the whole recipe, fetched
+  /// for every attached meal on every page of every feed and rendered on none
+  /// of them. A card shows a title, a photo and four numbers.
+  ///
+  /// What used to need it was [MealRepository.copyIntoLibrary], reading the
+  /// recipe off the model the feed had handed it. That now re-reads the source
+  /// meal by id instead, which is one request on a rare action rather than a
+  /// recipe on every row — and copies the recipe as it is now rather than as
+  /// it was when the page was loaded.
+  static const String _postColumns = 'id, user_id, group_id, label, content, '
+      'visibility, is_hidden, likes_count, comments_count, saves_count, '
+      'hot_score, created_at, '
       'users!posts_user_id_fkey(username, display_name, avatar_url), '
-      'post_images(url, position), '
+      'post_images(url, thumb_url, position), '
       'groups!posts_group_id_fkey(id, name), '
-      'meals!posts_attached_meal_id_fkey(*, '
+      'meals!posts_attached_meal_id_fkey($_attachedMealColumns)';
+
+  /// What an attached meal needs to draw its card and be copied by id.
+  static const String _attachedMealColumns = 'id, creator_id, title, '
+      'image_url, thumb_url, total_calories, total_protein_g, total_carbs_g, '
+      'total_fat_g, visibility, is_public, source_meal_id, source_creator_id, '
+      'created_at, '
       'users!meals_creator_id_fkey(username), '
-      'source_author:users!meals_source_creator_id_fkey(username))';
+      'source_author:users!meals_source_creator_id_fkey(username)';
 
   String? get _userId => _client.auth.currentUser?.id;
 
@@ -495,7 +519,7 @@ class PostRepository {
           .eq('creator_id', userId);
     }
 
-    final List<String> urls = await _uploadImages(
+    final List<UploadedImage> uploaded = await _uploadImages(
       userId: userId,
       images: images.take(PostDraft.maxImages).toList(),
     );
@@ -508,12 +532,17 @@ class PostRepository {
 
     final Post post = Post.fromRow(row, currentUserId: userId);
 
-    if (urls.isEmpty) return post;
+    if (uploaded.isEmpty) return post;
 
     try {
       await _client.from('post_images').insert([
-        for (int i = 0; i < urls.length; i++)
-          {'post_id': post.id, 'url': urls[i], 'position': i},
+        for (int i = 0; i < uploaded.length; i++)
+          {
+            'post_id': post.id,
+            'url': uploaded[i].url,
+            'thumb_url': uploaded[i].thumbUrl,
+            'position': i,
+          },
       ]);
     } catch (error) {
       debugPrint('Bulkr: post saved but its images failed — $error');
@@ -522,7 +551,12 @@ class PostRepository {
 
     // The insert above is not reflected in the row already read back, so the
     // URLs are carried over by hand rather than by a second round trip.
-    return post.copyWith(imageUrls: urls);
+    return post.copyWith(
+      imageUrls: [for (final UploadedImage image in uploaded) image.url],
+      imageThumbUrls: [
+        for (final UploadedImage image in uploaded) image.thumbUrl ?? image.url,
+      ],
+    );
   }
 
   /// Writes a post, and the challenge it is announcing.
@@ -845,15 +879,23 @@ class PostRepository {
   /// Marks what this user has already done to each of [posts]: liked it, saved
   /// it, and taken a copy of the meal on it.
   ///
-  /// Three queries for the whole page rather than one per card, and they run
-  /// together. The obvious alternative — asking PostgREST to embed
-  /// `post_likes` filtered to this user — turns into an inner join that drops
-  /// every post the user has *not* liked, which is most of them.
+  /// Two calls for the whole page rather than one per card, and the second only
+  /// when the page carries somebody else's meal. It used to be three: likes and
+  /// saves are now one `post_engagement()` call, because the device asking two
+  /// separate questions about the same twenty ids is two requests, two
+  /// connections and two policy evaluations for one answer. That function is
+  /// deliberately not `security definer` — it runs as the caller, so every
+  /// policy applies exactly as it did when this was three queries.
+  ///
+  /// The obvious alternative — asking PostgREST to embed `post_likes` filtered
+  /// to this user — turns into an inner join that drops every post the user has
+  /// *not* liked, which is most of them.
   ///
   /// Non-fatal, all of it. A feed that renders with every heart empty is wrong
   /// in a way the next refresh fixes; a feed that fails to render because a
   /// lookup of who-liked-what timed out is wrong in a way the reader can do
-  /// nothing about.
+  /// nothing about. That also covers the migration not having been run: the
+  /// RPC 404s, this catches it, and the feed renders unmarked.
   Future<List<Post>> _withMyEngagement(
     List<Post> posts, {
     required String? userId,
@@ -865,44 +907,38 @@ class PostRepository {
     // Only posts carrying someone else's meal can be asked about — the user's
     // own needs no lookup, and a page with no attachments should not spend a
     // round trip discovering that.
-    final List<String> attachedMealIds = [
+    //
+    // The root id, not the one in hand: a copy records what it was copied
+    // *from*, so the same recipe reached through two different people's posts
+    // is one thing already taken, not two.
+    final List<String> attachedRootIds = [
       for (final Post post in posts)
         if (post.attachedMeal != null && !post.attachedMeal!.isMine)
-          post.attachedMeal!.id,
+          post.attachedMeal!.sourceMealId ?? post.attachedMeal!.id,
     ];
 
     try {
       final results = await Future.wait([
-        _client
-            .from('post_likes')
-            .select('post_id')
-            .eq('user_id', userId)
-            .inFilter('post_id', ids),
-        _client
-            .from('post_saves')
-            .select('post_id')
-            .eq('user_id', userId)
-            .inFilter('post_id', ids),
-        // Matched on `source_meal_id`, which is how a copy remembers what it
-        // was copied from. Empty in, empty out — no query worth making.
-        if (attachedMealIds.isEmpty)
-          Future<List<Map<String, dynamic>>>.value(const [])
+        _client.rpc('post_engagement', params: {'p_post_ids': ids}),
+        if (attachedRootIds.isEmpty)
+          Future<Object?>.value(const <dynamic>[])
         else
-          _client
-              .from('meals')
-              .select('source_meal_id')
-              .eq('creator_id', userId)
-              .inFilter('source_meal_id', attachedMealIds),
+          _client.rpc('copied_meals', params: {'p_meal_ids': attachedRootIds}),
       ]);
 
-      final Set<String> liked = {
-        for (final Map<String, dynamic> row in results[0]) '${row['post_id']}',
-      };
-      final Set<String> saved = {
-        for (final Map<String, dynamic> row in results[1]) '${row['post_id']}',
-      };
+      final Set<String> liked = <String>{};
+      final Set<String> saved = <String>{};
+
+      for (final Map<String, dynamic> row
+          in _rows(results.isEmpty ? null : results[0])) {
+        final String id = '${row['post_id']}';
+        if (row['liked'] == true) liked.add(id);
+        if (row['saved'] == true) saved.add(id);
+      }
+
       final Set<String> copiedMeals = {
-        for (final Map<String, dynamic> row in results[2])
+        for (final Map<String, dynamic> row
+            in _rows(results.length > 1 ? results[1] : null))
           '${row['source_meal_id']}',
       };
 
@@ -911,13 +947,23 @@ class PostRepository {
                 isLiked: liked.contains(post.id),
                 isSaved: saved.contains(post.id),
                 attachedMealSaved: post.attachedMeal != null &&
-                    copiedMeals.contains(post.attachedMeal!.id),
+                    copiedMeals.contains(
+                      post.attachedMeal!.sourceMealId ?? post.attachedMeal!.id,
+                    ),
               ))
           .toList(growable: false);
     } catch (error) {
       debugPrint('Bulkr: could not resolve this user\'s engagement — $error');
       return posts;
     }
+  }
+
+  /// An RPC result as rows. `rpc` is typed as `dynamic`, and a function that
+  /// returns a table gives a list of objects — but a failure shape or a null
+  /// should read as "no rows" rather than throw inside a loop.
+  static Iterable<Map<String, dynamic>> _rows(Object? result) {
+    if (result is! List) return const [];
+    return result.whereType<Map<String, dynamic>>();
   }
 
   /// Attaches each `challenge`-labelled post's challenge.
@@ -967,57 +1013,58 @@ class PostRepository {
     return '$column.lt.$value,and($column.eq.$value,id.lt.$id)';
   }
 
-  /// Uploads photos and returns their public URLs, in the order given.
+  /// Uploads a post's photos, in both sizes, in the order given.
   ///
-  /// Sequential rather than concurrent. The order is the post's order — a
-  /// before and an after are not interchangeable — and while a `Future.wait`
-  /// would preserve the result order too, one failure mid-flight would leave an
-  /// unknown number of orphaned files. Doing them in turn means a failure stops
-  /// at a known point.
-  Future<List<String>> _uploadImages({
+  /// Concurrent, and it did not used to be. The old version went one at a time
+  /// so that a failure stopped at a known point and left no orphans behind —
+  /// which mattered, but cost four photos four round trips end to end on a
+  /// phone, and now four more for the thumbnails.
+  ///
+  /// This does both: all of them at once, and if any one fails, the ones that
+  /// already landed are deleted before the error goes up. So the orphan
+  /// guarantee is the same and the wait is a quarter of what it was.
+  ///
+  /// `Future.wait` preserves the argument order regardless of what finishes
+  /// first, which is what makes this safe for a post whose photos are a before
+  /// and an after.
+  Future<List<UploadedImage>> _uploadImages({
     required String userId,
     required List<PostImageUpload> images,
   }) async {
     if (images.isEmpty) return const [];
 
-    final List<String> urls = [];
     // One timestamp for the whole post, indexed per photo, so a post's files
     // sort together in the bucket and two photos picked in the same
     // microsecond cannot collide on a name.
     final int stamp = DateTime.now().toUtc().microsecondsSinceEpoch;
 
-    for (int i = 0; i < images.length; i++) {
-      final PostImageUpload image = images[i];
-      final String path = '$userId/$stamp-$i.${image.extension}';
+    final List<Future<UploadedImage>> uploads = [
+      for (int i = 0; i < images.length; i++)
+        _images.upload(
+          ownerId: userId,
+          bytes: images[i].bytes,
+          extension: images[i].extension,
+          name: '$stamp-$i',
+        ),
+    ];
 
-      await _client.storage.from(imageBucket).uploadBinary(
-            path,
-            image.bytes,
-            fileOptions: FileOptions(
-              contentType: _contentTypeFor(image.extension),
-              upsert: false,
-              // The path is unique and never rewritten, so the file behind
-              // this URL cannot change — see StorageCache.
-              cacheControl: StorageCache.immutable,
-            ),
-          );
+    try {
+      return await Future.wait(uploads);
+    } catch (error) {
+      // eagerError is off by default, so every upload has settled by the time
+      // this runs — the survivors are known and can be swept up.
+      final List<String?> orphans = [];
+      for (final Future<UploadedImage> upload in uploads) {
+        try {
+          final UploadedImage done = await upload;
+          orphans..add(done.url)..add(done.thumbUrl);
+        } catch (_) {
+          // This is the one that failed. Nothing of it to clean up.
+        }
+      }
 
-      urls.add(_client.storage.from(imageBucket).getPublicUrl(path));
-    }
-
-    return urls;
-  }
-
-  static String _contentTypeFor(String extension) {
-    switch (extension.toLowerCase()) {
-      case 'png':
-        return 'image/png';
-      case 'webp':
-        return 'image/webp';
-      case 'heic':
-        return 'image/heic';
-      default:
-        return 'image/jpeg';
+      await _images.remove(orphans);
+      rethrow;
     }
   }
 }
