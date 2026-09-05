@@ -66,8 +66,28 @@ That writes `supabase\.env` with all four secrets, converting the key's
 newlines to the `\n` sequences the function expects and generating the webhook
 secret for you. `supabase/.env` is already in `.gitignore`.
 
-If you would rather do it by hand, the file needs exactly this shape — the key
-on **one line**, with literal backslash-n, not real line breaks:
+### Or skip the terminal entirely
+
+If the script gives you any trouble, the dashboard does the same job and
+handles multi-line values properly, which is the only hard part here:
+
+**Edge Functions → send-push → Secrets → Add new secret**, four times:
+
+| Name | Value |
+| --- | --- |
+| `FCM_PROJECT_ID` | `project_id` from the JSON |
+| `FCM_CLIENT_EMAIL` | `client_email` from the JSON |
+| `FCM_PRIVATE_KEY` | the key, pasted as-is, line breaks and all |
+| `PUSH_WEBHOOK_SECRET` | any long random string you make up |
+
+Paste the private key exactly as it appears — `-----BEGIN PRIVATE KEY-----`,
+the body, `-----END PRIVATE KEY-----`. The function accepts real newlines,
+Windows line endings and escaped `\n` alike; all three are tested.
+
+### Or write the file by hand
+
+The key must be on **one line**, with literal backslash-n rather than real
+line breaks, because a `.env` value cannot span lines:
 
 ```
 FCM_PROJECT_ID=your-project-id
