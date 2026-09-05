@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../models/meal.dart';
 import '../styles/app_color.dart';
+import 'bulkr_image.dart';
 import 'animations/motion.dart';
 import 'animations/press_scale.dart';
 import 'macro_bar.dart';
@@ -95,26 +96,15 @@ class MealCard extends StatelessWidget {
               color: _imageColor,
               child: meal.imageUrl == null
                   ? _buildImageFallback()
-                  : Image.network(
-                      meal.imageUrl!,
-                      fit: BoxFit.cover,
+                  : BulkrImage(
+                      url: meal.imageUrl!,
+                      // A card is a column of the grid, never the full width.
+                      width: 0.5.sw,
+                      placeholderColor: _imageColor,
                       // A meal photo is decoration, not information: a broken
                       // URL or an offline device gets the same plate icon an
                       // image-less meal does, never a grey error box.
-                      errorBuilder: (_, __, ___) => _buildImageFallback(),
-                      loadingBuilder: (context, child, progress) =>
-                          progress == null
-                              ? child
-                              : const Center(
-                                  child: SizedBox(
-                                    width: 22,
-                                    height: 22,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: AppColors.darkBorder,
-                                    ),
-                                  ),
-                                ),
+                      fallback: _buildImageFallback(),
                     ),
             ),
             Positioned(top: 10.h, left: 10.w, child: _buildEmphasisChip()),

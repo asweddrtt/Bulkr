@@ -5,6 +5,7 @@ enum MealEditorStatus { hydrating, editing, saving, saved, failure }
 class MealEditorState extends Equatable {
   const MealEditorState({
     this.draft = const MealDraft(),
+    this.baseline = const MealDraft(),
     this.status = MealEditorStatus.editing,
     this.editing,
     this.imageBytes,
@@ -16,6 +17,14 @@ class MealEditorState extends Equatable {
   });
 
   final MealDraft draft;
+
+  /// The draft as the form first showed it — empty for a new meal, the stored
+  /// meal for an edit.
+  ///
+  /// Kept so leaving can tell "nothing was touched" from "there is work here",
+  /// which a comparison against an empty draft cannot do: an edit starts full.
+  final MealDraft baseline;
+
   final MealEditorStatus status;
 
   /// The meal being edited, or null when writing a new one.
@@ -49,6 +58,15 @@ class MealEditorState extends Equatable {
 
   bool get isSaving => status == MealEditorStatus.saving;
 
+  /// Something has been changed and not saved.
+  ///
+  /// A photo counts on its own: it is the one edit that leaves the draft's
+  /// fields untouched, and picking one and walking away should still ask.
+  /// Nothing counts once the save has landed — [savedMeal] means the work is
+  /// somewhere safer than this screen.
+  bool get hasUnsavedWork =>
+      savedMeal == null && (draft != baseline || imageBytes != null);
+
   /// The form is not built until an edited meal's ingredients have loaded: its
   /// text fields are seeded once, at construction, and building them over an
   /// empty draft would leave them empty.
@@ -64,6 +82,7 @@ class MealEditorState extends Equatable {
 
   MealEditorState copyWith({
     MealDraft? draft,
+    MealDraft? baseline,
     MealEditorStatus? status,
     Meal? editing,
     Uint8List? imageBytes,
@@ -77,6 +96,7 @@ class MealEditorState extends Equatable {
   }) {
     return MealEditorState(
       draft: draft ?? this.draft,
+      baseline: baseline ?? this.baseline,
       status: status ?? this.status,
       editing: editing ?? this.editing,
       imageBytes: clearImage ? null : (imageBytes ?? this.imageBytes),
@@ -92,6 +112,7 @@ class MealEditorState extends Equatable {
   @override
   List<Object?> get props => [
         draft,
+        baseline,
         status,
         editing,
         imageBytes,

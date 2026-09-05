@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../models/person.dart';
 import '../styles/app_color.dart';
+import 'bulkr_image.dart';
 import 'animations/motion.dart';
 import 'animations/press_scale.dart';
 
@@ -229,10 +230,11 @@ class PersonAvatar extends StatelessWidget {
         height: size,
         child: url == null || url!.isEmpty
             ? _buildInitial()
-            : Image.network(
-                url!,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => _buildInitial(),
+            : BulkrImage(
+                url: url!,
+                width: size,
+                height: size,
+                fallback: _buildInitial(),
               ),
       ),
     );

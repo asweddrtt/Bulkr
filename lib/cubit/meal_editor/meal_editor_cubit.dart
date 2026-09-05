@@ -31,7 +31,12 @@ class MealEditorCubit extends Cubit<MealEditorState> {
         _foods = foodRepository,
         super(
           editing == null
-              ? MealEditorState(draft: MealDraft(visibility: initialVisibility))
+              ? MealEditorState(
+                  draft: MealDraft(visibility: initialVisibility),
+                  // A new meal starts at the draft it starts at, so leaving
+                  // straight away asks nothing.
+                  baseline: MealDraft(visibility: initialVisibility),
+                )
               : MealEditorState(
                   status: MealEditorStatus.hydrating,
                   editing: editing,
@@ -52,8 +57,12 @@ class MealEditorCubit extends Cubit<MealEditorState> {
           await _meals.fetchIngredients(meal.id);
       if (isClosed) return;
 
+      final MealDraft loaded = MealDraft.fromMeal(meal, ingredients);
       emit(state.copyWith(
-        draft: MealDraft.fromMeal(meal, ingredients),
+        draft: loaded,
+        // The stored meal is the baseline for an edit: opening one and closing
+        // it without touching anything is not unsaved work.
+        baseline: loaded,
         status: MealEditorStatus.editing,
       ));
     } catch (error) {
@@ -62,8 +71,10 @@ class MealEditorCubit extends Cubit<MealEditorState> {
 
       // The rest of the meal is still editable, and its stored totals are still
       // right, so this opens without the itemisation rather than not at all.
+      final MealDraft loaded = MealDraft.fromMeal(meal, const []);
       emit(state.copyWith(
-        draft: MealDraft.fromMeal(meal, const []),
+        draft: loaded,
+        baseline: loaded,
         status: MealEditorStatus.editing,
       ));
     }

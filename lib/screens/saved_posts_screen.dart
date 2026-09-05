@@ -8,6 +8,7 @@ import '../cubit/feed/feed_cubit.dart';
 import '../data/post_repository.dart';
 import '../models/post.dart';
 import '../styles/app_color.dart';
+import '../widgets/bulkr_image.dart';
 import '../widgets/post_label_chip.dart';
 import '../widgets/person_row.dart';
 import '../widgets/animations/press_scale.dart';
@@ -275,10 +276,13 @@ class _SavedTile extends StatelessWidget {
                   fit: StackFit.expand,
                   children: [
                     if (post.hasImages)
-                      Image.network(
-                        post.imageUrls.first,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => _textPreview(),
+                      BulkrImage(
+                        url: post.imageUrls.first,
+                        // A third of the screen: the grid is three across, and
+                        // decoding a 1600px photo into it was most of what made
+                        // scrolling this screen expensive.
+                        width: 0.33.sw,
+                        fallback: _textPreview(),
                       )
                     else
                       _textPreview(),

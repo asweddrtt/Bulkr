@@ -15,6 +15,8 @@ import '../models/macros.dart';
 import '../models/meal.dart';
 import '../models/meal_ingredient.dart';
 import '../styles/app_color.dart';
+import '../widgets/sheet_action_row.dart';
+import '../widgets/bulkr_image.dart';
 import '../widgets/visibility_picker.dart';
 import '../widgets/animations/press_scale.dart';
 import '../widgets/barcode_scanner_sheet.dart';
@@ -68,6 +70,45 @@ class _MealEditorView extends StatelessWidget {
 
   static const Color _bg = Color(0xFF121212);
 
+  /// Asks before throwing away an edit.
+  ///
+  /// Only when there is something to lose. Opening a meal to look at it and
+  /// closing it again asks nothing — a confirmation for nothing is how people
+  /// learn to dismiss confirmations without reading them.
+  static Future<void> _confirmClose(BuildContext context) async {
+    final MealEditorCubit cubit = context.read<MealEditorCubit>();
+    final NavigatorState navigator = Navigator.of(context);
+
+    if (!cubit.state.hasUnsavedWork) {
+      navigator.pop();
+      return;
+    }
+
+    final bool? discard = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => SheetShell(
+        title: 'meal_discard_title'.tr(),
+        children: [
+          SheetActionRow(
+            icon: Icons.delete_outline,
+            label: 'meal_discard_confirm'.tr(),
+            helper: 'meal_discard_helper'.tr(),
+            isDestructive: true,
+            onTap: () => Navigator.of(sheetContext).pop(true),
+          ),
+          SheetActionRow(
+            icon: Icons.edit_outlined,
+            label: 'meal_discard_keep'.tr(),
+            onTap: () => Navigator.of(sheetContext).pop(false),
+          ),
+        ],
+      ),
+    );
+
+    if (discard == true) navigator.pop();
+  }
+
   @override
   Widget build(BuildContext context) {
     return BlocListener<MealEditorCubit, MealEditorState>(
@@ -116,64 +157,75 @@ class _MealEditorView extends StatelessWidget {
           context.read<MealEditorCubit>().dismissError();
         }
       },
-      child: BlocBuilder<MealEditorCubit, MealEditorState>(
-        buildWhen: (previous, current) =>
-            previous.isEditing != current.isEditing ||
-            previous.isHydrating != current.isHydrating,
-        builder: (context, state) => Scaffold(
-        backgroundColor: _bg,
-        appBar: AppBar(
+      // Closing with the X already asks before losing an edit; the system
+      // back gesture did not, and that is how most people leave a screen.
+      // A direct Navigator.pop is unaffected, which is what the save path
+      // uses — only a back gesture is intercepted here.
+      child: PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (didPop) return;
+          _confirmClose(context);
+        },
+        child: BlocBuilder<MealEditorCubit, MealEditorState>(
+          buildWhen: (previous, current) =>
+              previous.isEditing != current.isEditing ||
+              previous.isHydrating != current.isHydrating,
+          builder: (context, state) => Scaffold(
           backgroundColor: _bg,
-          elevation: 0,
-          leading: IconButton(
-            icon: const Icon(Icons.close_rounded, color: Colors.white),
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-          title: Text(
-            (state.isEditing ? 'edit_meal_title' : 'create_meal_title')
-                .tr()
-                .toUpperCase(),
-            style: GoogleFonts.anton(
-              fontSize: 17.sp,
-              color: Colors.white,
-              letterSpacing: 1,
+          appBar: AppBar(
+            backgroundColor: _bg,
+            elevation: 0,
+            leading: IconButton(
+              icon: const Icon(Icons.close_rounded, color: Colors.white),
+              onPressed: () => _confirmClose(context),
+            ),
+            title: Text(
+              (state.isEditing ? 'edit_meal_title' : 'create_meal_title')
+                  .tr()
+                  .toUpperCase(),
+              style: GoogleFonts.anton(
+                fontSize: 17.sp,
+                color: Colors.white,
+                letterSpacing: 1,
+              ),
             ),
           ),
-        ),
-        // Nothing is built until an edited meal has loaded: the text fields
-        // are seeded once, when they are constructed, so building them over an
-        // empty draft would leave them empty for good.
-        body: state.isHydrating
-            ? const Center(
-                child: CircularProgressIndicator(color: AppColors.primaryNeon),
-              )
-            : SafeArea(
-                top: false,
-                child: Column(
-                  children: [
-                    Expanded(
-                      child: ListView(
-                        padding: EdgeInsets.fromLTRB(20.w, 8.h, 20.w, 24.h),
-                        children: [
-                          const _PhotoPicker(),
-                          SizedBox(height: 20.h),
-                          const _NameField(),
-                          SizedBox(height: 22.h),
-                          const _IngredientsSection(),
-                          SizedBox(height: 22.h),
-                          const _TotalsSection(),
-                          SizedBox(height: 22.h),
-                          const _RecipeField(),
-                          SizedBox(height: 18.h),
-                          const _VisibilityField(),
-                        ],
+          // Nothing is built until an edited meal has loaded: the text fields
+          // are seeded once, when they are constructed, so building them over an
+          // empty draft would leave them empty for good.
+          body: state.isHydrating
+              ? const Center(
+                  child: CircularProgressIndicator(color: AppColors.primaryNeon),
+                )
+              : SafeArea(
+                  top: false,
+                  child: Column(
+                    children: [
+                      Expanded(
+                        child: ListView(
+                          padding: EdgeInsets.fromLTRB(20.w, 8.h, 20.w, 24.h),
+                          children: [
+                            const _PhotoPicker(),
+                            SizedBox(height: 20.h),
+                            const _NameField(),
+                            SizedBox(height: 22.h),
+                            const _IngredientsSection(),
+                            SizedBox(height: 22.h),
+                            const _TotalsSection(),
+                            SizedBox(height: 22.h),
+                            const _RecipeField(),
+                            SizedBox(height: 18.h),
+                            const _VisibilityField(),
+                          ],
+                        ),
                       ),
-                    ),
-                    const _SaveBar(),
-                  ],
+                      const _SaveBar(),
+                    ],
+                  ),
                 ),
-              ),
-      ),
+        ),
+        ),
       ),
     );
   }
@@ -229,10 +281,9 @@ class _PhotoPicker extends StatelessWidget {
                           if (bytes != null)
                             Image.memory(bytes, fit: BoxFit.cover)
                           else
-                            Image.network(
-                              storedUrl!,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => _buildPrompt(),
+                            BulkrImage(
+                              url: storedUrl!,
+                              fallback: _buildPrompt(),
                             ),
                           Positioned(
                             right: 8.w,

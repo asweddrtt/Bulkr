@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../core/storage_cache.dart';
 import '../models/meal.dart';
 import '../models/post.dart';
 import '../models/post_comment.dart';
@@ -75,6 +76,10 @@ class PostRepository {
   /// makes this degrade well: before `social_privacy.sql` has been run the
   /// refresh fails, the set stays empty, and the feed is exactly what it was.
   Set<String> _hiddenPostIds = <String>{};
+
+  /// The follow graph and group membership behind the current For You scroll.
+  /// See [_audienceFor].
+  _ForYouAudience? _audience;
 
   /// Who the user follows, which is half of what For You is made of. Read
   /// through the repository that owns the follow graph rather than queried
@@ -192,13 +197,9 @@ class PostRepository {
     final String? userId = _userId;
     if (userId == null) return const FeedPage.empty();
 
-    final results = await Future.wait([
-      _followedAuthorIds(userId),
-      _memberGroupIds(userId),
-    ]);
-
-    final List<String> authorIds = results[0];
-    final List<String> groupIds = results[1];
+    final _ForYouAudience audience = await _audienceFor(userId, cursor: cursor);
+    final List<String> authorIds = audience.authorIds;
+    final List<String> groupIds = audience.groupIds;
 
     if (authorIds.isEmpty && groupIds.isEmpty) return const FeedPage.empty();
 
@@ -262,6 +263,37 @@ class PostRepository {
   /// everything. Quietly showing the whole site under a tab labelled "for you"
   /// is worse than showing too little, and the too-little case is visibly a
   /// problem the user can retry.
+  /// Who and what For You is reading, held for the length of one scroll.
+  ///
+  /// Read fresh when a page is asked for with no cursor — the top of the list,
+  /// which is what a pull-to-refresh and a tab switch both produce — and
+  /// reused for every page after it.
+  ///
+  /// Cheaper, but that is the smaller half of it. The audience has to be
+  /// *stable* while a keyset walks the list: follow somebody on page one and
+  /// re-read it on page two and the ordering the cursor is a position in has
+  /// silently changed underneath, which is how a paged list starts repeating
+  /// and skipping posts. The follow shows up on the next refresh, where a
+  /// change of contents belongs.
+  Future<_ForYouAudience> _audienceFor(
+    String userId, {
+    required FeedCursor? cursor,
+  }) async {
+    final _ForYouAudience? held = _audience;
+    if (cursor != null && held != null && held.userId == userId) return held;
+
+    final results = await Future.wait([
+      _followedAuthorIds(userId),
+      _memberGroupIds(userId),
+    ]);
+
+    return _audience = _ForYouAudience(
+      userId: userId,
+      authorIds: results[0],
+      groupIds: results[1],
+    );
+  }
+
   Future<List<String>> _followedAuthorIds(String userId) async {
     try {
       final List<String> followed = await _follows.followedIds(userId);
@@ -964,6 +996,9 @@ class PostRepository {
             fileOptions: FileOptions(
               contentType: _contentTypeFor(image.extension),
               upsert: false,
+              // The path is unique and never rewritten, so the file behind
+              // this URL cannot change — see StorageCache.
+              cacheControl: StorageCache.immutable,
             ),
           );
 
@@ -985,4 +1020,20 @@ class PostRepository {
         return 'image/jpeg';
     }
   }
+}
+
+/// Who For You is reading, for one pass down the list.
+class _ForYouAudience {
+  const _ForYouAudience({
+    required this.userId,
+    required this.authorIds,
+    required this.groupIds,
+  });
+
+  /// Whose feed this is. Held so a sign-out and a sign-in on the same device
+  /// cannot serve the first account's follows to the second.
+  final String userId;
+
+  final List<String> authorIds;
+  final List<String> groupIds;
 }

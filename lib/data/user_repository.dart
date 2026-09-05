@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../core/storage_cache.dart';
 import '../models/activity_level.dart';
 import '../models/gender.dart';
 import '../models/nutrition_plan.dart';
@@ -367,6 +368,9 @@ class UserRepository {
           fileOptions: FileOptions(
             contentType: _avatarContentType(extension),
             upsert: false,
+            // The path is unique and never rewritten, so the file behind this
+            // URL cannot change — see StorageCache.
+            cacheControl: StorageCache.immutable,
           ),
         );
 
