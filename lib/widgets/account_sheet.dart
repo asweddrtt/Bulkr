@@ -16,6 +16,9 @@ class AccountSheet extends StatelessWidget {
     required this.onSignOut,
     required this.onManageBlocked,
     required this.onDeleteAccount,
+    required this.onSavedPosts,
+    required this.onCreateGroup,
+    this.onEditProfile,
   });
 
   /// The email on the Supabase session — the answer to "which account is this?".
@@ -26,6 +29,17 @@ class AccountSheet extends StatelessWidget {
 
   /// Opens the list of people this user has blocked, so it can be undone.
   final VoidCallback onManageBlocked;
+
+  /// Everything the user has bookmarked.
+  final VoidCallback onSavedPosts;
+
+  /// Starts a group. Also an icon on the profile header — this is the row for
+  /// somebody who does not know the icon is there.
+  final VoidCallback onCreateGroup;
+
+  /// Name and about. Null until the profile row has loaded, which is what
+  /// keeps this row out rather than opening a sheet with empty fields in it.
+  final VoidCallback? onEditProfile;
 
   /// Deletes the account. Confirmed by the screen, not here — a sheet is not
   /// where something irreversible should be one tap away.
@@ -38,6 +52,9 @@ class AccountSheet extends StatelessWidget {
     required Future<void> Function() onSignOut,
     required VoidCallback onManageBlocked,
     required VoidCallback onDeleteAccount,
+    required VoidCallback onSavedPosts,
+    required VoidCallback onCreateGroup,
+    VoidCallback? onEditProfile,
   }) {
     return showModalBottomSheet<void>(
       context: context,
@@ -48,6 +65,9 @@ class AccountSheet extends StatelessWidget {
         onSignOut: onSignOut,
         onManageBlocked: onManageBlocked,
         onDeleteAccount: onDeleteAccount,
+        onSavedPosts: onSavedPosts,
+        onCreateGroup: onCreateGroup,
+        onEditProfile: onEditProfile,
       ),
     );
   }
@@ -105,6 +125,49 @@ class AccountSheet extends StatelessWidget {
               ),
             ),
             SizedBox(height: 24.h),
+            SizedBox(
+              width: double.infinity,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Ordered by how often they are wanted: your own details,
+                  // then what you kept, then making something, then the
+                  // moderation list nobody opens unless they mean to.
+                  if (onEditProfile != null) ...[
+                    SheetActionRow(
+                      icon: Icons.edit_outlined,
+                      label: 'account_edit_profile'.tr(),
+                      helper: 'account_edit_profile_helper'.tr(),
+                      onTap: () {
+                        Navigator.of(context).pop();
+                        onEditProfile!();
+                      },
+                    ),
+                    SizedBox(height: 10.h),
+                  ],
+                  SheetActionRow(
+                    icon: Icons.bookmark_border,
+                    label: 'account_saved_posts'.tr(),
+                    helper: 'account_saved_posts_helper'.tr(),
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      onSavedPosts();
+                    },
+                  ),
+                  SizedBox(height: 10.h),
+                  SheetActionRow(
+                    icon: Icons.group_add_outlined,
+                    label: 'account_create_group'.tr(),
+                    helper: 'account_create_group_helper'.tr(),
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      onCreateGroup();
+                    },
+                  ),
+                  SizedBox(height: 10.h),
+                ],
+              ),
+            ),
             SizedBox(
               width: double.infinity,
               child: SheetActionRow(

@@ -16,6 +16,7 @@ import '../data/follow_repository.dart';
 import '../data/post_repository.dart';
 import '../data/user_repository.dart';
 import '../go_router/app_routes.dart';
+import '../models/group.dart';
 import '../models/person.dart';
 import '../models/post.dart';
 import '../models/user_profile.dart';
@@ -30,6 +31,8 @@ import '../widgets/person_row.dart';
 import '../widgets/post_actions_sheet.dart';
 import '../widgets/post_card.dart';
 import '../widgets/report_sheet.dart';
+import 'group_screen.dart';
+import 'groups_screen.dart';
 import 'saved_posts_screen.dart';
 import 'people_list_screen.dart';
 import 'blocked_people_screen.dart';
@@ -280,32 +283,20 @@ class _Header extends StatelessWidget {
                   ],
                 ),
               ),
+              // Starting a group is the one thing here that is not about
+              // reading or adjusting your own account, so it is the one thing
+              // that keeps an icon of its own. Editing a profile and looking
+              // at what you saved both moved into settings: they are things
+              // you do occasionally and go looking for, not things worth a
+              // permanent target beside your name.
               PressScale(
                 child: GestureDetector(
-                  onTap: () => _edit(context, person),
+                  onTap: () => _createGroup(context),
                   behavior: HitTestBehavior.opaque,
                   child: Padding(
                     padding: EdgeInsets.all(6.w),
                     child: Icon(
-                      Icons.edit_outlined,
-                      color: AppColors.textGray,
-                      size: 19.sp,
-                    ),
-                  ),
-                ),
-              ),
-              // Saved posts sit next to settings rather than inside them.
-              // Saving a post is something people do several times a day and
-              // come back to; putting it behind a gear makes it a setting,
-              // which it is not.
-              PressScale(
-                child: GestureDetector(
-                  onTap: () => SavedPostsScreen.open(context),
-                  behavior: HitTestBehavior.opaque,
-                  child: Padding(
-                    padding: EdgeInsets.all(6.w),
-                    child: Icon(
-                      Icons.bookmark_border,
+                      Icons.group_add_outlined,
                       color: AppColors.textGray,
                       size: 20.sp,
                     ),
@@ -404,6 +395,9 @@ class _Header extends StatelessWidget {
     final UserRepository users = context.read<UserRepository>();
     final String username =
         context.read<ProfileCubit>().state.profile?.username ?? '';
+    // Null until the profile row has loaded, which is what makes the edit row
+    // absent rather than opening a sheet with nothing in its fields.
+    final Person? person = context.read<AuthorCubit>().state.person;
 
     await AccountSheet.show(
       context,
@@ -413,9 +407,25 @@ class _Header extends StatelessWidget {
         await auth.signOut();
         router.go(AppRoutes.welcome);
       },
+      onEditProfile: person == null ? null : () => _edit(context, person),
+      onSavedPosts: () => SavedPostsScreen.open(context),
+      onCreateGroup: () => _createGroup(context),
       onManageBlocked: () => BlockedPeopleScreen.open(context),
       onDeleteAccount: () => _deleteAccount(context, auth, router, users),
     );
+  }
+
+  /// Starts a group and drops the user into it.
+  ///
+  /// Same flow as the search screen's, and deliberately reachable from two
+  /// places: the icon beside your name is the shortcut for somebody who knows
+  /// it is there, and the row in settings is where somebody who does not know
+  /// goes looking for "how do I make a group".
+  static Future<void> _createGroup(BuildContext context) async {
+    final Group? created = await GroupEditorSheet.create(context);
+    if (created == null || !context.mounted) return;
+
+    await GroupScreen.open(context, created.id);
   }
 
   /// Deletes the account, after asking for the handle to be typed.

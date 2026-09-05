@@ -519,5 +519,11 @@
   "saved_posts_failed": "Couldn't load your saved posts.",
   "profile_block": "Block {name}",
   "profile_unblock": "Unblock {name}",
-  "profile_unblock_helper": "You'll be able to see each other again"
+  "profile_unblock_helper": "You'll be able to see each other again",
+  "account_edit_profile": "Edit profile",
+  "account_edit_profile_helper": "Your name and what you're working on",
+  "account_saved_posts": "Saved posts",
+  "account_saved_posts_helper": "Everything you've bookmarked",
+  "account_create_group": "Start a group",
+  "account_create_group_helper": "Name it, invite people, post in it"
 }
