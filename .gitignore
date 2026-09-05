@@ -15,6 +15,7 @@
 .cxx
 local.properties
 .kotlin/
+bulkr-a61b0-firebase-adminsdk-fbsvc-51dd4cf5ff.json
 
 # Supabase CLI state and secrets.
 #
@@ -27,6 +28,7 @@ supabase/.env
 supabase/functions/**/.env
 .env
 .env.local
+
 
 # Files `flutter pub get` regenerates from pubspec.
 #
