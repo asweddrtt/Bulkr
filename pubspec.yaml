@@ -46,6 +46,16 @@ dependencies:
   flutter_bloc: ^9.1.1
   equatable: ^2.0.7
   google_sign_in: ^7.2.0
+
+  # Native Sign in with Apple. Apple's own sheet rather than a browser round
+  # trip: the web flow needs a redirect back into the app, which is fragile,
+  # and Apple's review guidelines expect the native sheet on iOS anyway.
+  # Android has no native sheet, so it keeps the browser flow.
+  sign_in_with_apple: ^8.2.0
+
+  # SHA-256 for the OAuth nonce. Providers are handed the hash and Supabase the
+  # original, so neither side alone can replay the other's token.
+  crypto: ^3.0.7
   flutter_launcher_icons: ^0.14.4
 
   # Meal photos: the user's own camera or library. Open Food Facts product

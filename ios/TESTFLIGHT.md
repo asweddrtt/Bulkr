@@ -58,12 +58,27 @@ run.
 Find or create the App ID `com.alimahmoud.bulkr`, and tick:
 
 - **Push Notifications**
-- **Sign In with Apple** — not for the entitlement (Bulkr uses the browser
-  flow through Supabase, so it needs none) but because App Store review
-  requires it to be *offered* by any app that offers Google sign-in
+- **Sign In with Apple** — now a real entitlement, not just a review
+  requirement. Bulkr uses Apple's native sheet on iOS rather than a browser
+  round trip, and the sheet does not appear without it
 
-If Push Notifications is not ticked here, signing fails with a provisioning
-profile that does not match the entitlements file.
+If either is missing here, signing fails with a provisioning profile that does
+not match the entitlements file. Tick them *before* the next build: the
+profile is regenerated during signing, and a profile created before the
+capability existed will not carry it.
+
+## 3b. Supabase has to accept the app's own token
+
+<https://supabase.com/dashboard> → Authentication → Providers → **Apple**
+
+The native sheet mints an identity token whose audience is the *bundle ID*,
+not a Services ID. Supabase rejects it unless the bundle ID is listed:
+
+- **Authorized Client IDs** → add `com.alimahmoud.bulkr`
+
+Leave any existing Services ID in place — the browser flow on Android still
+uses it. Without this the sheet appears, the user signs in, and Supabase
+returns an audience error at the last step.
 
 ## 4. App Store Connect
 
@@ -218,4 +233,8 @@ already has, so you never have to touch `pubspec.yaml`.
 | `The sandbox is not in sync with the Podfile.lock` | Something reintroduced a Podfile. All plugins are Swift Packages; there should not be one |
 | A pod wants a higher deployment target | Raise `IPHONEOS_DEPLOYMENT_TARGET` in `project.pbxproj` and `MinimumOSVersion` in `ios/Flutter/AppFrameworkInfo.plist` — both, or Flutter rewrites them mid-build |
 | Google sign-in opens and returns nothing | Step 2 was skipped |
+| `Passed nonce and nonce in id_token should either both exist or not` | The app and Supabase disagreed about whether a nonce exists. Handled in `lib/core/oauth_nonce.dart` now; if it returns, the ID token's `nonce` claim is something neither branch there expects |
+| `PlatformException(Error, Error while launching https://...authorize?provider=apple)` | The browser flow. iOS should never reach it — check `_isApplePlatform` in `auth_repository.dart` |
+| Apple sheet appears, then an audience or client error | Step 3b was skipped |
+| `Provisioning profile doesn't include the com.apple.developer.applesignin entitlement` | Sign In with Apple not ticked on the App ID, or the profile predates it — step 3 |
 | Crash at launch in `MLKAnalyticsLogger` / `unrecognized selector ... synchronize` | ML Kit and Firebase disagreeing about GoogleUtilities. Fixed by mobile_scanner 7 plus static linkage in the Podfile; if it comes back, a new pod has brought an old GoogleUtilities with it |

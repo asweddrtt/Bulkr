@@ -1,8 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../core/config/supabase_config.dart';
+import '../core/oauth_nonce.dart';
 
 /// The user dismissed the sign-in sheet.
 ///
@@ -33,6 +35,17 @@ class AuthRepository {
   /// re-initialise the plugin.
   Future<void>? _googleInitialization;
 
+  /// The nonce behind this app run's Google sign-ins.
+  ///
+  /// Per run rather than per attempt, and not by choice: `initialize()` is the
+  /// only place google_sign_in accepts a nonce — `authenticate()` takes a
+  /// scope hint and nothing else — and initialising more than once is
+  /// documented as undefined. So the nonce is fixed for as long as the process
+  /// lives, which still ties a token to this install rather than to nothing at
+  /// all.
+  late final String _googleRawNonce = OAuthNonce.generate();
+  late final String _googleHashedNonce = OAuthNonce.hash(_googleRawNonce);
+
   User? get currentUser => _client.auth.currentUser;
 
   bool get hasSession => _client.auth.currentSession != null;
@@ -42,6 +55,7 @@ class AuthRepository {
 
   Future<void> _ensureGoogleInitialized() {
     return _googleInitialization ??= GoogleSignIn.instance.initialize(
+      nonce: _googleHashedNonce,
       serverClientId: SupabaseConfig.googleWebClientId,
       // Android resolves its client from the package name + signing SHA-1, so
       // it must not be given the iOS ID.
@@ -88,21 +102,75 @@ class AuthRepository {
       provider: OAuthProvider.google,
       idToken: idToken,
       accessToken: authorization?.accessToken,
+      // Read back out of the token rather than assumed. iOS was returning a
+      // token with a nonce claim while this passed none, and Supabase rejects
+      // that mismatch outright: "Passed nonce and nonce in id_token should
+      // either both exist or not".
+      nonce: OAuthNonce.forSupabase(
+        claim: OAuthNonce.claimOf(idToken),
+        raw: _googleRawNonce,
+        hashed: _googleHashedNonce,
+      ),
     );
   }
 
-  /// Apple still uses the browser flow.
+  /// Apple's own sheet on iOS and macOS; the browser flow elsewhere.
   ///
-  /// Native Sign in with Apple needs the `sign_in_with_apple` package and is
-  /// what Apple expects for App Store submission — see the README.
+  /// The browser flow was never right here. It needs a redirect back into the
+  /// app, which is one more thing to get wrong, and on iOS it got it wrong —
+  /// `PlatformException(Error, Error while launching …/authorize?provider=apple)`
+  /// on every tap. Apple's guidelines expect the native sheet on their
+  /// platforms anyway, so the fallback exists for Android alone.
   Future<void> signInWithApple() async {
+    if (!_isApplePlatform) return _signInWithAppleViaBrowser();
+
+    final String raw = OAuthNonce.generate();
+    final String hashed = OAuthNonce.hash(raw);
+
+    final AuthorizationCredentialAppleID credential;
+    try {
+      credential = await SignInWithApple.getAppleIDCredential(
+        scopes: const [
+          AppleIDAuthorizationScopes.email,
+          AppleIDAuthorizationScopes.fullName,
+        ],
+        // Apple stamps this into the identity token, so the token cannot be
+        // replayed into a different sign-in attempt.
+        nonce: hashed,
+      );
+    } on SignInWithAppleAuthorizationException catch (error) {
+      if (error.code == AuthorizationErrorCode.canceled) {
+        throw const SignInCancelled();
+      }
+      rethrow;
+    }
+
+    final String? idToken = credential.identityToken;
+    if (idToken == null) {
+      throw const AuthException(
+        'Apple did not return an identity token. Check that Sign in with Apple '
+        'is enabled for this App ID and included in the provisioning profile.',
+      );
+    }
+
+    await _client.auth.signInWithIdToken(
+      provider: OAuthProvider.apple,
+      idToken: idToken,
+      nonce: OAuthNonce.forSupabase(
+        claim: OAuthNonce.claimOf(idToken),
+        raw: raw,
+        hashed: hashed,
+      ),
+    );
+  }
+
+  Future<void> _signInWithAppleViaBrowser() async {
     final launched = await _client.auth.signInWithOAuth(
       OAuthProvider.apple,
       redirectTo: SupabaseConfig.oauthRedirectUrl,
-      // An in-app browser view: a Chrome Custom Tab on Android, an
-      // SFSafariViewController on iOS. It overlays the app instead of throwing
-      // the user out into a full browser window, and unlike an embedded
-      // WebView it isn't blocked by providers as a disallowed user agent.
+      // A Chrome Custom Tab. It overlays the app instead of throwing the user
+      // out into a full browser window, and unlike an embedded WebView it
+      // isn't blocked by providers as a disallowed user agent.
       authScreenLaunchMode: LaunchMode.inAppBrowserView,
     );
 

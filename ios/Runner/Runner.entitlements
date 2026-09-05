@@ -18,5 +18,19 @@
 	     profile that does not match this file. -->
 	<key>aps-environment</key>
 	<string>development</string>
+
+	<!-- Sign in with Apple.
+	     The native sheet refuses to appear without this: the request fails with
+	     an authorization error rather than an obvious permissions message, so
+	     it reads like a code bug.
+
+	     As with push, the App ID in the Apple Developer portal must have the
+	     Sign In with Apple capability enabled, and the provisioning profile must
+	     be regenerated afterwards, or signing fails on a profile that no longer
+	     matches this file. -->
+	<key>com.apple.developer.applesignin</key>
+	<array>
+		<string>Default</string>
+	</array>
 </dict>
 </plist>
