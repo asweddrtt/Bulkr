@@ -3,6 +3,7 @@ import 'package:equatable/equatable.dart';
 import 'challenge.dart';
 import 'meal.dart';
 import 'post_label.dart';
+import 'visibility.dart';
 
 /// A `public.posts` row plus this user's relationship to it.
 ///
@@ -34,6 +35,7 @@ class Post extends Equatable {
     this.isLiked = false,
     this.isSaved = false,
     this.isHidden = false,
+    this.visibility = ContentVisibility.public,
     this.attachedMealSaved = false,
     this.groupId,
     this.groupName,
@@ -140,6 +142,13 @@ class Post extends Equatable {
   /// copy rather than letting it vanish without explanation.
   final bool isHidden;
 
+  /// Who the author chose to show this to.
+  ///
+  /// A label, not a gate. The row-level security policy decides who may read
+  /// the row at all — this is what the composer set and what the card shows
+  /// back, so the author can see at a glance which of their posts is which.
+  final ContentVisibility visibility;
+
   /// What to print above the post. Falls through display name to handle, the
   /// same order [UserProfile.preferredName] uses, so one person reads the same
   /// everywhere in the app.
@@ -189,6 +198,7 @@ class Post extends Equatable {
     bool? isLiked,
     bool? isSaved,
     bool? isHidden,
+    ContentVisibility? visibility,
     bool? attachedMealSaved,
     Challenge? challenge,
   }) {
@@ -212,6 +222,7 @@ class Post extends Equatable {
       isLiked: isLiked ?? this.isLiked,
       isSaved: isSaved ?? this.isSaved,
       isHidden: isHidden ?? this.isHidden,
+      visibility: visibility ?? this.visibility,
       attachedMealSaved: attachedMealSaved ?? this.attachedMealSaved,
       groupId: groupId,
       groupName: groupName,
@@ -253,6 +264,7 @@ class Post extends Equatable {
       isLiked: isLiked,
       isSaved: isSaved,
       isHidden: row['is_hidden'] == true,
+      visibility: ContentVisibility.fromDbValue(row['visibility']),
       groupId: row['group_id'] as String?,
       groupName: _group(row)?['name'] as String?,
     );
@@ -357,6 +369,7 @@ class Post extends Equatable {
         isLiked,
         isSaved,
         isHidden,
+        visibility,
         attachedMealSaved,
         groupId,
         groupName,

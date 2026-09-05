@@ -470,6 +470,65 @@ class _FeedListState extends State<_FeedList> {
         );
   }
 
+  /// Confirms a block, because it is not something to do by mistyping a tap.
+  ///
+  /// Says what it will actually do, in both directions. "Block" on its own
+  /// reads as "stop seeing them"; half of what it means is that they stop
+  /// seeing you, and someone should know that before they choose it.
+  Future<bool> _confirmBlock(BuildContext context, String name) async {
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A1A),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12.r),
+          side: const BorderSide(color: AppColors.darkBorder),
+        ),
+        title: Text(
+          'post_block_confirm_title'.tr(namedArgs: {'name': name}),
+          style: GoogleFonts.anton(
+            color: Colors.white,
+            fontSize: 15.sp,
+            letterSpacing: 1,
+          ),
+        ),
+        content: Text(
+          'post_block_confirm_body'.tr(namedArgs: {'name': name}),
+          style: GoogleFonts.inter(
+            color: AppColors.offWhiteMuted,
+            fontSize: 12.sp,
+            height: 1.5,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(
+              'cancel'.tr().toUpperCase(),
+              style: GoogleFonts.inter(
+                color: AppColors.textGray,
+                fontSize: 12.sp,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(
+              'post_block_confirm_action'.tr().toUpperCase(),
+              style: GoogleFonts.inter(
+                color: const Color(0xFFFF5722),
+                fontSize: 12.sp,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    return confirmed ?? false;
+  }
+
   Future<void> _showActions(BuildContext context, Post post) async {
     final FeedCubit cubit = context.read<FeedCubit>();
     final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
@@ -486,6 +545,35 @@ class _FeedListState extends State<_FeedList> {
 
       case PostAction.unhide:
         await cubit.setHidden(post, isHidden: false);
+
+      case PostAction.hideFromFeed:
+        await cubit.hidePost(post);
+
+        messenger
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(
+              backgroundColor: const Color(0xFF2A2A2A),
+              duration: const Duration(seconds: 4),
+              content: Text(
+                'post_hidden_notice'.tr(),
+                style: GoogleFonts.inter(color: Colors.white, fontSize: 12.sp),
+              ),
+              // Hiding is quiet and reversible, so the undo belongs on the
+              // notice rather than in a settings screen someone has to find.
+              action: SnackBarAction(
+                label: 'undo'.tr().toUpperCase(),
+                textColor: AppColors.primaryNeon,
+                onPressed: () => cubit.unhidePost(post),
+              ),
+            ),
+          );
+
+      case PostAction.blockAuthor:
+        if (!context.mounted) return;
+        final bool confirmed = await _confirmBlock(context, post.authorName);
+        if (!confirmed) return;
+        await cubit.blockAuthor(post);
 
       case PostAction.report:
         if (!context.mounted) return;

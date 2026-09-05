@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../data/meal_repository.dart';
 import '../../data/post_repository.dart';
+import '../../models/visibility.dart';
 import '../../models/meal.dart';
 import '../../models/post.dart';
 import '../../models/challenge.dart';
@@ -82,6 +83,10 @@ class PostComposerCubit extends Cubit<PostComposerState> {
   /// Untrimmed, deliberately: trimming as the user types eats the space before
   /// the word they are about to write. The trim happens once, on the way to the
   /// database.
+  void setVisibility(ContentVisibility visibility) {
+    emit(state.copyWith(draft: state.draft.copyWith(visibility: visibility)));
+  }
+
   void setContent(String content) {
     if (state.draft.content == content) return;
     emit(state.copyWith(draft: state.draft.copyWith(content: content)));

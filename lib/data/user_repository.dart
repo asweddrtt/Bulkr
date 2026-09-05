@@ -251,6 +251,52 @@ class UserRepository {
     }).eq('id', userId);
   }
 
+  // --- Leaving --------------------------------------------------------------
+
+  /// The edge function that deletes an account.
+  ///
+  /// It has to be a function: `auth.users` is not reachable through PostgREST,
+  /// and deleting a row there needs the service role — a key that must never
+  /// be inside the app, since an `.apk` is a zip. See
+  /// `supabase/functions/delete-account/README.md`.
+  static const String deleteAccountFunction = 'delete-account';
+
+  /// Deletes the signed-in account and everything belonging to it.
+  ///
+  /// Takes no user id, and that is the security model rather than an omission:
+  /// the function reads the caller from their own verified JWT, so there is no
+  /// parameter that could make this "delete any account you can name".
+  ///
+  /// Throws on failure, so the caller can say so rather than signing someone
+  /// out of an account that still exists. Returns only once the account is
+  /// actually gone.
+  Future<void> deleteAccount() async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) {
+      throw StateError('Cannot delete an account without a signed-in user');
+    }
+
+    final FunctionResponse response = await _client.functions.invoke(
+      deleteAccountFunction,
+      method: HttpMethod.post,
+    );
+
+    // `invoke` does not throw on a non-2xx by itself, so the status is checked
+    // here — otherwise a 500 would read as a successful deletion and the app
+    // would sign the user out of an account that is still there.
+    if (response.status >= 200 && response.status < 300) return;
+
+    final Object? data = response.data;
+    final String detail = data is Map && data['detail'] != null
+        ? '${data['detail']}'
+        : data is Map && data['error'] != null
+            ? '${data['error']}'
+            : 'HTTP ${response.status}';
+
+    debugPrint('Bulkr: account deletion failed — $detail');
+    throw Exception(detail);
+  }
+
   /// Writes the two things a person says about themselves.
   ///
   /// The only columns on `users` a profile screen edits. Everything else on

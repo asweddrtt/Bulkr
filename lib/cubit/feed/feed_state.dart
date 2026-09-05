@@ -55,6 +55,18 @@ class FeedSlice extends Equatable {
     );
   }
 
+  /// This feed with everything by one author removed.
+  ///
+  /// For blocking, where one post is what was tapped but the person is what
+  /// was meant. Only clears what has already been fetched — from the next
+  /// fetch on the policy is what keeps them out, so this is the screen
+  /// catching up rather than the mechanism.
+  FeedSlice withoutAuthor(String authorId) {
+    return copyWith(
+      posts: posts.where((post) => post.authorId != authorId).toList(),
+    );
+  }
+
   /// This feed with one post replaced, matched on id.
   ///
   /// What like, save and hide all go through once those land: the same post can

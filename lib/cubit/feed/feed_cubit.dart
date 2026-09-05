@@ -410,6 +410,95 @@ class FeedCubit extends Cubit<FeedState> {
     }
   }
 
+  /// Takes one post out of this reader's feeds.
+  ///
+  /// Optimistic, unlike liking or saving: the card is gone before the write
+  /// lands, because "I do not want to see this" is a request to stop seeing it
+  /// now. A failure puts it back and says so, which is the right way round —
+  /// the alternative is a card that sits there while a spinner decides whether
+  /// the user is allowed to look away.
+  Future<void> hidePost(Post post) async {
+    final FeedState before = state;
+
+    emit(state
+        .copyWith(
+          forYou: state.forYou.without(post.id),
+          discover: state.discover.without(post.id),
+        )
+        .copyWith(clearActionError: true));
+
+    try {
+      await _posts.hidePost(post.id);
+    } catch (error) {
+      if (isClosed) return;
+
+      final String detail = _describe(error);
+      debugPrint('Bulkr: hiding a post failed — $detail');
+
+      emit(before.copyWith(
+        actionErrorKey: _actionFailedKey,
+        actionErrorDetail: detail,
+      ));
+    }
+  }
+
+  /// Puts a hidden post back, and reloads so it reappears where it belongs.
+  ///
+  /// A reload rather than re-inserting the card at the position it was pulled
+  /// from: the feed is ordered, other posts may have arrived, and dropping one
+  /// back into a list at a remembered index is how a feed ends up out of order.
+  Future<void> unhidePost(Post post) async {
+    try {
+      await _posts.unhidePost(post.id);
+      if (isClosed) return;
+      await refresh();
+    } catch (error) {
+      if (isClosed) return;
+
+      final String detail = _describe(error);
+      debugPrint('Bulkr: unhiding a post failed — $detail');
+
+      emit(state.copyWith(
+        actionErrorKey: _actionFailedKey,
+        actionErrorDetail: detail,
+      ));
+    }
+  }
+
+  /// Blocks a post's author, and drops everything of theirs on screen.
+  ///
+  /// The screen only needs clearing because the pages already fetched still
+  /// hold their posts. From the next fetch on it is the row-level security
+  /// policy doing the work, in both directions and whatever the client does.
+  ///
+  /// Not optimistic. Blocking is a deliberate, consequential act, and telling
+  /// someone it happened when it did not is worse than half a second of wait.
+  Future<void> blockAuthor(Post post) async {
+    if (post.isMine) return;
+
+    emit(state.copyWith(clearActionError: true));
+
+    try {
+      await _posts.blockAuthor(post.authorId);
+      if (isClosed) return;
+
+      emit(state.copyWith(
+        forYou: state.forYou.withoutAuthor(post.authorId),
+        discover: state.discover.withoutAuthor(post.authorId),
+      ));
+    } catch (error) {
+      if (isClosed) return;
+
+      final String detail = _describe(error);
+      debugPrint('Bulkr: blocking failed — $detail');
+
+      emit(state.copyWith(
+        actionErrorKey: _actionFailedKey,
+        actionErrorDetail: detail,
+      ));
+    }
+  }
+
   /// Forgets whatever the last snack bar said.
   ///
   /// Clears the success message as well as the failure, and has to: the screen

@@ -9,11 +9,13 @@ import 'package:image_picker/image_picker.dart';
 import '../cubit/meal_editor/meal_editor_cubit.dart';
 import '../data/food_repository.dart';
 import '../data/meal_repository.dart';
+import '../models/visibility.dart';
 import '../models/food_item.dart';
 import '../models/macros.dart';
 import '../models/meal.dart';
 import '../models/meal_ingredient.dart';
 import '../styles/app_color.dart';
+import '../widgets/visibility_picker.dart';
 import '../widgets/animations/press_scale.dart';
 import '../widgets/barcode_scanner_sheet.dart';
 import '../widgets/food_search_sheet.dart';
@@ -30,7 +32,7 @@ class MealEditorScreen extends StatelessWidget {
   const MealEditorScreen({
     super.key,
     this.meal,
-    this.initialIsPublic = false,
+    this.initialVisibility = ContentVisibility.private,
   });
 
   /// The meal to open. Null writes a new one.
@@ -43,7 +45,9 @@ class MealEditorScreen extends StatelessWidget {
   /// attached to a post that nobody else can read renders as no attachment at
   /// all, because the meals RLS policy only shows a meal to its creator or to
   /// everyone. Ignored when editing, where the meal's own setting wins.
-  final bool initialIsPublic;
+  /// What the picker starts on. The composer opens this with `public`,
+  /// because a meal made to go on a post is a meal being shared.
+  final ContentVisibility initialVisibility;
 
   @override
   Widget build(BuildContext context) {
@@ -52,7 +56,7 @@ class MealEditorScreen extends StatelessWidget {
         mealRepository: context.read<MealRepository>(),
         foodRepository: context.read<FoodRepository>(),
         editing: meal,
-        initialIsPublic: initialIsPublic,
+        initialVisibility: initialVisibility,
       ),
       child: const _MealEditorView(),
     );
@@ -161,7 +165,7 @@ class _MealEditorView extends StatelessWidget {
                           SizedBox(height: 22.h),
                           const _RecipeField(),
                           SizedBox(height: 18.h),
-                          const _PublicToggle(),
+                          const _VisibilityField(),
                         ],
                       ),
                     ),
@@ -1037,56 +1041,24 @@ class _NumberFieldState extends State<_NumberField> {
   }
 }
 
-/// Whether the meal shows up in the feed for other users to save.
-class _PublicToggle extends StatelessWidget {
-  const _PublicToggle();
+/// Who can see this meal.
+///
+/// Was a public/private switch, which could not express the middle answer —
+/// shared with the people who follow you, and not with Discover. The same
+/// picker the composer uses, so the two things a user publishes ask the
+/// question the same way.
+class _VisibilityField extends StatelessWidget {
+  const _VisibilityField();
 
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<MealEditorCubit, MealEditorState>(
       buildWhen: (previous, current) =>
-          previous.draft.isPublic != current.draft.isPublic,
-      builder: (context, state) => Container(
-        padding: EdgeInsets.fromLTRB(14.w, 6.h, 6.w, 6.h),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1A1A1A),
-          borderRadius: BorderRadius.circular(5.r),
-          border: Border.all(color: AppColors.darkBorder),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'meal_public_label'.tr().toUpperCase(),
-                    style: GoogleFonts.inter(
-                      fontSize: 11.sp,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                      letterSpacing: 1,
-                    ),
-                  ),
-                  SizedBox(height: 2.h),
-                  Text(
-                    'meal_public_helper'.tr(),
-                    style: GoogleFonts.inter(
-                      fontSize: 10.sp,
-                      color: AppColors.textGray,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Switch(
-              value: state.draft.isPublic,
-              onChanged: context.read<MealEditorCubit>().setPublic,
-              activeThumbColor: Colors.black,
-              activeTrackColor: AppColors.primaryNeon,
-            ),
-          ],
-        ),
+          previous.draft.visibility != current.draft.visibility,
+      builder: (context, state) => VisibilityPicker(
+        titleKey: 'meal_visibility_title',
+        value: state.draft.visibility,
+        onChanged: context.read<MealEditorCubit>().setVisibility,
       ),
     );
   }

@@ -2,6 +2,7 @@ import 'package:equatable/equatable.dart';
 
 import 'macros.dart';
 import 'meal_ingredient.dart';
+import 'visibility.dart';
 
 /// What a meal is mostly made of, for the tag on its card.
 ///
@@ -24,7 +25,7 @@ class Meal extends Equatable {
     this.description,
     this.imageUrl,
     this.totals = Macros.zero,
-    this.isPublic = false,
+    this.visibility = ContentVisibility.private,
     required this.createdAt,
     this.creatorUsername,
     this.isMine = false,
@@ -54,7 +55,13 @@ class Meal extends Equatable {
   /// one query rather than one join per card.
   final Macros totals;
 
-  final bool isPublic;
+  /// Who can see this meal. Replaces the boolean `is_public` — see
+  /// [ContentVisibility] for why a boolean was not enough.
+  final ContentVisibility visibility;
+
+  /// Kept as a getter so the several places that only ask "is this shareable"
+  /// read the same as they did.
+  bool get isPublic => visibility.isPublic;
   final DateTime createdAt;
 
   /// Author's handle, when the meal was read with its creator joined. Shown on
@@ -161,7 +168,7 @@ class Meal extends Equatable {
     String? description,
     String? imageUrl,
     Macros? totals,
-    bool? isPublic,
+    ContentVisibility? visibility,
     bool? isMine,
     bool? isSaved,
     bool? isFavorite,
@@ -181,7 +188,7 @@ class Meal extends Equatable {
       description: description ?? this.description,
       imageUrl: imageUrl ?? this.imageUrl,
       totals: totals ?? this.totals,
-      isPublic: isPublic ?? this.isPublic,
+      visibility: visibility ?? this.visibility,
       createdAt: createdAt,
       creatorUsername: creatorUsername ?? this.creatorUsername,
       isMine: isMine ?? this.isMine,
@@ -229,7 +236,12 @@ class Meal extends Equatable {
         fatG: parseGrams(row['total_fat_g']),
       ),
       creatorUsername: authorRow?['username'] as String?,
-      isPublic: row['is_public'] == true,
+      // Falls back to the old boolean for a row read before
+      // `social_privacy.sql` has run, so the meals list is not suddenly all
+      // private on the day this ships.
+      visibility: row.containsKey('visibility')
+          ? ContentVisibility.fromDbValue(row['visibility'])
+          : ContentVisibility.fromIsPublic(row['is_public']),
       createdAt: DateTime.tryParse('${row['created_at']}')?.toLocal() ??
           DateTime.fromMillisecondsSinceEpoch(0),
       isMine: currentUserId != null && creatorId == currentUserId,
@@ -262,7 +274,7 @@ class Meal extends Equatable {
         description,
         imageUrl,
         totals,
-        isPublic,
+        visibility,
         creatorUsername,
         isMine,
         isSaved,

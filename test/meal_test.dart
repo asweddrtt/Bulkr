@@ -1,3 +1,4 @@
+import 'package:bulkr/models/visibility.dart';
 import 'package:bulkr/models/food_item.dart';
 import 'package:bulkr/models/macros.dart';
 import 'package:bulkr/models/meal.dart';
@@ -34,7 +35,7 @@ void main() {
           'total_protein_g': 70,
           'total_carbs_g': 130,
           'total_fat_g': 40,
-          'is_public': true,
+          'visibility': 'public',
           'created_at': '2026-08-20T10:00:00Z',
           'users': {'username': 'ali'},
         },
@@ -44,7 +45,7 @@ void main() {
       expect(subject.title, 'Anabolic Rigatoni');
       expect(subject.totals.caloriesRounded, 1200);
       expect(subject.totals.proteinRounded, 70);
-      expect(subject.isPublic, isTrue);
+      expect(subject.visibility, ContentVisibility.public);
       expect(subject.isMine, isTrue);
       expect(subject.creatorUsername, 'ali');
     });

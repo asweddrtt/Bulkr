@@ -1,3 +1,4 @@
+import 'package:bulkr/models/visibility.dart';
 import 'package:bulkr/models/food_item.dart';
 import 'package:bulkr/models/macros.dart';
 import 'package:bulkr/models/meal.dart';
@@ -139,7 +140,7 @@ void main() {
       String title = 'Apex Ribeye',
       String? description = 'Sear it.',
       String? imageUrl = 'https://x.test/a.jpg',
-      bool isPublic = true,
+      ContentVisibility visibility = ContentVisibility.public,
     }) {
       return Meal(
         id: 'meal-1',
@@ -148,7 +149,7 @@ void main() {
         description: description,
         imageUrl: imageUrl,
         totals: const Macros(calories: 1450, proteinG: 67),
-        isPublic: isPublic,
+        visibility: visibility,
         createdAt: DateTime(2026, 8, 20),
         isMine: true,
       );
@@ -160,7 +161,7 @@ void main() {
       expect(draft.title, 'Apex Ribeye');
       expect(draft.recipe, 'Sear it.');
       expect(draft.existingImageUrl, 'https://x.test/a.jpg');
-      expect(draft.isPublic, isTrue);
+      expect(draft.visibility, ContentVisibility.public);
       expect(draft.canSave, isTrue);
     });
 

@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../data/food_repository.dart';
 import '../../data/meal_repository.dart';
+import '../../models/visibility.dart';
 import '../../models/food_item.dart';
 import '../../models/macros.dart';
 import '../../models/meal.dart';
@@ -25,12 +26,12 @@ class MealEditorCubit extends Cubit<MealEditorState> {
     required MealRepository mealRepository,
     required FoodRepository foodRepository,
     Meal? editing,
-    bool initialIsPublic = false,
+    ContentVisibility initialVisibility = ContentVisibility.private,
   })  : _meals = mealRepository,
         _foods = foodRepository,
         super(
           editing == null
-              ? MealEditorState(draft: MealDraft(isPublic: initialIsPublic))
+              ? MealEditorState(draft: MealDraft(visibility: initialVisibility))
               : MealEditorState(
                   status: MealEditorStatus.hydrating,
                   editing: editing,
@@ -79,8 +80,8 @@ class MealEditorCubit extends Cubit<MealEditorState> {
   void setRecipe(String recipe) =>
       emit(state.copyWith(draft: state.draft.copyWith(recipe: recipe)));
 
-  void setPublic(bool isPublic) =>
-      emit(state.copyWith(draft: state.draft.copyWith(isPublic: isPublic)));
+  void setVisibility(ContentVisibility visibility) =>
+      emit(state.copyWith(draft: state.draft.copyWith(visibility: visibility)));
 
   /// Updates one of the four hand-typed totals.
   ///

@@ -3,6 +3,7 @@ import 'package:equatable/equatable.dart';
 import 'macros.dart';
 import 'meal.dart';
 import 'meal_ingredient.dart';
+import 'visibility.dart';
 
 /// A meal being written, before it becomes a `meals` row.
 ///
@@ -17,7 +18,7 @@ class MealDraft extends Equatable {
     this.existingImageUrl,
     this.ingredients = const [],
     this.manualTotals = Macros.zero,
-    this.isPublic = false,
+    this.visibility = ContentVisibility.private,
   });
 
   /// Opens an existing meal for editing.
@@ -33,7 +34,7 @@ class MealDraft extends Equatable {
       existingImageUrl: meal.imageUrl,
       ingredients: ingredients,
       manualTotals: meal.totals,
-      isPublic: meal.isPublic,
+      visibility: meal.visibility,
     );
   }
 
@@ -62,7 +63,10 @@ class MealDraft extends Equatable {
   final Macros manualTotals;
 
   /// Whether the meal is visible to other users in the feed.
-  final bool isPublic;
+  /// Who will be able to see it once saved. Private by default: a meal is
+  /// something someone builds for themselves, and sharing is the deliberate
+  /// act.
+  final ContentVisibility visibility;
 
   bool get hasIngredients => ingredients.isNotEmpty;
 
@@ -102,7 +106,7 @@ class MealDraft extends Equatable {
     bool clearImage = false,
     List<MealIngredient>? ingredients,
     Macros? manualTotals,
-    bool? isPublic,
+    ContentVisibility? visibility,
   }) {
     return MealDraft(
       title: title ?? this.title,
@@ -114,7 +118,7 @@ class MealDraft extends Equatable {
           clearImage ? null : (existingImageUrl ?? this.existingImageUrl),
       ingredients: ingredients ?? this.ingredients,
       manualTotals: manualTotals ?? this.manualTotals,
-      isPublic: isPublic ?? this.isPublic,
+      visibility: visibility ?? this.visibility,
     );
   }
 
@@ -159,6 +163,6 @@ class MealDraft extends Equatable {
         existingImageUrl,
         ingredients,
         manualTotals,
-        isPublic,
+        visibility,
       ];
 }

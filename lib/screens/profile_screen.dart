@@ -19,6 +19,7 @@ import '../models/person.dart';
 import '../models/post.dart';
 import '../models/user_profile.dart';
 import '../styles/app_color.dart';
+import '../widgets/delete_account_sheet.dart';
 import '../widgets/bulkr_nav_bar.dart';
 import '../widgets/account_sheet.dart';
 import '../widgets/animations/press_scale.dart';
@@ -28,6 +29,7 @@ import '../widgets/person_row.dart';
 import '../widgets/post_actions_sheet.dart';
 import '../widgets/post_card.dart';
 import '../widgets/report_sheet.dart';
+import 'blocked_people_screen.dart';
 import 'post_comments_sheet.dart';
 import 'post_composer_screen.dart';
 
@@ -367,6 +369,7 @@ class _Header extends StatelessWidget {
   static Future<void> _openAccount(BuildContext context) async {
     final AuthCubit auth = context.read<AuthCubit>();
     final GoRouter router = GoRouter.of(context);
+    final UserRepository users = context.read<UserRepository>();
     final String username =
         context.read<ProfileCubit>().state.profile?.username ?? '';
 
@@ -378,7 +381,59 @@ class _Header extends StatelessWidget {
         await auth.signOut();
         router.go(AppRoutes.welcome);
       },
+      onManageBlocked: () => BlockedPeopleScreen.open(context),
+      onDeleteAccount: () => _deleteAccount(context, auth, router, users),
     );
+  }
+
+  /// Deletes the account, after asking for the handle to be typed.
+  ///
+  /// A typed confirmation rather than a yes/no, because this is the one action
+  /// in the app that nothing can undo: posts, comments, meals, logs and the
+  /// login itself, gone, and other people's threads lose the replies. A dialog
+  /// somebody can dismiss by tapping where OK usually is is not enough
+  /// friction for that.
+  ///
+  /// Signs out afterwards rather than relying on the session expiring. The
+  /// account behind it no longer exists, so every request from here would fail
+  /// — better to be on the welcome screen than on a profile that cannot load.
+  static Future<void> _deleteAccount(
+    BuildContext context,
+    AuthCubit auth,
+    GoRouter router,
+    UserRepository users,
+  ) async {
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    final String username =
+        context.read<ProfileCubit>().state.profile?.username ?? '';
+
+    final bool confirmed = await DeleteAccountSheet.show(context, username);
+    if (!confirmed) return;
+
+    try {
+      await users.deleteAccount();
+      await auth.signOut();
+      router.go(AppRoutes.welcome);
+    } catch (error) {
+      // Deliberately not signed out on failure: the account still exists, and
+      // dropping the session would leave someone unable to try again without
+      // signing back in to an account they were told was deleted.
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            backgroundColor: const Color(0xFF2A2A2A),
+            duration: const Duration(seconds: 6),
+            content: Text(
+              [
+                'account_delete_failed'.tr(),
+                '$error',
+              ].join('\n'),
+              style: GoogleFonts.inter(color: Colors.white, fontSize: 12.sp),
+            ),
+          ),
+        );
+    }
   }
 
   /// Opens the editor and applies what comes back.
@@ -636,6 +691,10 @@ Future<void> _openComments(BuildContext context, Post post) async {
 
 Future<void> _showActions(BuildContext context, Post post) async {
   final AuthorCubit cubit = context.read<AuthorCubit>();
+  // Read before the await, like the cubit above it: the sheet is a route,
+  // and reaching back through this context after it closes is reaching
+  // through a context that may be gone.
+  final PostRepository posts = context.read<PostRepository>();
   final PostAction? action = await PostActionsSheet.show(context, post);
 
   if (action == null) return;
@@ -653,6 +712,17 @@ Future<void> _showActions(BuildContext context, Post post) async {
     // Every post here is the user's own, so the sheet never offers this — but
     // the switch is exhaustive and a silent fall-through would be a bug the
     // day that changes.
+    // Unreachable for the same reason report is: every post here is the
+    // user's own, so the sheet never offers the reader's actions. Handled
+    // rather than fallen through, because the day that changes a silent
+    // no-op would be the bug.
+    case PostAction.hideFromFeed:
+      await posts.hidePost(post.id);
+
+    case PostAction.blockAuthor:
+      if (post.isMine) return;
+      await posts.blockAuthor(post.authorId);
+
     case PostAction.report:
       if (!context.mounted) return;
       await reportPostFlow(context, post);

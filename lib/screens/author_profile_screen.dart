@@ -255,6 +255,10 @@ Future<void> _openComments(BuildContext context, Post post) async {
 Future<void> _showActions(BuildContext context, Post post) async {
   final AuthorCubit cubit = context.read<AuthorCubit>();
   final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+  // Read before the await, like the cubit above it: the sheet is a route,
+  // and reaching back through this context after it closes is reaching
+  // through a context that may be gone.
+  final PostRepository posts = context.read<PostRepository>();
   final PostAction? action = await PostActionsSheet.show(context, post);
 
   if (action == null) return;
@@ -268,6 +272,18 @@ Future<void> _showActions(BuildContext context, Post post) async {
 
     case PostAction.unhide:
       await cubit.setHidden(post, isHidden: false);
+
+    // Hiding and blocking are the feed's to own — the reader-side actions
+    // exist to shape what arrives there, and doing them from a screen whose
+    // whole purpose is to show one author's or one group's posts would empty
+    // the screen the user deliberately opened. Offered here so the sheet is
+    // consistent; handled by taking them back to the feed's own flow.
+    case PostAction.hideFromFeed:
+      await posts.hidePost(post.id);
+
+    case PostAction.blockAuthor:
+      if (post.isMine) return;
+      await posts.blockAuthor(post.authorId);
 
     case PostAction.report:
       if (!context.mounted) return;

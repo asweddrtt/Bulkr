@@ -3,6 +3,7 @@ import 'package:equatable/equatable.dart';
 import 'challenge.dart';
 import 'meal.dart';
 import 'post_label.dart';
+import 'visibility.dart';
 
 /// A post being written, before it becomes a `posts` row.
 ///
@@ -18,7 +19,15 @@ class PostDraft extends Equatable {
     this.attachedMeal,
     this.groupId,
     this.challenge,
+    this.visibility = ContentVisibility.public,
   });
+
+  /// Who will be able to see it.
+  ///
+  /// Public by default, matching the column default and what every post
+  /// written before this existed already is. Posting is a public act here
+  /// unless someone says otherwise — the Feed is the point of the app.
+  final ContentVisibility visibility;
 
   /// Which of the six kinds of post this is.
   ///
@@ -134,6 +143,7 @@ class PostDraft extends Equatable {
     String? groupId,
     bool clearGroup = false,
     ChallengeDraft? challenge,
+    ContentVisibility? visibility,
     bool clearChallenge = false,
   }) {
     return PostDraft(
@@ -144,6 +154,7 @@ class PostDraft extends Equatable {
           clearAttachedMeal ? null : (attachedMeal ?? this.attachedMeal),
       groupId: clearGroup ? null : (groupId ?? this.groupId),
       challenge: clearChallenge ? null : (challenge ?? this.challenge),
+      visibility: visibility ?? this.visibility,
     );
   }
 
@@ -178,10 +189,14 @@ class PostDraft extends Equatable {
       'content': trimmedContent.isEmpty ? null : trimmedContent,
       'attached_meal_id': attachedMeal?.id,
       'group_id': groupId,
+      // Ignored by the reader for a group post — group membership is the
+      // audience there, and section 5 of `social_privacy.sql` says so — but
+      // still written, so a post moved out of a group later has an answer.
+      'visibility': visibility.dbValue,
     };
   }
 
   @override
   List<Object?> get props =>
-      [label, content, imagePaths, attachedMeal, groupId, challenge];
+      [label, content, imagePaths, attachedMeal, groupId, challenge, visibility];
 }

@@ -8,10 +8,12 @@ import '../models/post_draft.dart';
 import '../models/challenge.dart';
 import '../models/post_label.dart';
 import '../models/post_report.dart';
+import '../models/visibility.dart';
 import 'feed_cursor.dart';
 import 'challenge_repository.dart';
 import 'follow_repository.dart';
 import 'group_repository.dart';
+import 'moderation_repository.dart';
 
 /// A photo waiting to go up with a post.
 ///
@@ -50,13 +52,29 @@ class PostRepository {
     FollowRepository? followRepository,
     GroupRepository? groupRepository,
     ChallengeRepository? challengeRepository,
+    ModerationRepository? moderationRepository,
   })  : _client = client ?? Supabase.instance.client,
         _follows = followRepository ?? FollowRepository(client: client),
         _groups = groupRepository ?? GroupRepository(client: client),
         _challenges =
-            challengeRepository ?? ChallengeRepository(client: client);
+            challengeRepository ?? ChallengeRepository(client: client),
+        _moderation =
+            moderationRepository ?? ModerationRepository(client: client);
 
   final SupabaseClient _client;
+
+  /// Blocks and hidden posts. Blocking needs nothing from here — the policy
+  /// refuses a blocked author's rows before they reach the client — but hiding
+  /// is a preference the query has to apply, so this is where it is applied.
+  final ModerationRepository _moderation;
+
+  /// Posts this reader has hidden, as of the last [refreshHidden].
+  ///
+  /// Cached rather than fetched per page, because a feed scrolls and the set
+  /// does not change while it does. Empty until refreshed, which is also what
+  /// makes this degrade well: before `social_privacy.sql` has been run the
+  /// refresh fails, the set stays empty, and the feed is exactly what it was.
+  Set<String> _hiddenPostIds = <String>{};
 
   /// Who the user follows, which is half of what For You is made of. Read
   /// through the repository that owns the follow graph rather than queried
@@ -440,7 +458,7 @@ class PostRepository {
     if (meal != null && !meal.isPublic) {
       await _client
           .from('meals')
-          .update({'is_public': true})
+          .update({'visibility': ContentVisibility.public.dbValue})
           .eq('id', meal.id)
           .eq('creator_id', userId);
     }
@@ -721,6 +739,45 @@ class PostRepository {
   }
 
   /// Turns rows into a page, and works out where the next one starts.
+  // --- Hiding ---------------------------------------------------------------
+
+  /// Re-reads which posts this user has hidden.
+  ///
+  /// Called when a feed loads rather than when a page is fetched: the set does
+  /// not change while someone scrolls, and a query per page would be a query
+  /// per page for something that almost always comes back the same.
+  ///
+  /// Never throws. A failure here — most likely `social_privacy.sql` not having
+  /// been run — leaves the previous set in place and the feed unfiltered, which
+  /// is the state the app was in before hiding existed.
+  Future<void> refreshHidden() async {
+    try {
+      _hiddenPostIds = await _moderation.hiddenPostIds();
+    } catch (error) {
+      debugPrint('Bulkr: hidden posts unavailable — $error');
+    }
+  }
+
+  /// Hides one post from this reader's feeds, and remembers it locally so the
+  /// card goes without waiting for a refetch.
+  Future<void> hidePost(String postId) async {
+    await _moderation.hidePost(postId);
+    _hiddenPostIds = {..._hiddenPostIds, postId};
+  }
+
+  /// Puts a hidden post back into this reader's feeds.
+  Future<void> unhidePost(String postId) async {
+    await _moderation.unhidePost(postId);
+    _hiddenPostIds = {..._hiddenPostIds}..remove(postId);
+  }
+
+  /// Blocks [personId].
+  ///
+  /// The block itself is what does the work — `public.can_view` refuses their
+  /// rows in either direction from here on, so the next fetch simply will not
+  /// contain them.
+  Future<void> blockAuthor(String personId) => _moderation.block(personId);
+
   Future<FeedPage> _page(
     List<Map<String, dynamic>> rows, {
     required String? userId,
@@ -732,7 +789,15 @@ class PostRepository {
 
     if (posts.isEmpty) return const FeedPage.empty();
 
-    List<Post> marked = await _withMyEngagement(posts, userId: userId);
+    // Applied here rather than in the query, so every feed gets it from one
+    // place — Discover, For You, a group, an author's profile. A page of 20
+    // that loses two returns 18; `hasMore` and the cursor are both built from
+    // the raw rows below, so paging is unaffected by how many were dropped.
+    final List<Post> visible = _hiddenPostIds.isEmpty
+        ? posts
+        : posts.where((post) => !_hiddenPostIds.contains(post.id)).toList();
+
+    List<Post> marked = await _withMyEngagement(visible, userId: userId);
     marked = await _withChallenges(marked);
 
     return FeedPage(

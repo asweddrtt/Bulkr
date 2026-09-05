@@ -13,12 +13,14 @@ import '../cubit/meals/meals_cubit.dart';
 import '../cubit/post_composer/post_composer_cubit.dart';
 import '../data/meal_repository.dart';
 import '../data/post_repository.dart';
+import '../models/visibility.dart';
 import '../models/meal.dart';
 import '../models/challenge.dart';
 import '../models/post.dart';
 import '../models/post_draft.dart';
 import '../models/post_label.dart';
 import '../styles/app_color.dart';
+import '../widgets/visibility_picker.dart';
 import '../widgets/animations/press_scale.dart';
 import '../widgets/image_source_sheet.dart';
 import '../widgets/sheet_action_row.dart';
@@ -165,6 +167,7 @@ class PostComposerScreen extends StatelessWidget {
                     _ContentField(),
                     _ImageStrip(),
                     _MealAttachment(),
+                    _VisibilityField(),
                   ],
                 ),
               ),
@@ -604,6 +607,41 @@ class _DayChip extends StatelessWidget {
 /// Asked first, and never left unanswered — it opens on a default rather than
 /// on nothing, because a required question with no answer is a wall in front of
 /// a text field.
+/// Who can see the post.
+///
+/// Last in the composer, under the meal, rather than up beside the label. The
+/// label is what the post *is* and the author picks it before writing; the
+/// audience is a decision about the finished thing, and putting it at the end
+/// is where someone is ready to make it.
+///
+/// Hidden for a group post: the group is already the audience, and asking
+/// somebody to choose one twice for the same post is asking them to reason
+/// about the schema. The value is still written — see [PostDraft.toRowValues].
+class _VisibilityField extends StatelessWidget {
+  const _VisibilityField();
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<PostComposerCubit, PostComposerState>(
+      buildWhen: (previous, current) =>
+          previous.draft.visibility != current.draft.visibility ||
+          previous.draft.groupId != current.draft.groupId,
+      builder: (context, state) {
+        if (state.draft.groupId != null) return const SizedBox.shrink();
+
+        return Padding(
+          padding: EdgeInsets.only(top: 20.h),
+          child: VisibilityPicker(
+            titleKey: 'post_visibility_title',
+            value: state.draft.visibility,
+            onChanged: context.read<PostComposerCubit>().setVisibility,
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _LabelPicker extends StatelessWidget {
   const _LabelPicker();
 
@@ -1135,7 +1173,9 @@ class _MealAttachment extends StatelessWidget {
 
     final Meal? created = await Navigator.of(context).push<Meal>(
       MaterialPageRoute(
-        builder: (_) => const MealEditorScreen(initialIsPublic: true),
+        builder: (_) => const MealEditorScreen(
+          initialVisibility: ContentVisibility.public,
+        ),
       ),
     );
 

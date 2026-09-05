@@ -4,6 +4,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../styles/app_color.dart';
+import 'sheet_action_row.dart';
 
 /// Behind the settings gear. Small on purpose: it exists so the user can see
 /// which account they are actually signed in as, and get out of it.
@@ -13,6 +14,8 @@ class AccountSheet extends StatelessWidget {
     required this.email,
     required this.username,
     required this.onSignOut,
+    required this.onManageBlocked,
+    required this.onDeleteAccount,
   });
 
   /// The email on the Supabase session — the answer to "which account is this?".
@@ -21,11 +24,20 @@ class AccountSheet extends StatelessWidget {
   final String username;
   final Future<void> Function() onSignOut;
 
+  /// Opens the list of people this user has blocked, so it can be undone.
+  final VoidCallback onManageBlocked;
+
+  /// Deletes the account. Confirmed by the screen, not here — a sheet is not
+  /// where something irreversible should be one tap away.
+  final VoidCallback onDeleteAccount;
+
   static Future<void> show(
     BuildContext context, {
     required String? email,
     required String username,
     required Future<void> Function() onSignOut,
+    required VoidCallback onManageBlocked,
+    required VoidCallback onDeleteAccount,
   }) {
     return showModalBottomSheet<void>(
       context: context,
@@ -34,6 +46,8 @@ class AccountSheet extends StatelessWidget {
         email: email,
         username: username,
         onSignOut: onSignOut,
+        onManageBlocked: onManageBlocked,
+        onDeleteAccount: onDeleteAccount,
       ),
     );
   }
@@ -93,6 +107,19 @@ class AccountSheet extends StatelessWidget {
             SizedBox(height: 24.h),
             SizedBox(
               width: double.infinity,
+              child: SheetActionRow(
+                icon: Icons.block,
+                label: 'account_blocked'.tr(),
+                helper: 'account_blocked_helper'.tr(),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  onManageBlocked();
+                },
+              ),
+            ),
+            SizedBox(height: 14.h),
+            SizedBox(
+              width: double.infinity,
               child: OutlinedButton(
                 onPressed: () async {
                   Navigator.of(context).pop();
@@ -109,6 +136,28 @@ class AccountSheet extends StatelessWidget {
                 child: Text(
                   'sign_out_btn'.tr().toUpperCase(),
                   style: GoogleFonts.anton(fontSize: 16.sp, letterSpacing: 1),
+                ),
+              ),
+            ),
+            SizedBox(height: 18.h),
+            // Last, quiet, and a text button rather than an outlined one. It
+            // should be findable by someone looking for it and not by someone
+            // aiming at sign out — those two are one tap apart and only one of
+            // them can be undone.
+            Center(
+              child: TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  onDeleteAccount();
+                },
+                child: Text(
+                  'account_delete'.tr(),
+                  style: GoogleFonts.inter(
+                    color: AppColors.textGray,
+                    fontSize: 11.sp,
+                    decoration: TextDecoration.underline,
+                    decorationColor: AppColors.textGray,
+                  ),
                 ),
               ),
             ),

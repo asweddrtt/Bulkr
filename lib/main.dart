@@ -18,6 +18,7 @@ import 'data/challenge_repository.dart';
 import 'data/follow_repository.dart';
 import 'data/food_repository.dart';
 import 'data/group_repository.dart';
+import 'data/moderation_repository.dart';
 import 'data/meal_repository.dart';
 import 'data/post_repository.dart';
 import 'data/user_repository.dart';
@@ -59,6 +60,7 @@ class _BulkrAppState extends State<BulkrApp> {
   late final FollowRepository _followRepository;
   late final GroupRepository _groupRepository;
   late final ChallengeRepository _challengeRepository;
+  late final ModerationRepository _moderationRepository;
   late final PostRepository _postRepository;
   late final GoRouter _router;
 
@@ -75,6 +77,7 @@ class _BulkrAppState extends State<BulkrApp> {
     _followRepository = FollowRepository();
     _groupRepository = GroupRepository();
     _challengeRepository = ChallengeRepository();
+    _moderationRepository = ModerationRepository();
     // For You is "posts by people you follow, plus posts in your groups", and
     // a challenge post carries a challenge — so the post repository reads all
     // three through the repositories that own them rather than querying their
@@ -83,6 +86,9 @@ class _BulkrAppState extends State<BulkrApp> {
       followRepository: _followRepository,
       groupRepository: _groupRepository,
       challengeRepository: _challengeRepository,
+      // Hidden posts are filtered inside the feed's own paging, so the
+      // repository that owns them is handed in rather than built twice.
+      moderationRepository: _moderationRepository,
     );
     // Built once: rebuilding a GoRouter throws away the navigation stack.
     _router = AppRouter.build(
@@ -112,6 +118,9 @@ class _BulkrAppState extends State<BulkrApp> {
         RepositoryProvider.value(value: _followRepository),
         RepositoryProvider.value(value: _groupRepository),
         RepositoryProvider.value(value: _challengeRepository),
+        // The blocked-people screen reads this directly — one query and one
+        // write, opened rarely, and a cubit for it would say nothing more.
+        RepositoryProvider.value(value: _moderationRepository),
         // The profile's edit sheet writes name and bio, so it needs the
         // repository that owns `users`.
         RepositoryProvider.value(value: _userRepository),

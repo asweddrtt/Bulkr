@@ -8,6 +8,7 @@ import '../models/meal.dart';
 import '../models/meal_draft.dart';
 import '../models/meal_ingredient.dart';
 import '../models/meal_slot.dart';
+import '../models/visibility.dart';
 import 'food_repository.dart';
 
 /// Reads and writes the user's meal library.
@@ -273,7 +274,7 @@ class MealRepository {
           'total_protein_g': totals.proteinRounded,
           'total_carbs_g': totals.carbsRounded,
           'total_fat_g': totals.fatRounded,
-          'is_public': draft.isPublic,
+          'visibility': draft.visibility.dbValue,
         })
         .select(_mealColumns)
         .single();
@@ -364,7 +365,9 @@ class MealRepository {
           // A copy starts private. The user took it for their own cooking; if
           // they want to share it on a post of their own, that is a decision
           // they make there, and the composer will publish it then.
-          'is_public': false,
+          // A copy starts private whatever the original was. Saving somebody
+          // else's meal is taking it for your own use, not republishing it.
+          'visibility': ContentVisibility.private.dbValue,
           'source_meal_id': rootMealId,
           'source_creator_id': rootCreatorId,
         })
@@ -475,7 +478,7 @@ class MealRepository {
           'total_protein_g': totals.proteinRounded,
           'total_carbs_g': totals.carbsRounded,
           'total_fat_g': totals.fatRounded,
-          'is_public': draft.isPublic,
+          'visibility': draft.visibility.dbValue,
         })
         .eq('id', meal.id)
         .eq('creator_id', userId)
