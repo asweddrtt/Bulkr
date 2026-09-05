@@ -1,0 +1,85 @@
+# Building Bulkr for iOS without owning a Mac.
+#
+# Codemagic rents one per build. It checks this file out, runs the workflow
+# below on a real macOS machine, signs with certificates it generates from your
+# App Store Connect API key, and uploads the result to TestFlight.
+#
+# The whole setup is at ios/TESTFLIGHT.md. This file is the part that does not
+# need explaining twice.
+
+workflows:
+  ios-testflight:
+    name: iOS - TestFlight
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+
+    integrations:
+      # Created in Codemagic under Teams -> Integrations -> Developer Portal.
+      # This is what lets Codemagic issue its own signing certificate and
+      # provisioning profile, which is the part that would otherwise need a Mac
+      # with Xcode on it.
+      app_store_connect: bulkr_asc
+
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.alimahmoud.bulkr
+
+      groups:
+        # Codemagic -> Environment variables. See ios/TESTFLIGHT.md for what
+        # goes in it.
+        - bulkr_secrets
+
+      vars:
+        BUNDLE_ID: com.alimahmoud.bulkr
+
+    scripts:
+      - name: Fetch packages
+        script: flutter pub get
+
+      # The build number has to rise on every upload or App Store Connect
+      # refuses the build, and pubspec is pinned at +1. Codemagic's own counter
+      # is the honest source: it goes up whether or not anyone remembered.
+      - name: Work out the build number
+        script: |
+          echo "BUILD_NUMBER=$(($(app-store-connect get-latest-testflight-build-number "$APP_STORE_APP_ID" 2>/dev/null || echo 0) + 1))" >> $CM_ENV
+
+      - name: Install pods
+        script: |
+          find . -name "Podfile" -execdir pod install \;
+
+      - name: Analyze and test
+        script: |
+          flutter analyze
+          flutter test
+
+      - name: Build the ipa
+        script: |
+          flutter build ipa --release \
+            --build-number=$BUILD_NUMBER \
+            --dart-define=GOOGLE_IOS_CLIENT_ID="$GOOGLE_IOS_CLIENT_ID" \
+            --export-options-plist=/Users/builder/export_options.plist
+
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - flutter_drive.log
+
+    publishing:
+      app_store_connect:
+        auth: integration
+        # Uploaded to TestFlight but not released to any tester group
+        # automatically. You install it on your own phone from the TestFlight
+        # app; adding testers is a decision, not a build step.
+        submit_to_testflight: false
+
+      email:
+        recipients:
+          - ahmed.elrashidy@mafi-egypt.com
+        notify:
+          success: true
+          failure: true

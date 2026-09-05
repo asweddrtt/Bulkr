@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Push notifications.
+	     Without this entitlement iOS never hands the app an APNs token, so
+	     FirebaseMessaging.getToken() returns null and the device is never
+	     registered — silently, with nothing in the logs that names the cause.
+
+	     `development` is correct for both debug builds and TestFlight: Apple
+	     rewrites it to `production` when a build is processed for the App
+	     Store, and a TestFlight build signed for production with a development
+	     entitlement is the usual reason pushes work in Xcode and stop working
+	     from TestFlight. Leave it alone.
+
+	     The App ID in the Apple Developer portal must also have the Push
+	     Notifications capability ticked, or signing fails with a provisioning
+	     profile that does not match this file. -->
+	<key>aps-environment</key>
+	<string>development</string>
+</dict>
+</plist>

@@ -63,6 +63,25 @@
 				<string>com.alimahmoud.bulkr</string>
 			</array>
 		</dict>
+		<!-- Native Google Sign-In.
+		     The Google SDK finishes its flow by redirecting to the *reversed*
+		     iOS client id, so this scheme has to exist or the account picker
+		     opens, the user picks, and nothing comes back.
+
+		     REPLACE the string below with the REVERSED_CLIENT_ID value out of
+		     ios/Runner/GoogleService-Info.plist. It looks like
+		     com.googleusercontent.apps.123456789012-abcdefg. It is not a
+		     secret — it ships inside every copy of the app. -->
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.alimahmoud.bulkr.google</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>REPLACE_WITH_REVERSED_CLIENT_ID</string>
+			</array>
+		</dict>
 	</array>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
