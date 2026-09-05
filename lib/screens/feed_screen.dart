@@ -62,7 +62,13 @@ class FeedScreen extends StatelessWidget {
         // lives inside MainScreen's IndexedStack, and its own Scaffold exists
         // only to host the floating action button.
         backgroundColor: Colors.transparent,
-        floatingActionButton: const _ComposeButton(),
+        // Lifted clear of the shell's floating nav bar. This Scaffold is
+        // nested inside MainScreen's and knows nothing about that bar, so
+        // left alone it puts the button underneath the glass.
+        floatingActionButton: Padding(
+          padding: EdgeInsets.only(bottom: BulkrNavBar.fabInset),
+          child: const _ComposeButton(),
+        ),
         body: Column(
           children: [
             const _FeedHeader(),

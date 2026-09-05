@@ -36,7 +36,11 @@ class MealsScreen extends StatelessWidget {
         // lives inside MainScreen's IndexedStack, and its own Scaffold exists
         // only to host the floating action button.
         backgroundColor: Colors.transparent,
-        floatingActionButton: const _CreateMealButton(),
+        // Same lift as the feed's compose button — see BulkrNavBar.fabInset.
+        floatingActionButton: Padding(
+          padding: EdgeInsets.only(bottom: BulkrNavBar.fabInset),
+          child: const _CreateMealButton(),
+        ),
         body: Column(
           children: [
             const _MealsHeader(),

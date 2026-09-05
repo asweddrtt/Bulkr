@@ -41,12 +41,72 @@ class BulkrNavBar extends StatefulWidget {
   final int currentIndex;
   final ValueChanged<int> onSelected;
 
+  /// The bar's own height, above whatever safe-area inset sits below it.
+  static double get barHeight => 56.h;
+
+  /// The gap between the bar and the bottom of the screen.
+  static double get barMargin => 12.h;
+
   /// What a scrolling screen should leave clear at the bottom.
   ///
-  /// The bar's own height plus the margin it floats on, plus a little air. Not
-  /// read from a LayoutBuilder because a scroll view needs it before the bar
-  /// has laid out, and the bar's height is fixed anyway.
-  static double get contentInset => 104.h;
+  /// The bar, its margin, and a little air so the last row is not touching the
+  /// glass. Not measured from a LayoutBuilder because a scroll view needs the
+  /// number before the bar has laid out.
+  static double get contentInset => barHeight + barMargin + 36.h;
+
+  /// What a floating action button inside the shell must be lifted by.
+  ///
+  /// A tab's [Scaffold] is nested inside this one and knows nothing about the
+  /// bar, so it puts its button at the bottom of itself — which, now that the
+  /// shell sets `extendBody: true`, is underneath the glass.
+  static double get fabInset => barHeight + barMargin;
+
+  /// Where a drag lands, and what travel is left over.
+  ///
+  /// Pure and separate from the widget so it can be tested, which it is:
+  /// the first version of this shipped an infinite loop. It consumed travel
+  /// with the wrong sign, so each pass round the loop made `travel` larger
+  /// instead of smaller and the condition could never become false — a hard
+  /// freeze on the UI thread the moment a drag crossed one step.
+  ///
+  /// Reads [current] once and walks a local copy. Calling back per step would
+  /// re-read a `widget.currentIndex` that cannot have changed yet — `setState`
+  /// schedules a rebuild rather than performing one — so a long drag would
+  /// select the same neighbour repeatedly instead of travelling.
+  @visibleForTesting
+  static ({int index, double remaining}) resolveDrag({
+    required int current,
+    required int count,
+    required double travel,
+    required double step,
+  }) {
+    // A zero-width bar would make every amount of travel "at least one step"
+    // and the loop below unbounded. Reachable during layout, so it is checked
+    // rather than assumed.
+    if (step <= 0 || count <= 0) return (index: current, remaining: 0);
+
+    int index = current;
+    double remaining = travel;
+
+    while (remaining.abs() >= step) {
+      // Dragging left moves forward, the way a page does.
+      final int direction = remaining < 0 ? 1 : -1;
+      final int next = index + direction;
+
+      if (next < 0 || next >= count) {
+        // At either end. Drop the travel so pushing further does not build up
+        // a charge that fires the moment the finger turns round.
+        remaining = 0;
+        break;
+      }
+
+      index = next;
+      // Toward zero. This is the line that was inverted.
+      remaining += direction * step;
+    }
+
+    return (index: index, remaining: remaining);
+  }
 
   @override
   State<BulkrNavBar> createState() => _BulkrNavBarState();
@@ -60,30 +120,26 @@ class _BulkrNavBarState extends State<BulkrNavBar> {
   /// so a long drag keeps going rather than needing to be lifted.
   double _dragged = 0;
 
-  /// How far to drag before the selection moves. A fifth of the bar's width,
-  /// which is one tab's worth — so the gesture tracks what it looks like it is
-  /// doing.
-  double _step(double barWidth) => barWidth / widget.destinations.length;
-
   void _onDragUpdate(DragUpdateDetails details, double barWidth) {
     _dragged += details.delta.dx;
-    final double step = _step(barWidth);
 
-    // A drag to the left moves forward, the way a page does.
-    while (_dragged.abs() >= step) {
-      final int direction = _dragged < 0 ? 1 : -1;
-      final int next = widget.currentIndex + direction;
+    // A fifth of the bar per tab, so the gesture travels at the speed it looks
+    // like it should.
+    final double step = barWidth / widget.destinations.length;
 
-      if (next < 0 || next >= widget.destinations.length) {
-        // At either end. Drop the travel so pushing further does not build up
-        // a charge that fires the moment the finger turns round.
-        _dragged = 0;
-        return;
-      }
+    final ({int index, double remaining}) result = BulkrNavBar.resolveDrag(
+      current: widget.currentIndex,
+      count: widget.destinations.length,
+      travel: _dragged,
+      step: step,
+    );
 
-      _dragged -= direction * step;
-      widget.onSelected(next);
-    }
+    _dragged = result.remaining;
+
+    // One call for the whole gesture frame, not one per step: each is a
+    // setState on the shell, and a fast drag across four tabs should rebuild
+    // once.
+    if (result.index != widget.currentIndex) widget.onSelected(result.index);
   }
 
   @override
