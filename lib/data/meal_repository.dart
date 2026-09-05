@@ -6,6 +6,7 @@ import '../models/daily_log_entry.dart';
 import '../models/food_item.dart';
 import '../models/macros.dart';
 import '../models/meal.dart';
+import '../models/weekly_recap.dart';
 import '../models/meal_draft.dart';
 import '../models/meal_ingredient.dart';
 import '../models/meal_slot.dart';
@@ -588,6 +589,58 @@ class MealRepository {
     }
   }
 
+  // --- Insights -------------------------------------------------------------
+
+  /// How many days in a row this user has logged something.
+  ///
+  /// One integer off `logging_streak()`, rather than every date they have ever
+  /// logged coming back to be counted here — a read that would grow without
+  /// bound and get slower for exactly the people who use the app most.
+  ///
+  /// Yesterday still counts as standing: someone opening the app at nine in
+  /// the morning has not broken anything yet. See the note in
+  /// `tracker_insights.sql`.
+  ///
+  /// Zero on any failure, including the migration not having been run. A
+  /// streak is an encouragement, and a missing one is an absent card rather
+  /// than an error.
+  Future<int> fetchStreak() async {
+    if (_userId == null) return 0;
+
+    try {
+      final Object? value = await _client.rpc('logging_streak');
+      if (value is int) return value;
+      return int.tryParse('${value ?? ''}') ?? 0;
+    } catch (error) {
+      debugPrint('Bulkr: streak unavailable — $error');
+      return 0;
+    }
+  }
+
+  /// The last seven days, reduced to one row by `weekly_recap()`.
+  ///
+  /// Null on failure, which the screen shows as "not available" rather than as
+  /// a week in which nothing happened — a recap of zeroes is a claim, and the
+  /// wrong one.
+  Future<WeeklyRecap?> fetchWeeklyRecap() async {
+    if (_userId == null) return null;
+
+    try {
+      final Object? result = await _client.rpc('weekly_recap');
+
+      // A `returns table` function comes back as a list of one.
+      final Map<String, dynamic>? row = result is List
+          ? result.whereType<Map<String, dynamic>>().firstOrNull
+          : (result is Map<String, dynamic> ? result : null);
+
+      if (row == null) return null;
+      return WeeklyRecap.fromRow(row);
+    } catch (error) {
+      debugPrint('Bulkr: weekly recap unavailable — $error');
+      return null;
+    }
+  }
+
   /// The meal being copied, read in full.
   ///
   /// A meal reached from the feed is missing `description` — see
@@ -860,6 +913,61 @@ class MealRepository {
         // the statement is worth more than one that constrains only the
         // policy: a wrong id here updates nothing instead of erroring.
         .eq('user_id', userId);
+  }
+
+  /// Copies a past day's entries onto [to].
+  ///
+  /// Most people eat the same five breakfasts. Re-entering Tuesday on
+  /// Thursday, item by item, is the friction that makes a tracker get
+  /// abandoned in week three — so this is the one action that turns a day, or
+  /// one slot of it, back into rows.
+  ///
+  /// Returns how many entries were copied, so the caller can say so. Zero when
+  /// the source day was empty, and nothing is written in that case.
+  ///
+  /// The copies carry the macros that were recorded then, not recomputed from
+  /// today's version of the meal. A log is a record of what was eaten, and a
+  /// meal whose recipe has since changed did not retroactively change what was
+  /// on the plate. `meal_id` and `cached_food_id` still point where they
+  /// pointed, so the entry keeps its provenance and its picture.
+  ///
+  /// One insert for the whole day rather than one per entry.
+  Future<int> repeatDay({
+    required DateTime from,
+    required DateTime to,
+    MealSlot? slot,
+  }) async {
+    final String? userId = _userId;
+    if (userId == null) return 0;
+
+    final List<DailyLogEntry> source = await fetchDayLog(from);
+
+    final List<DailyLogEntry> wanted = slot == null
+        ? source
+        : source.where((entry) => entry.slot == slot).toList();
+
+    if (wanted.isEmpty) return 0;
+
+    await _client.from('daily_logs').insert([
+      for (final DailyLogEntry entry in wanted)
+        {
+          'user_id': userId,
+          'log_date': _asDate(to),
+          'meal_id': entry.mealId,
+          'cached_food_id': entry.cachedFoodId,
+          // Into the same slot it came from, even when one slot was asked for
+          // — copying breakfast onto a day puts it at breakfast.
+          'meal_type': entry.slot?.dbValue,
+          'item_name': entry.itemName,
+          'quantity_g': entry.quantityG,
+          'calories_logged': entry.macros.caloriesRounded,
+          'protein_logged_g': entry.macros.proteinRounded,
+          'carbs_logged_g': entry.macros.carbsRounded,
+          'fat_logged_g': entry.macros.fatRounded,
+        },
+    ]);
+
+    return wanted.length;
   }
 
   /// Removes one entry from the log.

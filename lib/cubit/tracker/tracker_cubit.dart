@@ -62,7 +62,17 @@ class TrackerCubit extends Cubit<TrackerState> {
         return;
       }
 
-      final List<DailyLogEntry> entries = await _meals.fetchDayLog(state.day);
+      // Together: the day's food and the streak it may or may not be part of.
+      // The streak is its own cheap integer and never fails loudly — see
+      // [MealRepository.fetchStreak] — so it does not need the guarded shape
+      // the water read below has.
+      final results = await Future.wait([
+        _meals.fetchDayLog(state.day),
+        _meals.fetchStreak(),
+      ]);
+
+      final List<DailyLogEntry> entries = results[0] as List<DailyLogEntry>;
+      final int streak = results[1] as int;
 
       // Water is secondary: a failure to read `water_logs` — most likely
       // `tracker_water.sql` not having been run — must not take the day's food
@@ -82,6 +92,7 @@ class TrackerCubit extends Cubit<TrackerState> {
         status: TrackerStatus.ready,
         profile: profile,
         entries: entries,
+        streak: streak,
         water: water,
         waterErrorDetail: waterError,
         clearWaterError: waterError == null,
@@ -273,6 +284,26 @@ class TrackerCubit extends Cubit<TrackerState> {
   }
 
   void clearActionError() => emit(state.copyWith(clearActionError: true));
+
+  /// Copies a past day's entries onto the day being shown.
+  ///
+  /// Returns how many landed, so the screen can say so — "nothing to copy"
+  /// and "copied six things" are different outcomes and a silent reload tells
+  /// them apart for nobody.
+  ///
+  /// Goes through [_write] like every other write here: not optimistic, and
+  /// followed by a reload, because this screen's job is to state a calorie
+  /// total and a total that is wrong for half a second is a total that was
+  /// wrong.
+  Future<int> repeatDay({required DateTime from, MealSlot? slot}) async {
+    int copied = 0;
+
+    await _write(() async {
+      copied = await _meals.repeatDay(from: from, to: state.day, slot: slot);
+    });
+
+    return copied;
+  }
 
   /// Postgres errors carry the useful part in [PostgrestException.code] —
   /// 42501 is a row-level security refusal, which reads nothing like a network
