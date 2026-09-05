@@ -68,10 +68,18 @@
 		     iOS client id, so this scheme has to exist or the account picker
 		     opens, the user picks, and nothing comes back.
 
-		     REPLACE the string below with the REVERSED_CLIENT_ID value out of
-		     ios/Runner/GoogleService-Info.plist. It looks like
-		     com.googleusercontent.apps.123456789012-abcdefg. It is not a
-		     secret — it ships inside every copy of the app. -->
+		     REPLACE the string below with GOOGLE_IOS_CLIENT_ID reversed:
+		     take 123456-abcdef.apps.googleusercontent.com and write it as
+		     com.googleusercontent.apps.123456-abcdef.
+
+		     Not from GoogleService-Info.plist. Bulkr's Google sign-in belongs
+		     to the Google Cloud project behind Supabase Auth, which is a
+		     different project from the Firebase one that sends pushes — so
+		     that plist has no CLIENT_ID in it and never will. The id this
+		     needs is the same one passed as the GOOGLE_IOS_CLIENT_ID build
+		     define; see lib/core/config/supabase_config.dart.
+
+		     It is not a secret — it ships inside every copy of the app. -->
 		<dict>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>

@@ -20,28 +20,49 @@ These were genuine blockers, not paperwork:
 
 ---
 
-## 1. Commit the two Firebase files
+## 1. The two Firebase files - done
 
-Neither is in the repo, so a cloud build has no Firebase at all:
+`android/app/google-services.json` and `ios/Runner/GoogleService-Info.plist`
+are committed. A cloud build has no Firebase without them.
 
-```powershell
-git add android/app/google-services.json ios/Runner/GoogleService-Info.plist
-git commit -m "Add Firebase configuration"
-git push
-```
+They are client configuration rather than credentials - they ship inside every
+copy of the app either way, which is why committing them to a private repo is
+the normal thing to do rather than plumbing them through CI as secure files.
 
-These are client configuration, not credentials — they ship inside every copy
-of the app either way, and Google documents them as such. Committing them to a
-private repo is the normal thing to do and saves plumbing them through CI as
-secure files.
+## 2. Get an iOS OAuth client, and fix the URL scheme
 
-## 2. Replace the URL scheme placeholder
+Your `GoogleService-Info.plist` has no `CLIENT_ID` and your
+`google-services.json` has `oauth_client: []`. That is not a mistake — Bulkr's
+Google sign-in belongs to the **Google Cloud project behind Supabase Auth**,
+set up long before the Firebase project you made for push. Two projects, doing
+two unrelated jobs. Firebase only sends notifications and needs no OAuth client
+at all.
 
-Open `ios/Runner/GoogleService-Info.plist`, find `REVERSED_CLIENT_ID`, and copy
-its value — it looks like `com.googleusercontent.apps.1234567890-abcdefg`.
+So the value you need does not come from either file.
 
-Paste it over `REPLACE_WITH_REVERSED_CLIENT_ID` in `ios/Runner/Info.plist`.
-Commit.
+**Find the iOS client id:**
+<https://console.cloud.google.com/apis/credentials> → switch to the project
+whose *Web* client id you already use for Supabase Google sign-in → look under
+**OAuth 2.0 Client IDs** for one of type **iOS** with bundle id
+`com.alimahmoud.bulkr`.
+
+If there is no iOS one, create it: **+ Create credentials → OAuth client ID →
+iOS**, bundle id `com.alimahmoud.bulkr`. It needs no review and no secret.
+
+It looks like `123456789012-abcdefg.apps.googleusercontent.com`.
+
+**Then two places:**
+
+1. `ios/Runner/Info.plist` — replace `REPLACE_WITH_REVERSED_CLIENT_ID` with the
+   same id *reversed*:
+   `com.googleusercontent.apps.123456789012-abcdefg`
+2. Codemagic environment variable `GOOGLE_IOS_CLIENT_ID` — the id as-is, not
+   reversed (step 5)
+
+Commit the Info.plist change.
+
+Skip this and everything still builds and installs; Google sign-in is the only
+thing that breaks, and it breaks by opening the picker and never returning.
 
 ## 3. Apple Developer portal
 
