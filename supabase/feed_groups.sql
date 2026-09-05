@@ -287,7 +287,18 @@ alter table public.group_members enable row level security;
 drop policy if exists "Groups are readable when public or joined" on public.groups;
 create policy "Groups are readable when public or joined"
   on public.groups for select to authenticated
-  using (not is_private or public.is_group_member(id));
+  using (
+    not is_private
+    or auth.uid() = owner_id
+    or public.is_group_member(id)
+  );
+
+-- The owner clause is not redundant with membership, even though the trigger
+-- below makes every owner a member. Creating a group is
+-- `INSERT ... RETURNING`, Postgres applies this policy to the returned row,
+-- and the trigger is AFTER INSERT — it has not run yet. Without this clause a
+-- private group's own creator cannot read back the row they just wrote, and
+-- the insert lands while the call fails.
 
 -- Anyone can start a group, and only as themselves.
 drop policy if exists "Groups are creatable by their owner" on public.groups;
