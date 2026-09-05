@@ -13,6 +13,7 @@ import '../cubit/author/author_cubit.dart';
 import '../cubit/profile/profile_cubit.dart';
 import '../data/meal_repository.dart';
 import '../data/moderation_repository.dart';
+import '../data/push_service.dart';
 import '../data/follow_repository.dart';
 import '../data/post_repository.dart';
 import '../data/user_repository.dart';
@@ -400,6 +401,7 @@ class _Header extends StatelessWidget {
   /// belonging to a session that no longer exists.
   static Future<void> _openAccount(BuildContext context) async {
     final AuthCubit auth = context.read<AuthCubit>();
+    final PushService push = context.read<PushService>();
     final GoRouter router = GoRouter.of(context);
     final UserRepository users = context.read<UserRepository>();
     final String username =
@@ -413,6 +415,11 @@ class _Header extends StatelessWidget {
       email: auth.state.user?.email,
       username: username,
       onSignOut: () async {
+        // Before the session goes, because removing the row needs it. The
+        // token belongs to the phone rather than the account — left behind,
+        // the next person to sign in here would receive this account's
+        // notifications until they registered their own.
+        await push.signOut();
         await auth.signOut();
         router.go(AppRoutes.welcome);
       },

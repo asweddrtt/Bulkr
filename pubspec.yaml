@@ -66,6 +66,8 @@ dependencies:
   shared_preferences: ^2.3.2
   cached_network_image: ^4.0.0
   image: ^4.9.2
+  firebase_core: ^4.14.0
+  firebase_messaging: ^16.6.0
   # NOTE: `intl` (DateFormat/NumberFormat) is not listed here on purpose —
   # easy_localization re-exports it, which is how NumberFormat is already used
   # in the reveal screen. Adding it explicitly risks a resolution conflict with

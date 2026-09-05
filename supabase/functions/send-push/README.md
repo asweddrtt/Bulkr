@@ -132,50 +132,44 @@ saved whatever happens next.
 
 ## 6. The app
 
-Only once `google-services.json` is in `android/app/`:
+**Done.** `firebase_core` and `firebase_messaging` are in `pubspec.yaml`, the
+Google Services Gradle plugin is applied, `Firebase.initializeApp()` runs at
+startup, and `PushService` registers the device.
 
-```powershell
-flutter pub add firebase_core firebase_messaging
-```
+For the record, where each piece lives:
 
-In `main()`, after `Supabase.initialize`:
+| Piece | Where |
+| --- | --- |
+| Gradle plugin declared | `android/settings.gradle.kts` |
+| Gradle plugin applied | `android/app/build.gradle.kts` |
+| `Firebase.initializeApp()` | `lib/main.dart` |
+| Permission + token registration | `lib/data/push_service.dart` |
+| Called on sign-in | `lib/screens/main_screen.dart` |
+| Called on sign-out | `lib/screens/profile_screen.dart` |
 
-```dart
-await Firebase.initializeApp();
-```
+Two choices in there worth knowing:
 
-Once the user is signed in — `AuthCubit`, next to where the session is adopted:
+**Permission is asked for at the shell, not at launch.** A notification prompt
+on first open, before anyone has seen what the app is, is the one most reliably
+denied — and on iOS a denial is close to permanent, because the app cannot ask
+again.
 
-```dart
-final NotificationSettings settings =
-    await FirebaseMessaging.instance.requestPermission();
+**Sign-out unregisters before the session goes.** The token belongs to the
+phone, not the account. Left behind, the next person to sign in on that device
+would receive the previous person's notifications until they registered their
+own. Account *deletion* needs no equivalent: `device_tokens.user_id` cascades.
 
-if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-  final String? token = await FirebaseMessaging.instance.getToken();
-  if (token != null) {
-    await pushRepository.register(
-      token: token,
-      platform: Platform.isIOS ? 'ios' : 'android',
-    );
-  }
+Firebase failing to start is caught and logged rather than thrown. It is only
+here to deliver notifications, so a desktop build with no configuration should
+run without them rather than not run.
 
-  // FCM rotates tokens. Registering only at sign-in goes stale, and a stale
-  // token is a phone that silently stops being notified.
-  FirebaseMessaging.instance.onTokenRefresh.listen((token) {
-    pushRepository.register(token: token, platform: ...);
-  });
-}
-```
+You still need, on the Firebase side:
 
-And on sign-out, **before** the session goes:
-
-```dart
-await pushRepository.unregister(token);
-```
-
-That last one matters more than it looks: the token belongs to the *device*,
-not the account, so leaving it behind means the next person to sign in on that
-phone receives the previous person's notifications.
+- `android/app/google-services.json`
+- `ios/Runner/GoogleService-Info.plist`, added to the Runner target in Xcode
+- an **APNs key** uploaded under Project settings → Cloud Messaging, and the
+  Push Notifications capability on the Runner target — iOS sends nothing
+  without both
 
 ---
 

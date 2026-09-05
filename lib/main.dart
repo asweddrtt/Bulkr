@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/config/supabase_config.dart';
@@ -21,6 +22,7 @@ import 'data/follow_repository.dart';
 import 'data/chat_repository.dart';
 import 'data/notification_repository.dart';
 import 'data/push_repository.dart';
+import 'data/push_service.dart';
 import 'data/food_repository.dart';
 import 'data/group_repository.dart';
 import 'data/moderation_repository.dart';
@@ -38,6 +40,21 @@ void main() async {
     url: SupabaseConfig.url,
     publishableKey: SupabaseConfig.publishableKey,
   );
+
+  // Firebase is only here to deliver push notifications, so a failure to
+  // start it must not stop the app starting. On a platform with no
+  // configuration — a desktop build during development — this throws, and the
+  // app should carry on without notifications rather than not run.
+  //
+  // PushService.isSupported gates the same thing on the way out; this gates
+  // the initialisation itself.
+  if (PushService.isSupported) {
+    try {
+      await Firebase.initializeApp();
+    } catch (error) {
+      debugPrint('Bulkr: Firebase unavailable, push is off — $error');
+    }
+  }
 
   runApp(
     EasyLocalization(
@@ -69,6 +86,7 @@ class _BulkrAppState extends State<BulkrApp> {
   late final ChatRepository _chatRepository;
   late final NotificationRepository _notificationRepository;
   late final PushRepository _pushRepository;
+  late final PushService _pushService;
   late final PostRepository _postRepository;
   late final GoRouter _router;
 
@@ -89,6 +107,7 @@ class _BulkrAppState extends State<BulkrApp> {
     _chatRepository = ChatRepository();
     _notificationRepository = NotificationRepository();
     _pushRepository = PushRepository();
+    _pushService = PushService(repository: _pushRepository);
     // For You is "posts by people you follow, plus posts in your groups", and
     // a challenge post carries a challenge — so the post repository reads all
     // three through the repositories that own them rather than querying their
@@ -144,6 +163,9 @@ class _BulkrAppState extends State<BulkrApp> {
         // Registered here so it is reachable the moment Firebase is wired up —
         // see supabase/functions/send-push/README.md. Nothing calls it yet.
         RepositoryProvider.value(value: _pushRepository),
+        // The plugin side, for the shell to register a token and sign-out to
+        // remove it.
+        RepositoryProvider.value(value: _pushService),
       ],
       child: MultiBlocProvider(
       // Above the router on purpose — onboarding answers have to survive

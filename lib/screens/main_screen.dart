@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../cubit/conversations/conversations_cubit.dart';
 import '../cubit/feed/feed_cubit.dart';
 import '../cubit/notifications/notifications_cubit.dart';
+import '../data/push_service.dart';
 import '../cubit/meals/meals_cubit.dart';
 import '../cubit/profile/profile_cubit.dart';
 import '../cubit/tracker/tracker_cubit.dart';
@@ -44,6 +45,13 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+
+    // Asked for here rather than at launch. A notification permission prompt
+    // on first open, before anyone has seen what the app is, is the one most
+    // reliably denied — and on iOS a denial is close to permanent, since the
+    // app cannot ask a second time.
+    context.read<PushService>().signIn();
+
     // Fetched once when the shell mounts rather than on each tab switch, so
     // moving between tabs doesn't re-hit the network.
     context.read<ProfileCubit>().load();
