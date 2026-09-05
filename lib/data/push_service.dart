@@ -49,10 +49,19 @@ class PushService {
   /// Never throws. Push is an enhancement; a phone that cannot register is a
   /// phone that misses notifications, not one that cannot use the app.
   Future<void> signIn() async {
-    if (!isSupported) return;
+    if (!isSupported) {
+      debugPrint('Bulkr push: platform does not do notifications, skipping.');
+      return;
+    }
 
     try {
       final NotificationSettings settings = await _messaging.requestPermission();
+
+      // Logged at every step, deliberately. This runs once, on a real device,
+      // and when it does nothing there is no screen that says so — "I did not
+      // get a prompt" has at least five causes and they are indistinguishable
+      // without this.
+      debugPrint('Bulkr push: permission ${settings.authorizationStatus}.');
 
       // `provisional` is iOS's quiet authorisation — delivered silently to the
       // notification centre without a prompt. It counts: the point is being
@@ -61,13 +70,30 @@ class PushService {
               AuthorizationStatus.authorized ||
           settings.authorizationStatus == AuthorizationStatus.provisional;
 
-      if (!allowed) return;
+      if (!allowed) {
+        debugPrint(
+          'Bulkr push: not authorised, so no token. On Android 13+ this is the '
+          'system prompt being declined; below that there is no prompt and this '
+          'should not happen.',
+        );
+        return;
+      }
 
       final String? token = await _messaging.getToken();
-      if (token == null) return;
+      if (token == null) {
+        // On Android this usually means the google-services.json belongs to a
+        // different application id. On iOS it means APNs has not handed one
+        // over — no APNs key uploaded to Firebase, or no Push Notifications
+        // capability on the target.
+        debugPrint('Bulkr push: FCM returned no token.');
+        return;
+      }
+
+      debugPrint('Bulkr push: token ${token.substring(0, 12)}..., registering.');
 
       _token = token;
       await _repository.register(token: token, platform: _platform);
+      debugPrint('Bulkr push: registered for $_platform.');
 
       // FCM rotates tokens — on reinstall, on restore to a new device, and
       // occasionally on its own. Registering only at sign-in would leave a
@@ -78,7 +104,7 @@ class PushService {
         _repository.register(token: refreshed, platform: _platform);
       });
     } catch (error) {
-      debugPrint('Bulkr: push registration failed — $error');
+      debugPrint('Bulkr push: registration failed — $error');
     }
   }
 

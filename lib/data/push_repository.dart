@@ -47,8 +47,11 @@ class PushRepository {
         },
         onConflict: 'token',
       );
+      debugPrint('Bulkr push: device_tokens row written.');
     } catch (error) {
-      debugPrint('Bulkr: push token not registered — $error');
+      // A PostgrestException here is the interesting case: 42501 means
+      // push_devices.sql has not been run, or its policies did not take.
+      debugPrint('Bulkr push: device_tokens write failed — $error');
     }
   }
 
