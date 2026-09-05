@@ -1,11 +1,13 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../models/daily_log_entry.dart';
 import '../models/food_item.dart';
 import '../models/macros.dart';
 import '../models/meal.dart';
 import '../models/meal_draft.dart';
 import '../models/meal_ingredient.dart';
+import '../models/meal_slot.dart';
 import 'food_repository.dart';
 
 /// Reads and writes the user's meal library.
@@ -688,24 +690,32 @@ class MealRepository {
         .eq('log_date', _asDate(DateTime.now()));
   }
 
-  /// Records one serving of [meal] against today in `daily_logs`.
+  /// Records one serving of [meal] against [day], in [slot].
   ///
   /// The meal's macros are copied onto the log row rather than referenced
   /// through `meal_id`, so editing or deleting the meal later cannot rewrite
-  /// what the user actually ate on a past day.
+  /// what the user actually ate on a past day. `item_name` is copied for the
+  /// same reason: a deleted meal leaves the row with nothing to join a title
+  /// from, and the log still has to be readable.
   ///
-  /// `meal_type` is left null: the schema allows it, and guessing breakfast from
-  /// the clock would be wrong often enough to be annoying.
-  Future<void> logMealToday(Meal meal) async {
+  /// [slot] may be null, and a null writes null — the tracker shows those
+  /// entries in their own section. It is not defaulted from the clock here:
+  /// [MealSlot.forTimeOfDay] exists for that, and belongs where the user can
+  /// see the guess and change it before it is written.
+  Future<void> logMeal({
+    required Meal meal,
+    MealSlot? slot,
+    DateTime? day,
+  }) async {
     final String? userId = _userId;
     if (userId == null) return;
 
-    final DateTime now = DateTime.now();
-
     await _client.from('daily_logs').insert({
       'user_id': userId,
-      'log_date': _asDate(now),
+      'log_date': _asDate(day ?? DateTime.now()),
       'meal_id': meal.id,
+      'meal_type': slot?.dbValue,
+      'item_name': meal.title,
       // Known only for meals built from ingredients. Zero reads as "the whole
       // meal, weight not recorded" — the calorie columns below are the figures
       // the tracker actually sums.
@@ -715,6 +725,132 @@ class MealRepository {
       'carbs_logged_g': meal.totals.carbsRounded,
       'fat_logged_g': meal.totals.fatRounded,
     });
+  }
+
+  /// Records [grams] of [food] against [day], without it becoming a meal.
+  ///
+  /// This is the "add food" path: someone ate a banana, and a banana is not a
+  /// recipe worth keeping in a library. So no `meals` row is created — the log
+  /// entry carries the name and the macros itself, and `cached_food_id` records
+  /// where the nutrition came from.
+  ///
+  /// The food is cached first, exactly as an ingredient is. That is what gives
+  /// it an id to point at, and it means a food logged once is in the app's own
+  /// database for everyone's next search — the same mechanism that makes food
+  /// search get faster the more it is used.
+  ///
+  /// A caching failure is not fatal: the entry is written with a null
+  /// `cached_food_id`. Losing the provenance of an eaten banana is a much
+  /// smaller problem than refusing to record it.
+  Future<void> logFood({
+    required FoodItem food,
+    required double grams,
+    MealSlot? slot,
+    DateTime? day,
+  }) async {
+    final String? userId = _userId;
+    if (userId == null) return;
+
+    String? cachedId = food.cachedId;
+    if (cachedId == null) {
+      try {
+        cachedId = (await _foods.ensureCached(food)).cachedId;
+      } catch (error) {
+        debugPrint('Bulkr: could not cache ${food.name} — $error');
+      }
+    }
+
+    final Macros eaten = food.per100g.forGrams(grams);
+
+    await _client.from('daily_logs').insert({
+      'user_id': userId,
+      'log_date': _asDate(day ?? DateTime.now()),
+      'meal_type': slot?.dbValue,
+      'cached_food_id': cachedId,
+      // The brand is deliberately not folded in: `FoodItem.label` is built for
+      // a search result, where telling two similar products apart matters. In
+      // a day's log the name alone reads better.
+      'item_name': food.name,
+      'quantity_g': grams,
+      'calories_logged': eaten.caloriesRounded,
+      'protein_logged_g': eaten.proteinRounded,
+      'carbs_logged_g': eaten.carbsRounded,
+      'fat_logged_g': eaten.fatRounded,
+    });
+  }
+
+  /// Everything logged on [day], in the order it should be read.
+  ///
+  /// The meal's live title and photo are joined so a renamed meal reads
+  /// correctly, while the macros come off the log row — the row is the record
+  /// of what was eaten, the join is only for presentation.
+  ///
+  /// The foreign key is named explicitly for the same reason [_mealColumns]
+  /// does it: `daily_logs` holds keys to both `meals` and `users` and nothing
+  /// else of its own, so PostgREST reads it as a junction table and a bare
+  /// embed is ambiguous (PGRST201).
+  Future<List<DailyLogEntry>> fetchDayLog(DateTime day) async {
+    final String? userId = _userId;
+    if (userId == null) return const <DailyLogEntry>[];
+
+    final rows = await _client
+        .from('daily_logs')
+        .select('*, meals!daily_logs_meal_id_fkey(title, image_url)')
+        .eq('user_id', userId)
+        .eq('log_date', _asDate(day))
+        // No time-of-day column to sort by, so the tracker groups by slot and
+        // this only has to be stable. Insertion order is the closest thing to
+        // the order things were eaten in.
+        .order('id', ascending: true);
+
+    return rows.map(DailyLogEntry.fromRow).toList();
+  }
+
+  /// Writes [entry] back over the row it came from.
+  ///
+  /// Takes a whole entry rather than the fields that changed, so the caller
+  /// builds the edit with [DailyLogEntry.copyWith] or
+  /// [DailyLogEntry.scaledTo] and the arithmetic stays in the model. What is
+  /// sent is only what an edit can legitimately touch: the slot, the amount
+  /// and the macros. `meal_id`, `cached_food_id` and `log_date` are the
+  /// identity of the entry, not its contents.
+  Future<void> updateLogEntry(DailyLogEntry entry) async {
+    final String? userId = _userId;
+    if (userId == null) return;
+
+    await _client
+        .from('daily_logs')
+        .update({
+          'meal_type': entry.slot?.dbValue,
+          'quantity_g': entry.quantityG,
+          'calories_logged': entry.macros.caloriesRounded,
+          'protein_logged_g': entry.macros.proteinRounded,
+          'carbs_logged_g': entry.macros.carbsRounded,
+          'fat_logged_g': entry.macros.fatRounded,
+        })
+        .eq('id', entry.id)
+        // Redundant against the RLS policy, which already scopes writes to
+        // `auth.uid() = user_id`, and kept because a filter that constrains
+        // the statement is worth more than one that constrains only the
+        // policy: a wrong id here updates nothing instead of erroring.
+        .eq('user_id', userId);
+  }
+
+  /// Removes one entry from the log.
+  ///
+  /// One row, unlike [unlogMealToday], which clears every row for a meal
+  /// today. That is the difference between the tracker and the toggle on a
+  /// meal card: the tracker is looking at entries, the card is looking at a
+  /// meal.
+  Future<void> deleteLogEntry(DailyLogEntry entry) async {
+    final String? userId = _userId;
+    if (userId == null) return;
+
+    await _client
+        .from('daily_logs')
+        .delete()
+        .eq('id', entry.id)
+        .eq('user_id', userId);
   }
 
   /// Reads an embedded row from a Supabase join, which arrives as an object for

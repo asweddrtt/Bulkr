@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../data/meal_repository.dart';
 import '../../models/meal.dart';
+import '../../models/meal_slot.dart';
 
 part 'meals_state.dart';
 
@@ -103,16 +104,26 @@ class MealsCubit extends Cubit<MealsState> {
     }
   }
 
-  /// Puts [meal] in today's log, or takes it back out.
+  /// Puts [meal] in today's log at [slot], or takes it back out.
   ///
   /// A toggle rather than a repeated add, because the button shows a state
   /// rather than firing an event: a card reading "logged" that adds a second
   /// helping when tapped is lying about what it is. Off deletes today's rows
   /// for the meal, so the day's total is what the ticked cards say it is.
   ///
+  /// Which is also why the tick keeps meaning "this meal is somewhere in
+  /// today's log" now that entries carry a slot. A card cannot show four
+  /// states in one checkbox, and the place to see the day broken down by meal
+  /// — and to remove one helping without removing the other — is the tracker.
+  ///
+  /// [slot] is only read when turning the toggle on; the caller collects it
+  /// first, so no entry is written slotless. Null is still accepted and still
+  /// writes null, because a caller with no way to ask is better off recording
+  /// the calories than refusing to.
+  ///
   /// Not optimistic, unlike favouriting: a calorie total the user believes was
   /// recorded and was not is worth the half-second of waiting.
-  Future<void> toggleLoggedToday(Meal meal) async {
+  Future<void> toggleLoggedToday(Meal meal, {MealSlot? slot}) async {
     if (state.busyMealId != null) return;
 
     final bool wasLogged = meal.isLoggedToday;
@@ -122,7 +133,7 @@ class MealsCubit extends Cubit<MealsState> {
       if (wasLogged) {
         await _meals.unlogMealToday(meal);
       } else {
-        await _meals.logMealToday(meal);
+        await _meals.logMeal(meal: meal, slot: slot);
       }
       if (isClosed) return;
 

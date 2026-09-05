@@ -71,19 +71,7 @@ class MealEditorCubit extends Cubit<MealEditorState> {
   final MealRepository _meals;
   final FoodRepository _foods;
 
-  Timer? _searchDebounce;
-
-  /// Long enough that a typed word is one request rather than five, short
-  /// enough that the pause doesn't read as the app ignoring you.
-  static const Duration _debounce = Duration(milliseconds: 350);
-
   static const String _saveFailedKey = 'meal_save_failed';
-
-  @override
-  Future<void> close() {
-    _searchDebounce?.cancel();
-    return super.close();
-  }
 
   void setTitle(String title) =>
       emit(state.copyWith(draft: state.draft.copyWith(title: title)));
@@ -140,58 +128,6 @@ class MealEditorCubit extends Cubit<MealEditorState> {
     ));
   }
 
-  /// Searches for a food to add, debounced.
-  ///
-  /// The response is dropped if the query moved on while it was in flight —
-  /// without that check, a slow request for "chi" can land after a fast one for
-  /// "chicken breast" and replace the right results with stale ones.
-  void searchFoods(String query) {
-    _searchDebounce?.cancel();
-    emit(state.copyWith(searchQuery: query));
-
-    if (query.trim().length < FoodRepository.minQueryLength) {
-      emit(state.copyWith(
-        searchStatus: FoodSearchStatus.idle,
-        searchResults: const [],
-      ));
-      return;
-    }
-
-    emit(state.copyWith(searchStatus: FoodSearchStatus.searching));
-
-    _searchDebounce = Timer(_debounce, () async {
-      final String inFlight = query;
-
-      try {
-        final List<FoodItem> results = await _foods.search(inFlight);
-        if (isClosed || state.searchQuery != inFlight) return;
-
-        emit(state.copyWith(
-          searchResults: results,
-          searchStatus: results.isEmpty
-              ? FoodSearchStatus.empty
-              : FoodSearchStatus.results,
-        ));
-      } catch (error) {
-        if (isClosed || state.searchQuery != inFlight) return;
-        debugPrint('Bulkr: food search failed — $error');
-        emit(state.copyWith(
-          searchStatus: FoodSearchStatus.empty,
-          searchResults: const [],
-        ));
-      }
-    });
-  }
-
-  void clearFoodSearch() {
-    _searchDebounce?.cancel();
-    emit(state.copyWith(
-      searchQuery: '',
-      searchStatus: FoodSearchStatus.idle,
-      searchResults: const [],
-    ));
-  }
-
   /// Adds [food] at [amountG], or corrects the amount if it is already in.
   void addIngredient(FoodItem food, double amountG) {
     if (amountG <= 0) return;
@@ -209,15 +145,16 @@ class MealEditorCubit extends Cubit<MealEditorState> {
   /// confident answer about *what*, and the amount is a separate decision the
   /// user can make by tapping the row. Returns the food so the screen can say
   /// which one landed.
+  ///
+  /// The lookup itself is [FoodRepository]'s; what is left here is the part
+  /// that is about a meal — which amount to add at, given what the draft
+  /// already holds. The search that used to live alongside it now belongs to
+  /// [FoodSearchCubit], because the tracker wanted the same search and a
+  /// different destination.
   Future<FoodItem?> addScannedBarcode(String barcode) async {
-    emit(state.copyWith(searchStatus: FoodSearchStatus.searching));
-
     try {
       final FoodItem? food = await _foods.findByBarcode(barcode);
-      if (isClosed) return null;
-
-      emit(state.copyWith(searchStatus: FoodSearchStatus.idle));
-      if (food == null) return null;
+      if (isClosed || food == null) return null;
 
       // Keeps the existing amount when the food is already in the meal, so
       // re-scanning something does not quietly reset 250g to 100.
@@ -228,7 +165,6 @@ class MealEditorCubit extends Cubit<MealEditorState> {
     } catch (error) {
       if (isClosed) return null;
       debugPrint('Bulkr: barcode lookup failed — $error');
-      emit(state.copyWith(searchStatus: FoodSearchStatus.idle));
       return null;
     }
   }

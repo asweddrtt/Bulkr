@@ -2,10 +2,6 @@ part of 'meal_editor_cubit.dart';
 
 enum MealEditorStatus { hydrating, editing, saving, saved, failure }
 
-/// Where the ingredient search is up to. Separate from the editor's own status
-/// so typing in the search field never looks like the meal is being saved.
-enum FoodSearchStatus { idle, searching, results, empty }
-
 class MealEditorState extends Equatable {
   const MealEditorState({
     this.draft = const MealDraft(),
@@ -13,9 +9,6 @@ class MealEditorState extends Equatable {
     this.editing,
     this.imageBytes,
     this.imageExtension = 'jpg',
-    this.searchQuery = '',
-    this.searchStatus = FoodSearchStatus.idle,
-    this.searchResults = const [],
     this.savedMeal,
     this.savedWithoutIngredients = false,
     this.errorKey,
@@ -42,10 +35,6 @@ class MealEditorState extends Equatable {
   /// touch the filesystem. Null when no photo was chosen.
   final Uint8List? imageBytes;
   final String imageExtension;
-
-  final String searchQuery;
-  final FoodSearchStatus searchStatus;
-  final List<FoodItem> searchResults;
 
   /// Set once the write lands, so the screen can hand it back to the library.
   final Meal? savedMeal;
@@ -80,9 +69,6 @@ class MealEditorState extends Equatable {
     Uint8List? imageBytes,
     bool clearImage = false,
     String? imageExtension,
-    String? searchQuery,
-    FoodSearchStatus? searchStatus,
-    List<FoodItem>? searchResults,
     Meal? savedMeal,
     bool? savedWithoutIngredients,
     String? errorKey,
@@ -95,9 +81,6 @@ class MealEditorState extends Equatable {
       editing: editing ?? this.editing,
       imageBytes: clearImage ? null : (imageBytes ?? this.imageBytes),
       imageExtension: imageExtension ?? this.imageExtension,
-      searchQuery: searchQuery ?? this.searchQuery,
-      searchStatus: searchStatus ?? this.searchStatus,
-      searchResults: searchResults ?? this.searchResults,
       savedMeal: savedMeal ?? this.savedMeal,
       savedWithoutIngredients:
           savedWithoutIngredients ?? this.savedWithoutIngredients,
@@ -113,9 +96,6 @@ class MealEditorState extends Equatable {
         editing,
         imageBytes,
         imageExtension,
-        searchQuery,
-        searchStatus,
-        searchResults,
         savedMeal,
         savedWithoutIngredients,
         errorKey,

@@ -7,12 +7,14 @@ import 'package:google_fonts/google_fonts.dart';
 import '../cubit/feed/feed_cubit.dart';
 import '../cubit/meals/meals_cubit.dart';
 import '../cubit/profile/profile_cubit.dart';
+import '../cubit/tracker/tracker_cubit.dart';
 import '../styles/app_color.dart';
 import '../widgets/animations/motion.dart';
 import '../widgets/animations/press_scale.dart';
 import 'feed_screen.dart';
 import 'meals_screen.dart';
 import 'profile_screen.dart';
+import 'tracker_screen.dart';
 import 'dashboard_screen.dart';
 
 const Color _textMuted = Color(0xFF9CA3AF);
@@ -45,6 +47,23 @@ class _MainScreenState extends State<MainScreen> {
     context.read<ProfileCubit>().load();
     context.read<MealsCubit>().load();
     context.read<FeedCubit>().load();
+    context.read<TrackerCubit>().load();
+  }
+
+  /// Index of the Tracker tab, which needs a nudge the others do not.
+  static const int _trackerIndex = 3;
+
+  void _select(int index) {
+    setState(() => _currentIndex = index);
+
+    // Everything here lives in an IndexedStack, so each screen is built once
+    // and kept alive — which is what makes switching tabs instant, and what
+    // would otherwise let the tracker show yesterday's log under today's
+    // heading after the app sat in the background overnight. The cubit does
+    // nothing when the day has not turned over, so this is free.
+    if (index == _trackerIndex) {
+      context.read<TrackerCubit>().refreshIfDayChanged();
+    }
   }
 
   @override
@@ -59,7 +78,7 @@ class _MainScreenState extends State<MainScreen> {
             DashboardScreen(),
             MealsScreen(),
             FeedScreen(),
-            _ComingSoon(labelKey: 'Tracker'),
+            TrackerScreen(),
             ProfileScreen(),
           ],
         ),
@@ -90,7 +109,7 @@ class _MainScreenState extends State<MainScreen> {
 
     return PressScale(
       child: GestureDetector(
-        onTap: () => setState(() => _currentIndex = index),
+        onTap: () => _select(index),
         behavior: HitTestBehavior.opaque,
         child: AnimatedContainer(
           duration: Motion.scaled(context, Motion.fast),
@@ -135,39 +154,4 @@ class _NavDestination {
 
   final IconData icon;
   final String labelKey;
-}
-
-/// Placeholder for the sections that don't exist yet. Says so plainly rather
-/// than showing an empty screen that looks broken.
-class _ComingSoon extends StatelessWidget {
-  const _ComingSoon({required this.labelKey});
-
-  final String labelKey;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            labelKey.tr().toUpperCase(),
-            style: GoogleFonts.anton(
-              color: Colors.white,
-              fontSize: 22.sp,
-              letterSpacing: 1.5,
-            ),
-          ),
-          SizedBox(height: 8.h),
-          Text(
-            'section_coming_soon'.tr(),
-            style: GoogleFonts.inter(
-              color: _textMuted,
-              fontSize: 12.sp,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }

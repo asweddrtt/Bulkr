@@ -595,10 +595,7 @@ class _AddIngredientButton extends StatelessWidget {
           child: _IngredientAction(
             icon: Icons.search,
             label: 'meal_add_ingredient'.tr(),
-            onTap: () => FoodSearchSheet.show(
-              context,
-              context.read<MealEditorCubit>(),
-            ),
+            onTap: () => _openFoodSearch(context),
           ),
         ),
         SizedBox(width: 10.w),
@@ -612,6 +609,29 @@ class _AddIngredientButton extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Opens the shared food search, pointed at this meal's ingredient list.
+///
+/// The sheet runs the search and knows nothing about meals; what it is *for*
+/// arrives as the callback below. [MealEditorCubit.addIngredient] is
+/// synchronous, so the sheet closes as soon as it returns.
+///
+/// The barcodes already in the draft go with it so those rows light up — the
+/// one thing on this sheet that is specific to editing a meal, because adding
+/// a food that is already an ingredient corrects its amount rather than
+/// adding a second helping. The tracker passes nothing, since eating the same
+/// food twice in a day is two entries and not a duplicate.
+Future<void> _openFoodSearch(BuildContext context) {
+  final MealEditorCubit cubit = context.read<MealEditorCubit>();
+
+  return FoodSearchSheet.show(
+    context,
+    onPicked: (food, grams) async => cubit.addIngredient(food, grams),
+    alreadyAdded: cubit.state.draft.ingredients
+        .map((ingredient) => ingredient.food.barcode)
+        .toSet(),
+  );
 }
 
 /// Scans a barcode, looks it up, and says what happened either way.

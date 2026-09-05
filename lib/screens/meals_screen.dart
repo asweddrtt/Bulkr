@@ -6,11 +6,13 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../cubit/meals/meals_cubit.dart';
 import '../models/meal.dart';
+import '../models/meal_slot.dart';
 import '../styles/app_color.dart';
 import '../widgets/animations/entrance.dart';
 import '../widgets/animations/press_scale.dart';
 import '../widgets/meal_actions_sheet.dart';
 import '../widgets/meal_card.dart';
+import '../widgets/slot_picker_sheet.dart';
 import 'meal_editor_screen.dart';
 
 /// The user's meal library.
@@ -315,7 +317,18 @@ class _MealsList extends StatelessWidget {
     final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
 
     final bool wasLogged = meal.isLoggedToday;
-    await cubit.toggleLoggedToday(meal);
+
+    // Turning it on asks which part of the day it was, so no entry is written
+    // slotless — the tracker groups the day by slot, and an unslotted row
+    // lands in the section kept for history from before slots existed.
+    // Dismissing the chooser is a cancellation, not a default.
+    MealSlot? slot;
+    if (!wasLogged) {
+      slot = await SlotPickerSheet.show(context);
+      if (slot == null) return;
+    }
+
+    await cubit.toggleLoggedToday(meal, slot: slot);
 
     // Only claim it landed if it did — a failure has already put its own
     // message up through the listener.

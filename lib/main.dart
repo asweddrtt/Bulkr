@@ -10,6 +10,7 @@ import 'cubit/auth/auth_cubit.dart';
 import 'cubit/feed/feed_cubit.dart';
 import 'cubit/meals/meals_cubit.dart';
 import 'cubit/onboarding/onboarding_cubit.dart';
+import 'cubit/tracker/tracker_cubit.dart';
 import 'cubit/profile/profile_cubit.dart';
 import 'data/app_preferences.dart';
 import 'data/auth_repository.dart';
@@ -136,6 +137,14 @@ class _BulkrAppState extends State<BulkrApp> {
         ),
         BlocProvider(
           create: (_) => MealsCubit(mealRepository: _mealRepository),
+        ),
+        BlocProvider(
+          create: (_) => TrackerCubit(
+            mealRepository: _mealRepository,
+            // Its own read of the `users` row, for the targets the day is
+            // measured against — see the note on the cubit.
+            userRepository: _userRepository,
+          ),
         ),
         BlocProvider(
           create: (_) => FeedCubit(
