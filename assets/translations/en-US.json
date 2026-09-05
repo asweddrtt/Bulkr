@@ -588,5 +588,14 @@
   "notification_follow": "{name} followed you",
   "notification_like": "{name} liked your post",
   "notification_comment": "{name} commented on your post",
-  "notification_reply": "{name} replied to you"
+  "notification_reply": "{name} replied to you",
+  "chat_seen": "Seen",
+  "my_challenges_title": "Challenges",
+  "my_challenges_empty": "You haven't joined a challenge yet. They show up on posts in your feed.",
+  "my_challenges_failed": "Couldn't load your challenges.",
+  "my_challenges_finished": "Finished",
+  "challenge_not_started": "Not started yet",
+  "challenge_goal_short": "{amount} {unit} goal",
+  "account_challenges": "Challenges",
+  "account_challenges_helper": "The ones you've joined, and where you stand"
 }

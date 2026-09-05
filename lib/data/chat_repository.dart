@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/chat_message.dart';
@@ -145,6 +146,36 @@ class ChatRepository {
         .delete()
         .eq('id', messageId)
         .eq('sender_id', userId);
+  }
+
+  /// When the other person last read this conversation.
+  ///
+  /// Their `last_read_at`, which the membership policy lets a member of the
+  /// same thread read — that is what makes a read receipt possible without a
+  /// second table or a function.
+  ///
+  /// Null when there is no other member, when they have never opened it, or
+  /// when the read fails. All three render the same way: no receipt. A tick
+  /// that appears because a query errored would be worse than no tick, since
+  /// the whole value of it is that it is trustworthy.
+  Future<DateTime?> fetchOtherLastRead(String conversationId) async {
+    final String? userId = _userId;
+    if (userId == null) return null;
+
+    try {
+      final List<Map<String, dynamic>> rows = await _client
+          .from('conversation_members')
+          .select('last_read_at')
+          .eq('conversation_id', conversationId)
+          .neq('user_id', userId)
+          .limit(1);
+
+      if (rows.isEmpty) return null;
+      return DateTime.tryParse('${rows.first['last_read_at']}')?.toLocal();
+    } catch (error) {
+      debugPrint('Bulkr: read receipt unavailable — $error');
+      return null;
+    }
   }
 
   /// Marks everything in [conversationId] as read, as of now.

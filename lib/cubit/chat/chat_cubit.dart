@@ -54,6 +54,7 @@ class ChatCubit extends Cubit<ChatState> {
 
       _listen();
       await markRead();
+      await _refreshReceipt();
     } catch (error) {
       if (isClosed) return;
 
@@ -123,7 +124,27 @@ class ChatCubit extends Cubit<ChatState> {
     emit(state.copyWith(messages: [...without, message]));
 
     // Anything that arrives while the thread is open has been seen.
-    if (!message.isMine) markRead();
+    if (!message.isMine) {
+      markRead();
+
+      // A message from them means they were just in the thread, so this is
+      // both the right moment to re-read their `last_read_at` and the only
+      // moment it can have moved. Bounded by how fast they type, rather than
+      // polled.
+      _refreshReceipt();
+    }
+  }
+
+  /// Re-reads when the other person last opened this thread.
+  ///
+  /// Never throws and never emits an error: the repository returns null for
+  /// every failure, and a missing receipt is simply no receipt.
+  Future<void> _refreshReceipt() async {
+    final DateTime? seenAt =
+        await _chat.fetchOtherLastRead(state.conversationId);
+
+    if (isClosed || seenAt == null) return;
+    emit(state.copyWith(otherLastReadAt: seenAt));
   }
 
   void _remove(String messageId) {
