@@ -386,26 +386,35 @@ class MealRepository {
       return Meal.fromRow(existing.first, currentUserId: userId);
     }
 
+    // Read fresh rather than copied off the model the caller was holding.
+    //
+    // A meal reached from the feed arrives without its recipe: the feed's
+    // embed leaves `description` out, because it is the largest column on the
+    // table and no card renders it. Copying from that model would have
+    // silently produced a recipe-less copy.
+    //
+    // It is also the more correct read. A meal is copied as it is now, not as
+    // it was when the page it was seen on happened to load.
+    final Meal source = await _fetchForCopy(meal);
+
     final Map<String, dynamic> row = await _client
         .from('meals')
         .insert({
           'creator_id': userId,
-          'title': meal.title,
-          'description': meal.description,
-          'image_url': meal.imageUrl,
+          'title': source.title,
+          'description': source.description,
+          'image_url': source.imageUrl,
           // The same two files, pointed at by a second row. A copy is a new
           // meal, not a new photo — re-uploading the bytes would double the
           // storage to no end.
-          'thumb_url': meal.thumbUrl,
+          'thumb_url': source.thumbUrl,
           'total_calories': meal.totals.caloriesRounded,
           'total_protein_g': meal.totals.proteinRounded,
           'total_carbs_g': meal.totals.carbsRounded,
           'total_fat_g': meal.totals.fatRounded,
-          // A copy starts private. The user took it for their own cooking; if
-          // they want to share it on a post of their own, that is a decision
-          // they make there, and the composer will publish it then.
-          // A copy starts private whatever the original was. Saving somebody
-          // else's meal is taking it for your own use, not republishing it.
+          // A copy starts private whatever the original was. The user took it
+          // for their own cooking; if they want to share it on a post of their
+          // own, that is a decision they make there.
           'visibility': ContentVisibility.private.dbValue,
           'source_meal_id': rootMealId,
           'source_creator_id': rootCreatorId,
@@ -576,6 +585,31 @@ class MealRepository {
           );
     } catch (error) {
       debugPrint('Bulkr: meal updated but ingredients failed — $error');
+    }
+  }
+
+  /// The meal being copied, read in full.
+  ///
+  /// A meal reached from the feed is missing `description` — see
+  /// `PostRepository._attachedMealColumns` — so the row is re-read before its
+  /// contents are written into somebody else's library.
+  ///
+  /// Falls back to the model in hand when the read fails. A copy without its
+  /// recipe is a worse copy; a copy that did not happen because a second
+  /// request timed out is no copy at all, and the totals that make it usable
+  /// in the tracker are already on the model.
+  Future<Meal> _fetchForCopy(Meal meal) async {
+    try {
+      final Map<String, dynamic> row = await _client
+          .from('meals')
+          .select(_mealColumns)
+          .eq('id', meal.id)
+          .single();
+
+      return Meal.fromRow(row, currentUserId: _userId);
+    } catch (error) {
+      debugPrint('Bulkr: copying a meal without re-reading it — $error');
+      return meal;
     }
   }
 

@@ -135,13 +135,33 @@ class PostRepository {
   /// is neither public nor the reader's own — the meals RLS policy sees to
   /// that — which is correct: a post can mention a meal the reader is not
   /// allowed to look at, and the card simply shows no attachment.
-  static const String _postColumns = '*, '
+  /// Named rather than `*`, on both the post and the meal inside it.
+  ///
+  /// The post's own list is only a few columns shorter than `*` — but the
+  /// meal's is shorter by `description`, which is the whole recipe, fetched
+  /// for every attached meal on every page of every feed and rendered on none
+  /// of them. A card shows a title, a photo and four numbers.
+  ///
+  /// What used to need it was [MealRepository.copyIntoLibrary], reading the
+  /// recipe off the model the feed had handed it. That now re-reads the source
+  /// meal by id instead, which is one request on a rare action rather than a
+  /// recipe on every row — and copies the recipe as it is now rather than as
+  /// it was when the page was loaded.
+  static const String _postColumns = 'id, user_id, group_id, label, content, '
+      'visibility, is_hidden, likes_count, comments_count, saves_count, '
+      'hot_score, created_at, '
       'users!posts_user_id_fkey(username, display_name, avatar_url), '
       'post_images(url, thumb_url, position), '
       'groups!posts_group_id_fkey(id, name), '
-      'meals!posts_attached_meal_id_fkey(*, '
+      'meals!posts_attached_meal_id_fkey($_attachedMealColumns)';
+
+  /// What an attached meal needs to draw its card and be copied by id.
+  static const String _attachedMealColumns = 'id, creator_id, title, '
+      'image_url, thumb_url, total_calories, total_protein_g, total_carbs_g, '
+      'total_fat_g, visibility, is_public, source_meal_id, source_creator_id, '
+      'created_at, '
       'users!meals_creator_id_fkey(username), '
-      'source_author:users!meals_source_creator_id_fkey(username))';
+      'source_author:users!meals_source_creator_id_fkey(username)';
 
   String? get _userId => _client.auth.currentUser?.id;
 
@@ -859,15 +879,23 @@ class PostRepository {
   /// Marks what this user has already done to each of [posts]: liked it, saved
   /// it, and taken a copy of the meal on it.
   ///
-  /// Three queries for the whole page rather than one per card, and they run
-  /// together. The obvious alternative — asking PostgREST to embed
-  /// `post_likes` filtered to this user — turns into an inner join that drops
-  /// every post the user has *not* liked, which is most of them.
+  /// Two calls for the whole page rather than one per card, and the second only
+  /// when the page carries somebody else's meal. It used to be three: likes and
+  /// saves are now one `post_engagement()` call, because the device asking two
+  /// separate questions about the same twenty ids is two requests, two
+  /// connections and two policy evaluations for one answer. That function is
+  /// deliberately not `security definer` — it runs as the caller, so every
+  /// policy applies exactly as it did when this was three queries.
+  ///
+  /// The obvious alternative — asking PostgREST to embed `post_likes` filtered
+  /// to this user — turns into an inner join that drops every post the user has
+  /// *not* liked, which is most of them.
   ///
   /// Non-fatal, all of it. A feed that renders with every heart empty is wrong
   /// in a way the next refresh fixes; a feed that fails to render because a
   /// lookup of who-liked-what timed out is wrong in a way the reader can do
-  /// nothing about.
+  /// nothing about. That also covers the migration not having been run: the
+  /// RPC 404s, this catches it, and the feed renders unmarked.
   Future<List<Post>> _withMyEngagement(
     List<Post> posts, {
     required String? userId,
@@ -879,44 +907,38 @@ class PostRepository {
     // Only posts carrying someone else's meal can be asked about — the user's
     // own needs no lookup, and a page with no attachments should not spend a
     // round trip discovering that.
-    final List<String> attachedMealIds = [
+    //
+    // The root id, not the one in hand: a copy records what it was copied
+    // *from*, so the same recipe reached through two different people's posts
+    // is one thing already taken, not two.
+    final List<String> attachedRootIds = [
       for (final Post post in posts)
         if (post.attachedMeal != null && !post.attachedMeal!.isMine)
-          post.attachedMeal!.id,
+          post.attachedMeal!.sourceMealId ?? post.attachedMeal!.id,
     ];
 
     try {
       final results = await Future.wait([
-        _client
-            .from('post_likes')
-            .select('post_id')
-            .eq('user_id', userId)
-            .inFilter('post_id', ids),
-        _client
-            .from('post_saves')
-            .select('post_id')
-            .eq('user_id', userId)
-            .inFilter('post_id', ids),
-        // Matched on `source_meal_id`, which is how a copy remembers what it
-        // was copied from. Empty in, empty out — no query worth making.
-        if (attachedMealIds.isEmpty)
-          Future<List<Map<String, dynamic>>>.value(const [])
+        _client.rpc('post_engagement', params: {'p_post_ids': ids}),
+        if (attachedRootIds.isEmpty)
+          Future<Object?>.value(const <dynamic>[])
         else
-          _client
-              .from('meals')
-              .select('source_meal_id')
-              .eq('creator_id', userId)
-              .inFilter('source_meal_id', attachedMealIds),
+          _client.rpc('copied_meals', params: {'p_meal_ids': attachedRootIds}),
       ]);
 
-      final Set<String> liked = {
-        for (final Map<String, dynamic> row in results[0]) '${row['post_id']}',
-      };
-      final Set<String> saved = {
-        for (final Map<String, dynamic> row in results[1]) '${row['post_id']}',
-      };
+      final Set<String> liked = <String>{};
+      final Set<String> saved = <String>{};
+
+      for (final Map<String, dynamic> row
+          in _rows(results.isEmpty ? null : results[0])) {
+        final String id = '${row['post_id']}';
+        if (row['liked'] == true) liked.add(id);
+        if (row['saved'] == true) saved.add(id);
+      }
+
       final Set<String> copiedMeals = {
-        for (final Map<String, dynamic> row in results[2])
+        for (final Map<String, dynamic> row
+            in _rows(results.length > 1 ? results[1] : null))
           '${row['source_meal_id']}',
       };
 
@@ -925,13 +947,23 @@ class PostRepository {
                 isLiked: liked.contains(post.id),
                 isSaved: saved.contains(post.id),
                 attachedMealSaved: post.attachedMeal != null &&
-                    copiedMeals.contains(post.attachedMeal!.id),
+                    copiedMeals.contains(
+                      post.attachedMeal!.sourceMealId ?? post.attachedMeal!.id,
+                    ),
               ))
           .toList(growable: false);
     } catch (error) {
       debugPrint('Bulkr: could not resolve this user\'s engagement — $error');
       return posts;
     }
+  }
+
+  /// An RPC result as rows. `rpc` is typed as `dynamic`, and a function that
+  /// returns a table gives a list of objects — but a failure shape or a null
+  /// should read as "no rows" rather than throw inside a loop.
+  static Iterable<Map<String, dynamic>> _rows(Object? result) {
+    if (result is! List) return const [];
+    return result.whereType<Map<String, dynamic>>();
   }
 
   /// Attaches each `challenge`-labelled post's challenge.
