@@ -11,6 +11,7 @@ import '../models/post.dart';
 import '../models/post_comment.dart';
 import '../models/post_label.dart';
 import '../styles/app_color.dart';
+import 'author_profile_screen.dart';
 import '../widgets/animations/press_scale.dart';
 import '../widgets/person_row.dart';
 
@@ -264,6 +265,25 @@ class _Body extends StatelessWidget {
   }
 }
 
+/// Opens the commenter's profile.
+///
+/// Closes the sheet first. The profile is a full route and the sheet is a
+/// modal over the feed; pushing one behind the other leaves the sheet to be
+/// dismissed before the profile can be seen, which reads as the tap having
+/// done nothing.
+///
+/// Skips a comment of your own — [AuthorProfileScreen] is for looking at
+/// somebody else, and the Profile tab is where your own lives.
+Future<void> _openAuthor(BuildContext context, PostComment comment) async {
+  if (comment.isMine) return;
+
+  final NavigatorState navigator = Navigator.of(context);
+  final BuildContext host = navigator.context;
+
+  navigator.pop();
+  await AuthorProfileScreen.open(host, comment.authorId);
+}
+
 class _CommentRow extends StatelessWidget {
   const _CommentRow({required this.comment});
 
@@ -279,10 +299,19 @@ class _CommentRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          PersonAvatar(
-            url: comment.authorAvatarUrl,
-            name: comment.authorName,
-            size: 26.w,
+          // Both the picture and the name open the commenter's profile — the
+          // same pair the post card offers, because a comment is the other
+          // place people meet someone they have not met.
+          PressScale(
+            child: GestureDetector(
+              onTap: () => _openAuthor(context, comment),
+              behavior: HitTestBehavior.opaque,
+              child: PersonAvatar(
+                url: comment.authorAvatarUrl,
+                name: comment.authorName,
+                size: 26.w,
+              ),
+            ),
           ),
           SizedBox(width: 10.w),
           Expanded(
@@ -292,14 +321,20 @@ class _CommentRow extends StatelessWidget {
                 Row(
                   children: [
                     Flexible(
-                      child: Text(
-                        comment.authorName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.inter(
-                          color: Colors.white,
-                          fontSize: 12.sp,
-                          fontWeight: FontWeight.w600,
+                      child: PressScale(
+                        child: GestureDetector(
+                          onTap: () => _openAuthor(context, comment),
+                          behavior: HitTestBehavior.opaque,
+                          child: Text(
+                            comment.authorName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.inter(
+                              color: Colors.white,
+                              fontSize: 12.sp,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                         ),
                       ),
                     ),

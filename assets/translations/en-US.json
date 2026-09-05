@@ -475,5 +475,9 @@
   "water_goal_derived": "Left alone, your goal is {perKg} ml per kg of bodyweight and moves as you bulk.",
   "water_goal_auto": "Use my weight",
   "water_unavailable": "Water isn't set up yet. Run tracker_water.sql and pull to refresh.",
-  "ml_unit": "ml"
+  "ml_unit": "ml",
+  "search_recent": "Recent",
+  "search_recent_clear": "Clear",
+  "search_create_group": "Start a group",
+  "search_create_group_helper": "Name it, invite people, post in it"
 }

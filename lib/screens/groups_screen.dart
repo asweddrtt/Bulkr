@@ -485,15 +485,27 @@ class _CreateButton extends StatelessWidget {
 class GroupEditorSheet extends StatefulWidget {
   const GroupEditorSheet({super.key});
 
-  static Future<void> open(BuildContext context) async {
-    final GroupsCubit cubit = context.read<GroupsCubit>();
-
-    final Group? created = await showModalBottomSheet<Group>(
+  /// Shows the sheet and hands back whatever was created.
+  ///
+  /// Split from [open] because the search screen offers this too and has no
+  /// [GroupsCubit] to tell about it — the sheet itself only needs
+  /// [GroupRepository], and requiring a cubit it never uses is what would keep
+  /// creating a group locked to one screen.
+  static Future<Group?> create(BuildContext context) {
+    return showModalBottomSheet<Group>(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (_) => const GroupEditorSheet(),
     );
+  }
+
+  /// Creates a group and tells the surrounding [GroupsCubit] about it, so the
+  /// list it came from shows it without a refetch.
+  static Future<void> open(BuildContext context) async {
+    final GroupsCubit cubit = context.read<GroupsCubit>();
+
+    final Group? created = await create(context);
 
     if (created != null) cubit.groupCreated(created);
   }

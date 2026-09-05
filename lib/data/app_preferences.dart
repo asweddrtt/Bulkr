@@ -51,9 +51,77 @@ class AppPreferences {
     await prefs?.setString(_onboardedUserKey, userId);
   }
 
+  // --- Search history -----------------------------------------------------
+
+  /// Terms the user has searched for, newest first.
+  ///
+  /// On the device rather than in a table, deliberately. What someone typed
+  /// into a search box is a record of who they were curious about, and there
+  /// is no feature here that needs it to follow them between devices — so the
+  /// cheapest place to keep it is also the most private one, and clearing it
+  /// means clearing it rather than deleting rows somebody could have read.
+  static const String _searchHistoryKey = 'search_history';
+
+  /// How many terms are kept. Enough to cover "the thing I looked at
+  /// yesterday" and short enough to stay a list rather than an archive.
+  static const int maxSearchHistory = 8;
+
+  Future<List<String>> searchHistory() async {
+    final SharedPreferences? prefs = await _prefs();
+    return prefs?.getStringList(_searchHistoryKey) ?? const <String>[];
+  }
+
+  /// Puts [term] at the top, removing any earlier copy of it.
+  ///
+  /// Case-insensitive on the way in, so searching "Sara" after "sara" moves
+  /// the one entry rather than making a second.
+  Future<List<String>> rememberSearch(String term) async {
+    final String trimmed = term.trim();
+    if (trimmed.isEmpty) return searchHistory();
+
+    final SharedPreferences? prefs = await _prefs();
+    if (prefs == null) return const <String>[];
+
+    final List<String> existing =
+        prefs.getStringList(_searchHistoryKey) ?? <String>[];
+
+    final List<String> updated = [
+      trimmed,
+      ...existing.where(
+        (entry) => entry.toLowerCase() != trimmed.toLowerCase(),
+      ),
+    ].take(maxSearchHistory).toList();
+
+    await prefs.setStringList(_searchHistoryKey, updated);
+    return updated;
+  }
+
+  /// Removes one term — the x on a row.
+  Future<List<String>> forgetSearch(String term) async {
+    final SharedPreferences? prefs = await _prefs();
+    if (prefs == null) return const <String>[];
+
+    final List<String> updated =
+        (prefs.getStringList(_searchHistoryKey) ?? <String>[])
+            .where((entry) => entry != term)
+            .toList();
+
+    await prefs.setStringList(_searchHistoryKey, updated);
+    return updated;
+  }
+
+  Future<void> clearSearchHistory() async {
+    final SharedPreferences? prefs = await _prefs();
+    await prefs?.remove(_searchHistoryKey);
+  }
+
   /// Called on sign-out, so the next account decides for itself.
+  ///
+  /// Takes the search history with it. The next person to sign in on this
+  /// device should not be looking at what the last one searched for.
   Future<void> clear() async {
     final SharedPreferences? prefs = await _prefs();
     await prefs?.remove(_onboardedUserKey);
+    await prefs?.remove(_searchHistoryKey);
   }
 }

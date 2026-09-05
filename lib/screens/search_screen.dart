@@ -258,8 +258,12 @@ class _Body extends StatelessWidget {
                         person: person,
                         onToggleFollow: () =>
                             context.read<SearchCubit>().toggleFollow(person),
-                        onOpen: () =>
-                            AuthorProfileScreen.open(context, person.id),
+                        onOpen: () {
+                          context.read<SearchCubit>().rememberSearch(
+                                state.query,
+                              );
+                          AuthorProfileScreen.open(context, person.id);
+                        },
                       ),
                   ],
                   if (state.hasGroups) ...[
@@ -276,8 +280,21 @@ class _Body extends StatelessWidget {
                         onToggleMembership: () => context
                             .read<SearchCubit>()
                             .toggleMembership(group),
-                        onOpen: () => GroupScreen.open(context, group.id),
+                        onOpen: () {
+                          context.read<SearchCubit>().rememberSearch(
+                                state.query,
+                              );
+                          GroupScreen.open(context, group.id);
+                        },
                       ),
+                  ],
+                  // Before the group rows and above the fold on a blank
+                  // screen: searching for something you have looked for
+                  // before is the common case, and retyping it is the thing
+                  // this saves.
+                  if (state.showsHistory) ...[
+                    _HistorySection(terms: state.history),
+                    SizedBox(height: 10.h),
                   ],
                   // Always last, and always there: browsing and creating
                   // groups is not something a search field can offer, and this
@@ -291,6 +308,17 @@ class _Body extends StatelessWidget {
                     ),
                     SizedBox(height: 20.h),
                   ],
+                  // Creating is offered next to browsing rather than behind
+                  // it. Starting a group used to mean opening the groups
+                  // screen and finding the button on it, which is two steps
+                  // more than a thing with no groups in it can afford.
+                  _ActionRow(
+                    icon: Icons.group_add_outlined,
+                    label: 'search_create_group'.tr(),
+                    helper: 'search_create_group_helper'.tr(),
+                    onTap: () => _createGroup(context),
+                  ),
+                  SizedBox(height: 8.h),
                   _AllGroupsRow(onTap: () => GroupsScreen.open(context)),
                 ],
               ),
@@ -321,6 +349,177 @@ class _SectionHeader extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Recent searches, newest first.
+///
+/// Kept on the device rather than in a table — see
+/// [AppPreferences.searchHistory] for why. Tapping one re-runs it; the x
+/// forgets that one; the header clears the lot.
+class _HistorySection extends StatelessWidget {
+  const _HistorySection({required this.terms});
+
+  final List<String> terms;
+
+  @override
+  Widget build(BuildContext context) {
+    final SearchCubit cubit = context.read<SearchCubit>();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(child: _SectionHeader(label: 'search_recent'.tr())),
+            PressScale(
+              child: GestureDetector(
+                onTap: cubit.clearHistory,
+                behavior: HitTestBehavior.opaque,
+                child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8.h, horizontal: 4.w),
+                  child: Text(
+                    'search_recent_clear'.tr().toUpperCase(),
+                    style: GoogleFonts.inter(
+                      color: AppColors.textGray,
+                      fontSize: 10.sp,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        for (final String term in terms)
+          PressScale(
+            key: ValueKey('history-$term'),
+            child: GestureDetector(
+              onTap: () => cubit.repeatSearch(term),
+              behavior: HitTestBehavior.opaque,
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 9.h),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.history,
+                      size: 16.sp,
+                      color: AppColors.textGray,
+                    ),
+                    SizedBox(width: 12.w),
+                    Expanded(
+                      child: Text(
+                        term,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.inter(
+                          color: Colors.white,
+                          fontSize: 12.sp,
+                        ),
+                      ),
+                    ),
+                    // Its own hit target rather than a swipe: the row itself
+                    // is already a tap that means "search this again", and a
+                    // gesture that removes it would be competing with that.
+                    GestureDetector(
+                      onTap: () => cubit.forgetSearch(term),
+                      behavior: HitTestBehavior.opaque,
+                      child: Padding(
+                        padding: EdgeInsets.all(4.w),
+                        child: Icon(
+                          Icons.close,
+                          size: 14.sp,
+                          color: AppColors.textGray,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// A tappable row in the same shape as [_AllGroupsRow], for anything else the
+/// bottom of this screen offers.
+class _ActionRow extends StatelessWidget {
+  const _ActionRow({
+    required this.icon,
+    required this.label,
+    required this.helper,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final String helper;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return PressScale(
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 14.h),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1A1A),
+            borderRadius: BorderRadius.circular(8.r),
+            border: Border.all(color: AppColors.darkBorder),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, color: AppColors.primaryNeon, size: 18.sp),
+              SizedBox(width: 12.w),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: GoogleFonts.inter(
+                        color: Colors.white,
+                        fontSize: 12.sp,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    SizedBox(height: 2.h),
+                    Text(
+                      helper,
+                      style: GoogleFonts.inter(
+                        color: AppColors.textGray,
+                        fontSize: 10.sp,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right, color: AppColors.textGray, size: 18.sp),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Creates a group from here, then puts the user straight into it.
+///
+/// Opening it is the point: someone who just made a group wants to post in it
+/// or add people, and leaving them on a search screen with a success message
+/// is where a new group goes quiet.
+Future<void> _createGroup(BuildContext context) async {
+  final SearchCubit cubit = context.read<SearchCubit>();
+
+  final Group? created = await GroupEditorSheet.create(context);
+  if (created == null || !context.mounted) return;
+
+  await GroupScreen.open(context, created.id);
+  await cubit.refresh();
 }
 
 class _AllGroupsRow extends StatelessWidget {
