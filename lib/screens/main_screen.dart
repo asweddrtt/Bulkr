@@ -1,23 +1,16 @@
-import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../cubit/feed/feed_cubit.dart';
 import '../cubit/meals/meals_cubit.dart';
 import '../cubit/profile/profile_cubit.dart';
 import '../cubit/tracker/tracker_cubit.dart';
-import '../styles/app_color.dart';
-import '../widgets/animations/motion.dart';
-import '../widgets/animations/press_scale.dart';
+import '../widgets/bulkr_nav_bar.dart';
 import 'feed_screen.dart';
 import 'meals_screen.dart';
 import 'profile_screen.dart';
 import 'tracker_screen.dart';
 import 'dashboard_screen.dart';
-
-const Color _textMuted = Color(0xFF9CA3AF);
 
 /// Post-onboarding shell: bottom navigation over the main sections.
 class MainScreen extends StatefulWidget {
@@ -30,13 +23,12 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 2;
 
-  static const List<_NavDestination> _destinations = [
-    _NavDestination(Icons.dashboard_sharp, 'Dashboard'),
-    _NavDestination(Icons.restaurant_sharp, 'Meals'),
-    _NavDestination(Icons.dynamic_feed_sharp, 'Feed'),
-    _NavDestination(Icons.electric_bolt_sharp, 'Tracker'),
-    _NavDestination(Icons.person_sharp, 'profile'),
-
+  static const List<NavDestination> _destinations = [
+    NavDestination(Icons.dashboard_sharp, 'Dashboard'),
+    NavDestination(Icons.restaurant_sharp, 'Meals'),
+    NavDestination(Icons.dynamic_feed_sharp, 'Feed'),
+    NavDestination(Icons.electric_bolt_sharp, 'Tracker'),
+    NavDestination(Icons.person_sharp, 'profile'),
   ];
 
   @override
@@ -70,6 +62,10 @@ class _MainScreenState extends State<MainScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
+      // The bar floats over the content and blurs what is behind it, so there
+      // has to be something behind it. Screens that scroll reserve
+      // BulkrNavBar.contentInset at the bottom of their list.
+      extendBody: true,
       body: SafeArea(
         bottom: false,
         child: IndexedStack(
@@ -83,75 +79,11 @@ class _MainScreenState extends State<MainScreen> {
           ],
         ),
       ),
-      bottomNavigationBar: _buildBottomNav(),
-    );
-  }
-
-  Widget _buildBottomNav() {
-    return Container(
-      color: const Color(0xFF0A0A0A),
-      padding: EdgeInsets.symmetric(vertical: 12.h),
-      child: SafeArea(
-        top: false,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            for (var i = 0; i < _destinations.length; i++)
-              _buildNavItem(i, _destinations[i]),
-          ],
-        ),
+      bottomNavigationBar: BulkrNavBar(
+        destinations: _destinations,
+        currentIndex: _currentIndex,
+        onSelected: _select,
       ),
     );
   }
-
-  Widget _buildNavItem(int index, _NavDestination destination) {
-    final isSelected = _currentIndex == index;
-
-    return PressScale(
-      child: GestureDetector(
-        onTap: () => _select(index),
-        behavior: HitTestBehavior.opaque,
-        child: AnimatedContainer(
-          duration: Motion.scaled(context, Motion.fast),
-          curve: Motion.enter,
-          padding: EdgeInsets.symmetric(
-            horizontal: isSelected ? 20.w : 12.w,
-            vertical: isSelected ? 8.h : 4.h,
-          ),
-          decoration: BoxDecoration(
-            color: isSelected ? AppColors.primaryNeon : Colors.transparent,
-            borderRadius: BorderRadius.circular(8.r),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                destination.icon,
-                color: isSelected ? Colors.black : _textMuted,
-                size: 22.sp ,
-              ),
-              SizedBox(height: 4.h),
-              Text(
-                destination.labelKey.tr(),
-                style: GoogleFonts.inter(
-                  color: isSelected ? Colors.black : _textMuted,
-                  fontSize: 9.sp,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.2,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-}
-
-class _NavDestination {
-  const _NavDestination(this.icon, this.labelKey);
-
-  final IconData icon;
-  final String labelKey;
 }

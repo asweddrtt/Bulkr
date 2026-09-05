@@ -10,6 +10,7 @@ import '../cubit/meals/meals_cubit.dart';
 import '../core/post_link.dart';
 import '../models/post.dart';
 import '../styles/app_color.dart';
+import '../widgets/bulkr_nav_bar.dart';
 import '../widgets/animations/motion.dart';
 import '../widgets/animations/press_scale.dart';
 import '../widgets/post_actions_sheet.dart';
@@ -383,7 +384,7 @@ class _FeedListState extends State<_FeedList> {
     return ListView.builder(
       controller: _controller,
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: EdgeInsets.fromLTRB(20.w, 0, 20.w, 90.h),
+      padding: EdgeInsets.fromLTRB(20.w, 0, 20.w, BulkrNavBar.contentInset),
       // One extra slot for the paging spinner at the tail.
       itemCount: slice.posts.length + (slice.hasMore ? 1 : 0),
       itemBuilder: (context, index) {

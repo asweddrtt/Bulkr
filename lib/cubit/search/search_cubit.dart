@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../data/app_preferences.dart';
 import '../../data/follow_repository.dart';
 import '../../data/group_repository.dart';
 import '../../models/group.dart';
@@ -27,12 +28,15 @@ class SearchCubit extends Cubit<SearchState> {
   SearchCubit({
     required FollowRepository followRepository,
     required GroupRepository groupRepository,
+    AppPreferences? preferences,
   })  : _follows = followRepository,
         _groups = groupRepository,
+        _preferences = preferences ?? AppPreferences(),
         super(const SearchState());
 
   final FollowRepository _follows;
   final GroupRepository _groups;
+  final AppPreferences _preferences;
 
   static const String _actionFailedKey = 'search_action_failed';
 
@@ -60,12 +64,17 @@ class SearchCubit extends Cubit<SearchState> {
         _groups.fetchMyGroups(),
       ]);
 
+      // Local, so it cannot fail the load and does not need its own error
+      // channel — the worst case is an empty list of recent searches.
+      final List<String> history = await _preferences.searchHistory();
+
       if (isClosed) return;
 
       emit(state.copyWith(
         status: SearchStatus.ready,
         suggestedPeople: results[0] as List<Person>,
         myGroups: results[1] as List<Group>,
+        history: history,
         clearError: true,
       ));
     } catch (error) {
@@ -114,6 +123,47 @@ class SearchCubit extends Cubit<SearchState> {
   }
 
   void clearSearch() => search('');
+
+  // --- History ------------------------------------------------------------
+
+  /// Records a term the user actually meant.
+  ///
+  /// Called when a result is opened, not on every keystroke and not when the
+  /// debounce fires: "sar" is a stage on the way to "sara", and a history full
+  /// of prefixes is a history nobody wants to look at. Acting on a result is
+  /// the signal that the term was the right one.
+  Future<void> rememberSearch(String term) async {
+    final List<String> history = await _preferences.rememberSearch(term);
+    if (isClosed) return;
+    emit(state.copyWith(history: history));
+  }
+
+  /// Re-runs a term from the history, immediately rather than debounced —
+  /// it was tapped, not typed, so there is nothing to wait for.
+  void repeatSearch(String term) {
+    _searchTimer?.cancel();
+
+    emit(state.copyWith(
+      query: term,
+      people: const [],
+      groups: const [],
+      isSearching: true,
+    ));
+
+    _runSearch(term.trim());
+  }
+
+  Future<void> forgetSearch(String term) async {
+    final List<String> history = await _preferences.forgetSearch(term);
+    if (isClosed) return;
+    emit(state.copyWith(history: history));
+  }
+
+  Future<void> clearHistory() async {
+    await _preferences.clearSearchHistory();
+    if (isClosed) return;
+    emit(state.copyWith(history: const []));
+  }
 
   /// Runs both searches together.
   ///

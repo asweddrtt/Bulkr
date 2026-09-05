@@ -8,6 +8,7 @@ import '../cubit/meals/meals_cubit.dart';
 import '../models/meal.dart';
 import '../models/meal_slot.dart';
 import '../styles/app_color.dart';
+import '../widgets/bulkr_nav_bar.dart';
 import '../widgets/animations/entrance.dart';
 import '../widgets/animations/press_scale.dart';
 import '../widgets/meal_actions_sheet.dart';
@@ -294,7 +295,7 @@ class _MealsList extends StatelessWidget {
       color: AppColors.primaryNeon,
       backgroundColor: const Color(0xFF1A1A1A),
       child: ListView.builder(
-        padding: EdgeInsets.fromLTRB(20.w, 8.h, 20.w, 96.h),
+        padding: EdgeInsets.fromLTRB(20.w, 8.h, 20.w, BulkrNavBar.contentInset),
         itemCount: meals.length,
         itemBuilder: (context, index) {
           final Meal meal = meals[index];

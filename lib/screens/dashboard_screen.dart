@@ -13,6 +13,7 @@ import '../models/plan_breakdown.dart';
 import '../models/user_profile.dart';
 import '../models/weight_entry.dart';
 import '../styles/app_color.dart';
+import '../widgets/bulkr_nav_bar.dart';
 import '../widgets/animations/entrance.dart';
 import '../widgets/animations/press_scale.dart';
 import '../widgets/insight_list.dart';
@@ -203,7 +204,10 @@ class _ProfileView extends StatelessWidget {
             color: DashboardScreen.accentColor,
             backgroundColor: DashboardScreen.cardColor,
             child: ListView(
-              padding: EdgeInsets.all(16.w),
+              // Bottom reserves room for the floating nav bar, which the content
+              // scrolls under rather than stopping above.
+              padding: EdgeInsets.fromLTRB(
+                  16.w, 16.w, 16.w, BulkrNavBar.contentInset),
               children: staggered([
                 _buildWeightProgress(context),
                 SizedBox(height: 16.h),

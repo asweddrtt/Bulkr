@@ -12,6 +12,7 @@ import '../models/macros.dart';
 import '../models/meal.dart';
 import '../models/meal_slot.dart';
 import '../styles/app_color.dart';
+import '../widgets/bulkr_nav_bar.dart';
 import '../widgets/animations/count_up.dart';
 import '../widgets/animations/entrance.dart';
 import '../widgets/animations/press_scale.dart';
@@ -107,7 +108,7 @@ class _TrackerView extends StatelessWidget {
       backgroundColor: _cardColor,
       color: AppColors.primaryNeon,
       child: ListView(
-        padding: EdgeInsets.fromLTRB(16.w, 8.h, 16.w, 32.h),
+        padding: EdgeInsets.fromLTRB(16.w, 8.h, 16.w, BulkrNavBar.contentInset),
         children: staggered(
           [
             _DayStrip(state: state),

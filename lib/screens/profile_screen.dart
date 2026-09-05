@@ -19,6 +19,7 @@ import '../models/person.dart';
 import '../models/post.dart';
 import '../models/user_profile.dart';
 import '../styles/app_color.dart';
+import '../widgets/bulkr_nav_bar.dart';
 import '../widgets/account_sheet.dart';
 import '../widgets/animations/press_scale.dart';
 import '../widgets/edit_profile_sheet.dart';
@@ -171,7 +172,8 @@ class _ProfileViewState extends State<_ProfileView> {
                         )
                       else
                         SliverPadding(
-                          padding: EdgeInsets.fromLTRB(20.w, 8.h, 20.w, 30.h),
+                          padding: EdgeInsets.fromLTRB(
+                              20.w, 8.h, 20.w, BulkrNavBar.contentInset),
                           sliver: SliverList.builder(
                             itemCount:
                                 state.posts.length + (state.hasMore ? 1 : 0),

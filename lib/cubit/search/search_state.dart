@@ -11,6 +11,7 @@ class SearchState extends Equatable {
     this.groups = const [],
     this.suggestedPeople = const [],
     this.myGroups = const [],
+    this.history = const [],
     this.errorMessage,
     this.actionErrorKey,
     this.actionErrorDetail,
@@ -32,6 +33,10 @@ class SearchState extends Equatable {
   final List<Person> suggestedPeople;
   final List<Group> myGroups;
 
+  /// Terms searched for before, newest first. Read from the device rather than
+  /// the database — see [AppPreferences.searchHistory].
+  final List<String> history;
+
   final String? errorMessage;
   final String? actionErrorKey;
   final String? actionErrorDetail;
@@ -43,6 +48,11 @@ class SearchState extends Equatable {
 
   /// The groups to render, on the same rule.
   List<Group> get visibleGroups => hasQuery ? groups : myGroups;
+
+  /// Recent searches are only worth showing on the blank screen. Once
+  /// something is typed the results are the answer, and a list of older terms
+  /// underneath them is just in the way.
+  bool get showsHistory => !hasQuery && history.isNotEmpty;
 
   bool get hasPeople => visiblePeople.isNotEmpty;
   bool get hasGroups => visibleGroups.isNotEmpty;
@@ -71,6 +81,7 @@ class SearchState extends Equatable {
     List<Group>? groups,
     List<Person>? suggestedPeople,
     List<Group>? myGroups,
+    List<String>? history,
     String? errorMessage,
     String? actionErrorKey,
     String? actionErrorDetail,
@@ -84,6 +95,7 @@ class SearchState extends Equatable {
       groups: groups ?? this.groups,
       suggestedPeople: suggestedPeople ?? this.suggestedPeople,
       myGroups: myGroups ?? this.myGroups,
+      history: history ?? this.history,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
       actionErrorKey:
           clearError ? null : (actionErrorKey ?? this.actionErrorKey),
@@ -101,6 +113,7 @@ class SearchState extends Equatable {
         groups,
         suggestedPeople,
         myGroups,
+        history,
         errorMessage,
         actionErrorKey,
         actionErrorDetail,

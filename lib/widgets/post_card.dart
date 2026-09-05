@@ -125,10 +125,19 @@ class PostCard extends StatelessWidget {
       padding: EdgeInsets.fromLTRB(14.w, 14.h, 6.w, 10.h),
       child: Row(
         children: [
-          PersonAvatar(
-            url: post.authorAvatarUrl,
-            name: post.authorName,
-            size: 34.w,
+          // The picture opens the author too, not only the name beside it.
+          // A face is the thing people aim at, and a tap that lands on it and
+          // does nothing reads as the profile being unreachable from here.
+          PressScale(
+            child: GestureDetector(
+              onTap: onOpenAuthor,
+              behavior: HitTestBehavior.opaque,
+              child: PersonAvatar(
+                url: post.authorAvatarUrl,
+                name: post.authorName,
+                size: 34.w,
+              ),
+            ),
           ),
           SizedBox(width: 10.w),
           Expanded(
