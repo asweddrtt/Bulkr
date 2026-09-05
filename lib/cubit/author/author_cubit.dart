@@ -3,10 +3,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../data/meal_repository.dart';
 import '../../data/moderation_repository.dart';
 import '../../data/feed_cursor.dart';
 import '../../data/follow_repository.dart';
 import '../../data/post_repository.dart';
+import '../../models/meal.dart';
 import '../../models/person.dart';
 import '../../models/post.dart';
 
@@ -22,15 +24,18 @@ class AuthorCubit extends Cubit<AuthorState> {
     required FollowRepository followRepository,
     required PostRepository postRepository,
     required ModerationRepository moderationRepository,
+    required MealRepository mealRepository,
     required String personId,
   })  : _follows = followRepository,
         _posts = postRepository,
         _moderation = moderationRepository,
+        _meals = mealRepository,
         super(AuthorState(personId: personId));
 
   final FollowRepository _follows;
   final PostRepository _posts;
   final ModerationRepository _moderation;
+  final MealRepository _meals;
 
   static const String _actionFailedKey = 'people_action_failed';
 
@@ -330,6 +335,48 @@ class AuthorCubit extends Cubit<AuthorState> {
       ...existing,
       ...incoming.where((post) => seen.add(post.id)),
     ];
+  }
+
+  /// Switches between this person's posts and their meals.
+  ///
+  /// Loads the meals the first time the tab is opened and not before. Most
+  /// visits never look at it, and making every profile wait on a query nobody
+  /// asked for would slow the common case to pay for the rare one.
+  Future<void> showMeals(bool meals) async {
+    if (state.showsMeals == meals) return;
+    emit(state.copyWith(showsMeals: meals));
+
+    if (!meals || state.meals.isNotEmpty || state.isLoadingMeals) return;
+    await loadMeals();
+  }
+
+  /// Reads this person's meals.
+  ///
+  /// Which ones come back is the database's decision, not this one — the
+  /// policy on `meals` is `can_view(creator_id, visibility)`, so a private
+  /// meal never leaves the server and a followers-only one needs the follow.
+  ///
+  /// Non-fatal: a profile that loaded should not become an error screen
+  /// because a second list failed.
+  Future<void> loadMeals() async {
+    emit(state.copyWith(isLoadingMeals: true));
+
+    try {
+      final List<Meal> meals = await _meals.fetchMealsBy(state.personId);
+      if (isClosed) return;
+      emit(state.copyWith(meals: meals, isLoadingMeals: false));
+    } catch (error) {
+      if (isClosed) return;
+
+      final String detail = _describe(error);
+      debugPrint('Bulkr: profile meals failed — $detail');
+
+      emit(state.copyWith(
+        isLoadingMeals: false,
+        actionErrorKey: _actionFailedKey,
+        actionErrorDetail: detail,
+      ));
+    }
   }
 
   /// Blocks or unblocks the person whose profile this is.

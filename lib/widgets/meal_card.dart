@@ -17,22 +17,29 @@ class MealCard extends StatelessWidget {
   const MealCard({
     super.key,
     required this.meal,
-    required this.onLog,
-    required this.onToggleFavorite,
-    required this.onShowActions,
+    this.onLog,
+    this.onToggleFavorite,
+    this.onShowActions,
     this.onOpen,
     this.isLogging = false,
   });
 
   final Meal meal;
 
-  /// Adds one serving to today's log.
-  final VoidCallback onLog;
+  /// Adds one serving to today's log. Null on a read-only card.
+  ///
+  /// All three of these are nullable so the same card can be shown somewhere
+  /// it is not yours to act on — a profile shows what somebody made, and
+  /// favouriting or logging from there would need a library cubit that screen
+  /// has no business holding. A null control is hidden rather than disabled:
+  /// a greyed-out button on somebody else's meal invites a tap that will never
+  /// do anything.
+  final VoidCallback? onLog;
 
-  final VoidCallback onToggleFavorite;
+  final VoidCallback? onToggleFavorite;
 
   /// Opens the overflow menu, which is where removing this meal lives.
-  final VoidCallback onShowActions;
+  final VoidCallback? onShowActions;
 
   /// Opens the detail view. Null until there is one to open.
   final VoidCallback? onOpen;
@@ -164,6 +171,9 @@ class MealCard extends StatelessWidget {
       };
 
   Widget _buildFavoriteButton() {
+    // Hidden rather than disabled — see the note on the callbacks.
+    if (onToggleFavorite == null) return const SizedBox.shrink();
+
     return PressScale(
       child: GestureDetector(
         onTap: onToggleFavorite,
@@ -184,6 +194,8 @@ class MealCard extends StatelessWidget {
   }
 
   Widget _buildOverflowButton() {
+    if (onShowActions == null) return const SizedBox.shrink();
+
     return PressScale(
       child: GestureDetector(
         onTap: onShowActions,
@@ -282,6 +294,8 @@ class MealCard extends StatelessWidget {
   /// database — so it is still lit after switching tabs, pulling to refresh, or
   /// reopening the app, rather than for as long as this screen stays alive.
   Widget _buildLogButton(BuildContext context) {
+    if (onLog == null) return const SizedBox.shrink();
+
     return PressScale(
       enabled: !isLogging,
       child: GestureDetector(

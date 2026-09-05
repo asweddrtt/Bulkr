@@ -8,12 +8,16 @@ import 'package:google_fonts/google_fonts.dart';
 import '../core/post_link.dart';
 import '../cubit/author/author_cubit.dart';
 import '../cubit/feed/feed_cubit.dart';
+import '../data/meal_repository.dart';
 import '../data/moderation_repository.dart';
 import '../data/follow_repository.dart';
 import '../data/post_repository.dart';
+import '../models/meal.dart';
 import '../models/person.dart';
 import '../models/post.dart';
 import '../styles/app_color.dart';
+import '../widgets/animations/motion.dart';
+import '../widgets/meal_card.dart';
 import '../widgets/sheet_action_row.dart';
 import '../widgets/animations/press_scale.dart';
 import '../widgets/person_row.dart';
@@ -40,6 +44,7 @@ class AuthorProfileScreen extends StatelessWidget {
     final FollowRepository follows = context.read<FollowRepository>();
     final PostRepository posts = context.read<PostRepository>();
     final ModerationRepository moderation = context.read<ModerationRepository>();
+    final MealRepository meals = context.read<MealRepository>();
     final FeedCubit feed = context.read<FeedCubit>();
 
     await Navigator.of(context).push<void>(
@@ -49,6 +54,7 @@ class AuthorProfileScreen extends StatelessWidget {
             followRepository: follows,
             postRepository: posts,
             moderationRepository: moderation,
+            mealRepository: meals,
             personId: personId,
           )..load(),
           child: BlocProvider.value(
@@ -184,7 +190,12 @@ class _BodyState extends State<_Body> {
                   SliverToBoxAdapter(
                     child: _ProfileHeader(state: state),
                   ),
-                  if (state.hasNoPosts)
+                  SliverToBoxAdapter(
+                    child: ProfileTabs(showsMeals: state.showsMeals),
+                  ),
+                  if (state.showsMeals)
+                    MealsSliver(state: state)
+                  else if (state.hasNoPosts)
                     SliverFillRemaining(
                       hasScrollBody: false,
                       child: _Message(
@@ -308,6 +319,142 @@ Future<void> _showActions(BuildContext context, Post post) async {
             ),
           ),
         );
+  }
+}
+
+/// Posts or meals.
+///
+/// A profile is two things somebody has made, and the feed only ever showed
+/// one of them. Meals are the other half of what this app is for, and a
+/// library nobody else can see is a library that only ever gets used once.
+class ProfileTabs extends StatelessWidget {
+  const ProfileTabs({super.key, required this.showsMeals});
+
+  final bool showsMeals;
+
+  @override
+  Widget build(BuildContext context) {
+    final AuthorCubit cubit = context.read<AuthorCubit>();
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20.w, 4.h, 20.w, 4.h),
+      child: Row(
+        children: [
+          Expanded(
+            child: _ProfileTab(
+              labelKey: 'profile_tab_posts',
+              isSelected: !showsMeals,
+              onTap: () => cubit.showMeals(false),
+            ),
+          ),
+          SizedBox(width: 8.w),
+          Expanded(
+            child: _ProfileTab(
+              labelKey: 'profile_tab_meals',
+              isSelected: showsMeals,
+              onTap: () => cubit.showMeals(true),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfileTab extends StatelessWidget {
+  const _ProfileTab({
+    required this.labelKey,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  final String labelKey;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return PressScale(
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: Motion.scaled(context, Motion.fast),
+          curve: Motion.enter,
+          alignment: Alignment.center,
+          padding: EdgeInsets.symmetric(vertical: 9.h),
+          decoration: BoxDecoration(
+            color: isSelected ? AppColors.primaryNeon : Colors.transparent,
+            borderRadius: BorderRadius.circular(6.r),
+            border: Border.all(
+              color: isSelected ? AppColors.primaryNeon : AppColors.darkBorder,
+            ),
+          ),
+          child: Text(
+            labelKey.tr().toUpperCase(),
+            style: GoogleFonts.inter(
+              color: isSelected ? Colors.black : AppColors.textGray,
+              fontSize: 10.sp,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The meals half of a profile.
+class MealsSliver extends StatelessWidget {
+  const MealsSliver({super.key, required this.state});
+
+  final AuthorState state;
+
+  @override
+  Widget build(BuildContext context) {
+    if (state.isLoadingMeals && state.meals.isEmpty) {
+      return const SliverFillRemaining(
+        hasScrollBody: false,
+        child: Center(
+          child: CircularProgressIndicator(color: AppColors.primaryNeon),
+        ),
+      );
+    }
+
+    if (state.meals.isEmpty) {
+      return SliverFillRemaining(
+        hasScrollBody: false,
+        child: _Message(
+          icon: Icons.restaurant_menu_outlined,
+          title: state.isMe
+              ? 'profile_no_meals_mine'.tr()
+              : 'profile_no_meals'.tr(),
+          // Only worth saying on somebody else's: a private meal is invisible
+          // by design, and "they have none" would be the wrong conclusion to
+          // let someone draw from an empty list.
+          body: state.isMe ? null : 'profile_no_meals_body'.tr(),
+        ),
+      );
+    }
+
+    return SliverPadding(
+      padding: EdgeInsets.fromLTRB(20.w, 8.h, 20.w, 30.h),
+      sliver: SliverList.builder(
+        itemCount: state.meals.length,
+        itemBuilder: (context, index) {
+          final Meal meal = state.meals[index];
+          // Read-only. Favouriting, logging and editing all belong to the
+          // Meals tab, where the library is yours to manage; a profile is
+          // somewhere you look at what somebody made. The card hides those
+          // controls rather than greying them out.
+          return MealCard(
+            key: ValueKey('profile-meal-${meal.id}'),
+            meal: meal,
+          );
+        },
+      ),
+    );
   }
 }
 

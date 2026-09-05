@@ -11,6 +11,7 @@ import '../core/post_link.dart';
 import '../cubit/auth/auth_cubit.dart';
 import '../cubit/author/author_cubit.dart';
 import '../cubit/profile/profile_cubit.dart';
+import '../data/meal_repository.dart';
 import '../data/moderation_repository.dart';
 import '../data/follow_repository.dart';
 import '../data/post_repository.dart';
@@ -31,6 +32,7 @@ import '../widgets/person_row.dart';
 import '../widgets/post_actions_sheet.dart';
 import '../widgets/post_card.dart';
 import '../widgets/report_sheet.dart';
+import 'author_profile_screen.dart';
 import 'group_screen.dart';
 import 'groups_screen.dart';
 import 'saved_posts_screen.dart';
@@ -77,6 +79,7 @@ class ProfileScreen extends StatelessWidget {
             followRepository: context.read<FollowRepository>(),
             postRepository: context.read<PostRepository>(),
             moderationRepository: context.read<ModerationRepository>(),
+            mealRepository: context.read<MealRepository>(),
             personId: profile.id,
           )..load(),
           child: const _ProfileView(),
@@ -168,7 +171,12 @@ class _ProfileViewState extends State<_ProfileView> {
                     physics: const AlwaysScrollableScrollPhysics(),
                     slivers: [
                       SliverToBoxAdapter(child: _Header(person: state.person!)),
-                      if (state.hasNoPosts)
+                      SliverToBoxAdapter(
+                        child: ProfileTabs(showsMeals: state.showsMeals),
+                      ),
+                      if (state.showsMeals)
+                        MealsSliver(state: state)
+                      else if (state.hasNoPosts)
                         SliverFillRemaining(
                           hasScrollBody: false,
                           child: _Message(

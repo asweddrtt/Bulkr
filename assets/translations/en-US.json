@@ -525,5 +525,10 @@
   "account_saved_posts": "Saved posts",
   "account_saved_posts_helper": "Everything you've bookmarked",
   "account_create_group": "Start a group",
-  "account_create_group_helper": "Name it, invite people, post in it"
+  "account_create_group_helper": "Name it, invite people, post in it",
+  "profile_tab_posts": "Posts",
+  "profile_tab_meals": "Meals",
+  "profile_no_meals": "No meals to show.",
+  "profile_no_meals_body": "They may not have shared any, or theirs may be private.",
+  "profile_no_meals_mine": "You haven't created any meals yet."
 }

@@ -169,6 +169,35 @@ class MealRepository {
     return meals;
   }
 
+  /// The meals [creatorId] has written, for their profile.
+  ///
+  /// Which of them come back is not decided here. `meals` has a SELECT policy
+  /// of `public.can_view(creator_id, visibility)`, so a private meal is
+  /// invisible to everyone but its author, a followers-only one needs the
+  /// follow, and a blocked author's are gone entirely. The query asks for all
+  /// of theirs and the database returns the ones this reader is allowed —
+  /// which is why there is no visibility filter in the Dart.
+  ///
+  /// Saved meals are deliberately absent, and cannot be added without a
+  /// decision: `saved_meals` is private to its owner, "no exceptions", per
+  /// `meals_policies.sql`. What somebody has bookmarked is a record of what
+  /// they are interested in, and making that public is a change to what the
+  /// app promises rather than a feature to add quietly.
+  Future<List<Meal>> fetchMealsBy(String creatorId) async {
+    final rows = await _client
+        .from('meals')
+        .select(_mealColumns)
+        .eq('creator_id', creatorId)
+        .order('created_at', ascending: false)
+        .limit(_libraryLimit);
+
+    final List<Meal> meals = rows
+        .map((row) => Meal.fromRow(row, currentUserId: _userId))
+        .toList();
+
+    return _withIngredientWeights(meals);
+  }
+
   /// Fills [Meal.totalGrams] for every meal that was built from ingredients.
   ///
   /// One query for the whole list. Meals with no ingredient rows keep a null

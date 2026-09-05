@@ -17,6 +17,9 @@ class AuthorState extends Equatable {
     this.hasMore = false,
     this.isLoadingMore = false,
     this.isFollowWriting = false,
+    this.meals = const [],
+    this.isLoadingMeals = false,
+    this.showsMeals = false,
     this.isBlocked = false,
     this.isBlockWriting = false,
     this.errorMessage,
@@ -52,6 +55,18 @@ class AuthorState extends Equatable {
   /// Read on load rather than inferred from an empty post list — someone with
   /// no posts and someone blocked look identical from the feed's side, and
   /// that is exactly the case that made blocking from a profile necessary.
+  /// Meals this person has written. Loaded when the Meals tab is first opened
+  /// rather than with the profile — most visits never look at it, and a
+  /// profile should not wait on a query nobody asked for.
+  final List<Meal> meals;
+
+  /// Null until the meals have been asked for, so "not loaded" and "loaded and
+  /// empty" are different states and only one of them shows a spinner.
+  final bool isLoadingMeals;
+
+  /// Which of the two lists the profile is showing.
+  final bool showsMeals;
+
   final bool isBlocked;
 
   /// A block or unblock is in flight.
@@ -75,6 +90,9 @@ class AuthorState extends Equatable {
     bool? hasMore,
     bool? isLoadingMore,
     bool? isFollowWriting,
+    List<Meal>? meals,
+    bool? isLoadingMeals,
+    bool? showsMeals,
     bool? isBlocked,
     bool? isBlockWriting,
     String? errorMessage,
@@ -91,6 +109,9 @@ class AuthorState extends Equatable {
       hasMore: hasMore ?? this.hasMore,
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
       isFollowWriting: isFollowWriting ?? this.isFollowWriting,
+      meals: meals ?? this.meals,
+      isLoadingMeals: isLoadingMeals ?? this.isLoadingMeals,
+      showsMeals: showsMeals ?? this.showsMeals,
       isBlocked: isBlocked ?? this.isBlocked,
       isBlockWriting: isBlockWriting ?? this.isBlockWriting,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
@@ -111,6 +132,9 @@ class AuthorState extends Equatable {
         hasMore,
         isLoadingMore,
         isFollowWriting,
+        meals,
+        isLoadingMeals,
+        showsMeals,
         isBlocked,
         isBlockWriting,
         errorMessage,
