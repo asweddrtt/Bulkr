@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/hydration.dart';
 import '../../data/meal_repository.dart';
 import '../../data/user_repository.dart';
 import '../../models/daily_log_entry.dart';
@@ -11,6 +12,7 @@ import '../../models/macros.dart';
 import '../../models/meal.dart';
 import '../../models/meal_slot.dart';
 import '../../models/user_profile.dart';
+import '../../models/water_entry.dart';
 
 part 'tracker_state.dart';
 
@@ -62,11 +64,27 @@ class TrackerCubit extends Cubit<TrackerState> {
 
       final List<DailyLogEntry> entries = await _meals.fetchDayLog(state.day);
 
+      // Water is secondary: a failure to read `water_logs` — most likely
+      // `tracker_water.sql` not having been run — must not take the day's food
+      // down with it. Same shape as ProfileCubit's weigh-in history.
+      List<WaterEntry> water;
+      String? waterError;
+      try {
+        water = await _users.fetchWaterDay(state.day);
+      } catch (error) {
+        water = const [];
+        waterError = _describe(error);
+        debugPrint('Bulkr: water unavailable — $waterError');
+      }
+
       if (isClosed) return;
       emit(state.copyWith(
         status: TrackerStatus.ready,
         profile: profile,
         entries: entries,
+        water: water,
+        waterErrorDetail: waterError,
+        clearWaterError: waterError == null,
         clearError: true,
       ));
     } catch (error) {
@@ -93,9 +111,44 @@ class TrackerCubit extends Cubit<TrackerState> {
     final DateTime today = _today();
     if (today == state.day) return;
 
-    emit(state.copyWith(day: today, entries: const []));
+    // Only when the tab is showing today. Someone who left it on last Tuesday
+    // and came back should still be on last Tuesday.
+    if (!state.isToday) return;
+
+    await showDay(today);
+  }
+
+  // --- Which day ----------------------------------------------------------
+
+  /// Shows [day], reloading the log and the water for it.
+  ///
+  /// Clears the entries first rather than leaving the previous day's on screen
+  /// while the new one loads. A silent reload is right for a refresh, where the
+  /// data is about to be replaced by the same day's; here it would show
+  /// Tuesday's food under Wednesday's heading for as long as the query takes.
+  Future<void> showDay(DateTime day) async {
+    final DateTime target = DateTime(day.year, day.month, day.day);
+    if (target == state.day) return;
+
+    // Never forwards of today. There is nothing to show, and a log for a day
+    // that has not happened is not a thing the app should let someone write.
+    if (target.isAfter(_today())) return;
+
+    emit(state.copyWith(
+      day: target,
+      entries: const [],
+      water: const [],
+      clearWaterError: true,
+    ));
     await load(silent: true);
   }
+
+  Future<void> previousDay() =>
+      showDay(state.day.subtract(const Duration(days: 1)));
+
+  /// Does nothing on today, which is what keeps the forward arrow from
+  /// walking into tomorrow.
+  Future<void> nextDay() => showDay(state.day.add(const Duration(days: 1)));
 
   // --- Writes -------------------------------------------------------------
 
@@ -138,6 +191,54 @@ class TrackerCubit extends Cubit<TrackerState> {
   /// Removes one entry from the day.
   Future<void> deleteEntry(DailyLogEntry entry) {
     return _write(() => _meals.deleteLogEntry(entry));
+  }
+
+  // --- Water --------------------------------------------------------------
+
+  /// Records a drink against the day being shown.
+  Future<void> addWater(int millilitres) {
+    if (millilitres <= 0) return Future<void>.value();
+    return _write(
+      () => _users.logWater(millilitres: millilitres, day: state.day),
+    );
+  }
+
+  /// Takes back the most recent drink.
+  ///
+  /// The undo for a mis-tap, and the reason `water_logs` holds rows rather
+  /// than a running total — there is an actual thing to delete.
+  Future<void> undoLastWater() {
+    final WaterEntry? last = state.lastWater;
+    if (last == null) return Future<void>.value();
+    return _write(() => _users.deleteWaterEntry(last));
+  }
+
+  /// Sets the daily water goal by hand, or clears it back to the derived one.
+  ///
+  /// Null means derive. Clearing is a real choice a user can make, not the
+  /// absence of one — see [TrackerState.waterTargetMl].
+  Future<void> setWaterTarget(int? millilitres) {
+    if (millilitres != null &&
+        (millilitres <= 0 || millilitres > Hydration.maxTargetMl)) {
+      return Future<void>.value();
+    }
+    return _write(() => _users.updateWaterTarget(millilitres: millilitres));
+  }
+
+  // --- Weight -------------------------------------------------------------
+
+  /// Records today's weigh-in.
+  ///
+  /// Today's only, whichever day the tracker is showing — [UserRepository]
+  /// writes `logged_at` from the clock and supersedes the same local day, so
+  /// there is no honest way to backdate one through it. The screen only offers
+  /// the field on today for the same reason.
+  ///
+  /// Reloading afterwards is what moves the water goal: the target is derived
+  /// from `current_weight_kg`, which this write moves.
+  Future<void> logWeight(double weightKg) {
+    if (weightKg <= 0 || !state.isToday) return Future<void>.value();
+    return _write(() => _users.logWeight(weightKg: weightKg));
   }
 
   /// One write path: flag saving, run it, re-read the day on success, and

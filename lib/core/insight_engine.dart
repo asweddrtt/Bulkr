@@ -5,6 +5,7 @@ import '../models/insight.dart';
 import '../models/plan_breakdown.dart';
 import '../models/user_profile.dart';
 import 'calorie_engine.dart';
+import 'hydration.dart';
 import 'progress_stats.dart';
 
 /// Turns the user's own numbers into the advice shown on the profile.
@@ -25,16 +26,14 @@ class InsightEngine {
   static const double behindPaceFactor = 0.5;
 
   /// Millilitres of water per kg of bodyweight — a general daily guideline.
-  static const double waterMlPerKg = 35;
-
-  static const double _mlPerFluidOunce = 29.5735;
+  ///
+  /// Kept as a forwarding constant rather than a literal: the tracker measures
+  /// a real day against this same figure, and the advice card and the water
+  /// ring disagreeing by 100 ml would be a bug nobody could explain.
+  static const double waterMlPerKg = Hydration.mlPerKg;
 
   /// Meals the protein target is split across in the advice copy.
   static const int proteinMeals = 4;
-
-  /// Glass sizes people actually picture: 250 ml, or 8 fl oz.
-  static const double _glassMl = 250;
-  static const double _glassFlOz = 8;
 
   /// Builds the advice list, most urgent first, capped at [limit].
   ///
@@ -237,7 +236,7 @@ class InsightEngine {
       // Stated in whatever the user reads the rest of the screen in.
       final double millilitres = weight * waterMlPerKg;
       final bool metric = profile.units.isMetric;
-      final double fluidOunces = millilitres / _mlPerFluidOunce;
+      final double fluidOunces = millilitres / Hydration.mlPerFluidOunce;
 
       habits.add(
         Insight(
@@ -248,11 +247,11 @@ class InsightEngine {
           args: metric
               ? {
                   'litres': (millilitres / 1000).toStringAsFixed(1),
-                  'glasses': '${(millilitres / _glassMl).round()}',
+                  'glasses': '${Hydration.glassesFor(millilitres)}',
                 }
               : {
                   'ounces': fluidOunces.round().toString(),
-                  'glasses': '${(fluidOunces / _glassFlOz).round()}',
+                  'glasses': '${(fluidOunces / Hydration.glassFlOz).round()}',
                 },
         ),
       );

@@ -20,15 +20,17 @@ class TrackerState extends Equatable {
     this.status = TrackerStatus.initial,
     this.profile,
     this.entries = const [],
+    this.water = const [],
     this.errorMessage,
     this.isSaving = false,
     this.actionErrorKey,
     this.actionErrorDetail,
+    this.waterErrorDetail,
   });
 
-  /// The local day being shown, truncated to midnight. Always today in this
-  /// slice; the field exists because every read and write is already scoped by
-  /// it, so browsing another day is a change of state rather than of shape.
+  /// The local day being shown, truncated to midnight. Every read and write is
+  /// scoped by it, so the date strip changes this and reloads rather than
+  /// there being a separate notion of "the day being browsed".
   final DateTime day;
 
   final TrackerStatus status;
@@ -38,6 +40,10 @@ class TrackerState extends Equatable {
   final UserProfile? profile;
 
   final List<DailyLogEntry> entries;
+
+  /// Every drink recorded on [day].
+  final List<WaterEntry> water;
+
   final String? errorMessage;
 
   /// A write is in flight. Kept out of [status] so logging something never
@@ -52,7 +58,21 @@ class TrackerState extends Equatable {
   /// "try again".
   final String? actionErrorDetail;
 
+  /// Why the day's water could not be read, if it could not. The food still
+  /// loads without it — but an empty glass and a table that does not exist are
+  /// not the same thing and must not look the same.
+  final String? waterErrorDetail;
+
   bool get isLoading => status == TrackerStatus.loading;
+
+  /// Whether [day] is the day it is now.
+  ///
+  /// Decides more than a heading: weighing in is today-only, and the forward
+  /// arrow stops here.
+  bool get isToday {
+    final DateTime now = DateTime.now();
+    return day.year == now.year && day.month == now.month && day.day == now.day;
+  }
 
   /// Nothing logged yet on this day.
   bool get isEmpty => entries.isEmpty;
@@ -80,6 +100,55 @@ class TrackerState extends Equatable {
 
   Macros get unsortedTotal =>
       Macros.sum(unsortedEntries.map((e) => e.macros));
+
+  // --- Water --------------------------------------------------------------
+
+  /// Millilitres drunk on this day, summed from the rows.
+  int get waterMl =>
+      water.fold(0, (running, entry) => running + entry.millilitres);
+
+  /// The most recent drink, which is the one undo takes back.
+  WaterEntry? get lastWater => water.isEmpty ? null : water.last;
+
+  /// The daily water goal: what the user set, or 35 ml per kg of bodyweight.
+  ///
+  /// The stored value wins when there is one, and null there means "derive"
+  /// rather than "none" — so someone who never touched it gets a goal that
+  /// moves with their weight, and someone who set one keeps it until they
+  /// clear it. Null overall means neither is available: no override, and no
+  /// usable weight to derive from.
+  int? get waterTargetMl {
+    final int? stored = profile?.waterTargetMl;
+    if (stored != null && stored > 0) return stored;
+    return Hydration.targetMlFor(profile?.currentWeightKg);
+  }
+
+  /// True when the goal is one the user typed rather than one derived from
+  /// their weight, so the UI can offer to hand it back.
+  bool get hasCustomWaterTarget => (profile?.waterTargetMl ?? 0) > 0;
+
+  bool get hasWaterTarget => waterTargetMl != null;
+
+  /// Progress towards the water goal, clamped for the meter. Zero when there
+  /// is no goal, so an unknown target renders empty rather than full.
+  double get waterProgress {
+    final int? target = waterTargetMl;
+    if (target == null || target <= 0) return 0;
+    return (waterMl / target).clamp(0.0, 1.0);
+  }
+
+  /// Whole glasses the goal comes to, for the row of cups.
+  ///
+  /// Bounded so a very large goal cannot draw hundreds of them. Past the
+  /// bound the cups stop being a count and become a progress bar, which is
+  /// what the meter underneath is for anyway.
+  int get waterGlasses {
+    final int? target = waterTargetMl;
+    if (target == null) return 0;
+    return (target / Hydration.glassMl).round().clamp(1, maxGlassesDrawn);
+  }
+
+  static const int maxGlassesDrawn = 16;
 
   // --- What was aimed at --------------------------------------------------
 
@@ -140,18 +209,22 @@ class TrackerState extends Equatable {
     TrackerStatus? status,
     UserProfile? profile,
     List<DailyLogEntry>? entries,
+    List<WaterEntry>? water,
     String? errorMessage,
     bool clearError = false,
     bool? isSaving,
     String? actionErrorKey,
     String? actionErrorDetail,
     bool clearActionError = false,
+    String? waterErrorDetail,
+    bool clearWaterError = false,
   }) {
     return TrackerState(
       day: day ?? this.day,
       status: status ?? this.status,
       profile: profile ?? this.profile,
       entries: entries ?? this.entries,
+      water: water ?? this.water,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
       isSaving: isSaving ?? this.isSaving,
       actionErrorKey:
@@ -159,6 +232,9 @@ class TrackerState extends Equatable {
       actionErrorDetail: clearActionError
           ? null
           : (actionErrorDetail ?? this.actionErrorDetail),
+      waterErrorDetail: clearWaterError
+          ? null
+          : (waterErrorDetail ?? this.waterErrorDetail),
     );
   }
 
@@ -168,9 +244,11 @@ class TrackerState extends Equatable {
         status,
         profile,
         entries,
+        water,
         errorMessage,
         isSaving,
         actionErrorKey,
         actionErrorDetail,
+        waterErrorDetail,
       ];
 }

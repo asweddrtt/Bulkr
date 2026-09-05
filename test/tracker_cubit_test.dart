@@ -8,6 +8,7 @@ import 'package:bulkr/models/gender.dart';
 import 'package:bulkr/models/meal_slot.dart';
 import 'package:bulkr/models/unit_system.dart';
 import 'package:bulkr/models/user_profile.dart';
+import 'package:bulkr/models/water_entry.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -48,10 +49,61 @@ class _FakeMealRepository extends MealRepository {
 class _FakeUserRepository extends UserRepository {
   _FakeUserRepository({this.profile}) : super(client: _client());
 
-  final UserProfile? profile;
+  UserProfile? profile;
+
+  /// Starts empty and grows through [logWater], the way the real table does.
+  List<WaterEntry> water = const [];
+
+  bool throwOnWaterRead = false;
+  final List<int> logged = [];
+  final List<String> deletedWater = [];
+
+  /// Records the last call, including the null that means "go back to
+  /// deriving it from bodyweight" — which is why this is a separate flag
+  /// rather than checking for null.
+  bool targetWasSet = false;
+  int? lastTarget;
+
+  double? loggedWeightKg;
 
   @override
   Future<UserProfile?> fetchProfile() async => profile;
+
+  @override
+  Future<List<WaterEntry>> fetchWaterDay(DateTime day) async {
+    if (throwOnWaterRead) throw Exception('no such table');
+    return water;
+  }
+
+  @override
+  Future<void> logWater({required int millilitres, DateTime? day}) async {
+    logged.add(millilitres);
+    water = [
+      ...water,
+      WaterEntry(
+        id: 'w${water.length + 1}',
+        millilitres: millilitres,
+        loggedAt: DateTime.now(),
+      ),
+    ];
+  }
+
+  @override
+  Future<void> deleteWaterEntry(WaterEntry entry) async {
+    deletedWater.add(entry.id);
+    water = water.where((e) => e.id != entry.id).toList();
+  }
+
+  @override
+  Future<void> updateWaterTarget({int? millilitres}) async {
+    targetWasSet = true;
+    lastTarget = millilitres;
+  }
+
+  @override
+  Future<void> logWeight({required double weightKg}) async {
+    loggedWeightKg = weightKg;
+  }
 }
 
 UserProfile _profile({
@@ -59,6 +111,8 @@ UserProfile _profile({
   int protein = 180,
   int carbs = 350,
   int fat = 90,
+  double weightKg = 88.5,
+  int? waterTargetMl,
 }) =>
     UserProfile(
       id: 'u1',
@@ -67,7 +121,7 @@ UserProfile _profile({
       gender: Gender.male,
       dateOfBirth: DateTime(1996, 3, 2),
       heightCm: 180,
-      currentWeightKg: 88.5,
+      currentWeightKg: weightKg,
       targetWeightKg: 95,
       activityLevel: ActivityLevel.moderatelyActive,
       units: UnitSystem.metric,
@@ -76,6 +130,7 @@ UserProfile _profile({
       carbsTargetG: carbs,
       fatTargetG: fat,
       onboardingCompleted: true,
+      waterTargetMl: waterTargetMl,
     );
 
 DailyLogEntry _entry({
@@ -261,5 +316,232 @@ void main() {
     expect(cubit.state.actionErrorKey, isNull);
 
     await cubit.close();
+  });
+
+  group('water', () {
+    test('derives the goal from bodyweight when none is stored', () async {
+      final users = _FakeUserRepository(profile: _profile(weightKg: 80));
+      final cubit = _cubit(_FakeMealRepository(), users);
+
+      await cubit.load();
+
+      // 80 kg * 35 ml/kg — the same figure the insight card has always quoted.
+      expect(cubit.state.waterTargetMl, 2800);
+      expect(cubit.state.hasCustomWaterTarget, isFalse);
+
+      await cubit.close();
+    });
+
+    test('a stored goal wins over the derived one', () async {
+      final users = _FakeUserRepository(
+        profile: _profile(weightKg: 80, waterTargetMl: 4000),
+      );
+      final cubit = _cubit(_FakeMealRepository(), users);
+
+      await cubit.load();
+
+      expect(cubit.state.waterTargetMl, 4000);
+      expect(cubit.state.hasCustomWaterTarget, isTrue);
+
+      await cubit.close();
+    });
+
+    test('no usable weight means no goal rather than a goal of zero', () async {
+      final users = _FakeUserRepository(profile: _profile(weightKg: 0));
+      final cubit = _cubit(_FakeMealRepository(), users);
+
+      await cubit.load();
+
+      expect(cubit.state.waterTargetMl, isNull);
+      expect(cubit.state.hasWaterTarget, isFalse);
+      expect(cubit.state.waterProgress, 0);
+
+      await cubit.close();
+    });
+
+    test('adding and undoing a drink moves the total', () async {
+      final users = _FakeUserRepository(profile: _profile(weightKg: 80));
+      final cubit = _cubit(_FakeMealRepository(), users);
+
+      await cubit.load();
+      await cubit.addWater(250);
+      await cubit.addWater(500);
+
+      expect(users.logged, [250, 500]);
+      expect(cubit.state.waterMl, 750);
+      expect(cubit.state.waterProgress, closeTo(750 / 2800, 0.0001));
+
+      // Undo takes the most recent one, not the first.
+      await cubit.undoLastWater();
+      expect(users.deletedWater, ['w2']);
+      expect(cubit.state.waterMl, 250);
+
+      await cubit.close();
+    });
+
+    test('undo with nothing logged does nothing', () async {
+      final users = _FakeUserRepository(profile: _profile());
+      final cubit = _cubit(_FakeMealRepository(), users);
+
+      await cubit.load();
+      await cubit.undoLastWater();
+
+      expect(users.deletedWater, isEmpty);
+      expect(cubit.state.actionErrorKey, isNull);
+
+      await cubit.close();
+    });
+
+    test('clearing the goal is a real write, not a no-op', () async {
+      // Null means "derive from bodyweight", which is a choice someone makes.
+      // It must reach the repository rather than being filtered out as absent.
+      final users = _FakeUserRepository(
+        profile: _profile(waterTargetMl: 4000),
+      );
+      final cubit = _cubit(_FakeMealRepository(), users);
+
+      await cubit.load();
+      await cubit.setWaterTarget(null);
+
+      expect(users.targetWasSet, isTrue);
+      expect(users.lastTarget, isNull);
+
+      await cubit.close();
+    });
+
+    test('refuses a goal outside what the column will store', () async {
+      final users = _FakeUserRepository(profile: _profile());
+      final cubit = _cubit(_FakeMealRepository(), users);
+
+      await cubit.load();
+      await cubit.setWaterTarget(0);
+      await cubit.setWaterTarget(30000);
+
+      expect(users.targetWasSet, isFalse);
+
+      await cubit.close();
+    });
+
+    test('water failing does not take the day down with it', () async {
+      // What "tracker_water.sql has not been run" looks like: the food still
+      // loads, and the card says why rather than reading zero forever.
+      final meals = _FakeMealRepository(entries: [
+        _entry(id: 'a', slot: 'lunch', calories: 400),
+      ]);
+      final users = _FakeUserRepository(profile: _profile())
+        ..throwOnWaterRead = true;
+      final cubit = _cubit(meals, users);
+
+      await cubit.load();
+
+      expect(cubit.state.status, TrackerStatus.ready);
+      expect(cubit.state.consumed.calories, 400);
+      expect(cubit.state.waterMl, 0);
+      expect(cubit.state.waterErrorDetail, isNotNull);
+
+      await cubit.close();
+    });
+  });
+
+  group('browsing days', () {
+    test('walks back and reloads', () async {
+      final meals = _FakeMealRepository();
+      final cubit = _cubit(meals, _FakeUserRepository(profile: _profile()));
+
+      await cubit.load();
+      final DateTime today = cubit.state.day;
+
+      await cubit.previousDay();
+
+      expect(cubit.state.day, today.subtract(const Duration(days: 1)));
+      expect(cubit.state.isToday, isFalse);
+
+      await cubit.close();
+    });
+
+    test('never walks forward past today', () async {
+      final cubit = _cubit(
+        _FakeMealRepository(),
+        _FakeUserRepository(profile: _profile()),
+      );
+
+      await cubit.load();
+      final DateTime today = cubit.state.day;
+
+      await cubit.nextDay();
+      expect(cubit.state.day, today);
+
+      await cubit.showDay(today.add(const Duration(days: 7)));
+      expect(cubit.state.day, today);
+
+      await cubit.close();
+    });
+
+    test('walking back then forward lands on today again', () async {
+      final cubit = _cubit(
+        _FakeMealRepository(),
+        _FakeUserRepository(profile: _profile()),
+      );
+
+      await cubit.load();
+      final DateTime today = cubit.state.day;
+
+      await cubit.previousDay();
+      await cubit.previousDay();
+      await cubit.nextDay();
+      await cubit.nextDay();
+
+      expect(cubit.state.day, today);
+      expect(cubit.state.isToday, isTrue);
+
+      await cubit.close();
+    });
+
+    test('the overnight refresh leaves a browsed day alone', () async {
+      // refreshIfDayChanged fires on every tab switch. Someone looking at last
+      // Tuesday should still be looking at it.
+      final cubit = _cubit(
+        _FakeMealRepository(),
+        _FakeUserRepository(profile: _profile()),
+      );
+
+      await cubit.load();
+      await cubit.previousDay();
+      final DateTime browsed = cubit.state.day;
+
+      await cubit.refreshIfDayChanged();
+
+      expect(cubit.state.day, browsed);
+
+      await cubit.close();
+    });
+  });
+
+  group('weight', () {
+    test('records today\'s weigh-in', () async {
+      final users = _FakeUserRepository(profile: _profile());
+      final cubit = _cubit(_FakeMealRepository(), users);
+
+      await cubit.load();
+      await cubit.logWeight(89.2);
+
+      expect(users.loggedWeightKg, 89.2);
+
+      await cubit.close();
+    });
+
+    test('refuses on a past day, where the write could not honour it',
+        () async {
+      final users = _FakeUserRepository(profile: _profile());
+      final cubit = _cubit(_FakeMealRepository(), users);
+
+      await cubit.load();
+      await cubit.previousDay();
+      await cubit.logWeight(89.2);
+
+      expect(users.loggedWeightKg, isNull);
+
+      await cubit.close();
+    });
   });
 }

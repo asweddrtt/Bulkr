@@ -28,6 +28,7 @@ class UserProfile extends Equatable {
     required this.carbsTargetG,
     required this.fatTargetG,
     required this.onboardingCompleted,
+    this.waterTargetMl,
   });
 
   final String id;
@@ -46,6 +47,15 @@ class UserProfile extends Equatable {
   final int carbsTargetG;
   final int fatTargetG;
   final bool onboardingCompleted;
+
+  /// A water goal the user set by hand, or null to derive one from bodyweight.
+  ///
+  /// Null is the normal state, not a missing value: with nothing stored the
+  /// goal follows the weight and keeps moving as they bulk. Which is why this
+  /// is `int?` rather than defaulting to 0 the way the calorie targets do —
+  /// there, 0 means "onboarding never wrote it"; here it would be
+  /// indistinguishable from someone choosing to drink nothing.
+  final int? waterTargetMl;
 
   /// What to greet the user with. Falls back through display name, then
   /// handle, so there's always something.
@@ -79,6 +89,7 @@ class UserProfile extends Equatable {
       carbsTargetG: _parseInt(map['carbs_target_g']) ?? 0,
       fatTargetG: _parseInt(map['fat_target_g']) ?? 0,
       onboardingCompleted: map['onboarding_completed'] == true,
+      waterTargetMl: _parseInt(map['water_target_ml']),
     );
   }
 
@@ -151,5 +162,6 @@ class UserProfile extends Equatable {
         carbsTargetG,
         fatTargetG,
         onboardingCompleted,
+        waterTargetMl,
       ];
 }

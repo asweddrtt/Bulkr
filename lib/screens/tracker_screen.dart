@@ -5,6 +5,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../cubit/meals/meals_cubit.dart';
+import '../cubit/profile/profile_cubit.dart';
 import '../cubit/tracker/tracker_cubit.dart';
 import '../models/daily_log_entry.dart';
 import '../models/macros.dart';
@@ -18,6 +19,7 @@ import '../widgets/calorie_ring.dart';
 import '../widgets/food_search_sheet.dart';
 import '../widgets/sheet_action_row.dart';
 import '../widgets/slot_picker_sheet.dart';
+import '../widgets/water_card.dart';
 
 const Color _cardColor = Color(0xFF1A1A1A);
 const Color _textMuted = Color(0xFF9CA3AF);
@@ -108,11 +110,21 @@ class _TrackerView extends StatelessWidget {
         padding: EdgeInsets.fromLTRB(16.w, 8.h, 16.w, 32.h),
         children: staggered(
           [
-            _DayHeading(day: state.day),
+            _DayStrip(state: state),
             SizedBox(height: 12.h),
             _CalorieHeadline(state: state),
             SizedBox(height: 18.h),
             _MacroTotals(state: state),
+            SizedBox(height: 18.h),
+            WaterCard(state: state),
+            // Today only. UserRepository writes the weigh-in from the clock and
+            // supersedes the same local day, so there is no honest way to
+            // backdate one — offering the field on a past day would promise
+            // something the write cannot do.
+            if (state.isToday) ...[
+              SizedBox(height: 14.h),
+              _WeightRow(state: state),
+            ],
             SizedBox(height: 22.h),
             for (final MealSlot slot in MealSlot.values) ...[
               _SlotSection(
@@ -140,35 +152,152 @@ class _TrackerView extends StatelessWidget {
   }
 }
 
-class _DayHeading extends StatelessWidget {
-  const _DayHeading({required this.day});
+/// Which day is being shown, and the arrows that move between them.
+///
+/// Back goes anywhere; forward stops at today. Both reload — every read is
+/// already scoped by the day, so browsing is a change of one field.
+class _DayStrip extends StatelessWidget {
+  const _DayStrip({required this.state});
 
-  final DateTime day;
+  final TrackerState state;
 
   @override
   Widget build(BuildContext context) {
-    final DateTime now = DateTime.now();
-    final bool isToday = day.year == now.year &&
-        day.month == now.month &&
-        day.day == now.day;
+    final TrackerCubit cubit = context.read<TrackerCubit>();
+    final bool isToday = state.isToday;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Row(
       children: [
-        Text(
-          (isToday ? 'tracker_title'.tr() : DateFormat.MMMMd().format(day))
-              .toUpperCase(),
-          style: GoogleFonts.anton(
-            fontSize: 26.sp,
-            color: Colors.white,
-            letterSpacing: 1,
+        _Arrow(icon: Icons.chevron_left, onTap: cubit.previousDay),
+        Expanded(
+          child: Column(
+            children: [
+              Text(
+                (isToday ? 'tracker_title'.tr() : DateFormat.MMMd().format(state.day))
+                    .toUpperCase(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.anton(
+                  fontSize: 24.sp,
+                  color: Colors.white,
+                  letterSpacing: 1,
+                ),
+              ),
+              Text(
+                DateFormat.yMMMEd().format(state.day),
+                style: GoogleFonts.inter(fontSize: 10.sp, color: _textMuted),
+              ),
+            ],
           ),
         ),
-        Text(
-          DateFormat.yMMMEd().format(day),
-          style: GoogleFonts.inter(fontSize: 11.sp, color: _textMuted),
+        // Dimmed rather than removed on today, so the strip does not reflow
+        // every time you walk back to it.
+        _Arrow(
+          icon: Icons.chevron_right,
+          onTap: cubit.nextDay,
+          enabled: !isToday,
         ),
+        // Only worth offering when it would do something.
+        if (!isToday)
+          PressScale(
+            child: GestureDetector(
+              onTap: () => cubit.showDay(DateTime.now()),
+              behavior: HitTestBehavior.opaque,
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 8.h),
+                child: Text(
+                  'tracker_today'.tr().toUpperCase(),
+                  style: GoogleFonts.inter(
+                    fontSize: 10.sp,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primaryNeon,
+                    letterSpacing: 1,
+                  ),
+                ),
+              ),
+            ),
+          ),
       ],
+    );
+  }
+}
+
+class _Arrow extends StatelessWidget {
+  const _Arrow({required this.icon, required this.onTap, this.enabled = true});
+
+  final IconData icon;
+  final VoidCallback onTap;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      onPressed: enabled ? onTap : null,
+      icon: Icon(icon, size: 26.sp),
+      color: Colors.white,
+      disabledColor: AppColors.darkBorder,
+    );
+  }
+}
+
+/// Today's weigh-in, from the same field the dashboard writes.
+///
+/// Here as well as on the dashboard because the tracker is where someone
+/// already is at the end of a day, and walking to another tab to record one
+/// number is how weigh-ins get skipped. It writes through
+/// [UserRepository.logWeight], so a second entry on the same day replaces the
+/// first rather than stacking a point on the chart.
+class _WeightRow extends StatelessWidget {
+  const _WeightRow({required this.state});
+
+  final TrackerState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final double current = state.profile?.currentWeightKg ?? 0;
+
+    return PressScale(
+      child: GestureDetector(
+        onTap: () => _logWeight(context, current),
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          decoration: BoxDecoration(
+            color: _cardColor,
+            borderRadius: BorderRadius.circular(10.r),
+            border: Border.all(color: AppColors.darkBorder),
+          ),
+          padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 14.h),
+          child: Row(
+            children: [
+              Icon(Icons.monitor_weight_outlined,
+                  size: 15.sp, color: AppColors.primaryNeon),
+              SizedBox(width: 8.w),
+              Expanded(
+                child: Text(
+                  'tracker_weigh_in'.tr().toUpperCase(),
+                  style: GoogleFonts.anton(
+                    fontSize: 14.sp,
+                    color: Colors.white,
+                    letterSpacing: 1,
+                  ),
+                ),
+              ),
+              Text(
+                current > 0
+                    ? '${current.toStringAsFixed(1)}${'kg_unit'.tr()}'
+                    : 'tracker_weigh_in_none'.tr(),
+                style: GoogleFonts.inter(
+                  fontSize: 12.sp,
+                  fontWeight: FontWeight.w600,
+                  color: current > 0 ? Colors.white : _textMuted,
+                ),
+              ),
+              SizedBox(width: 4.w),
+              Icon(Icons.chevron_right, size: 18.sp, color: _textMuted),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -798,6 +927,99 @@ Future<void> _openEntryActions(BuildContext context, DailyLogEntry entry) async 
           ],
         ),
       ),
+    ),
+  );
+}
+
+/// Records today's weight, and tells the dashboard about it.
+///
+/// [ProfileCubit] holds its own copy of the `users` row and drives the whole
+/// dashboard — the chart, the headline weight, the percentage to target — so
+/// writing a weigh-in from here without refreshing it would leave two screens
+/// disagreeing about what the user weighs until the app restarts.
+///
+/// The tracker reloads too, and not only for the number: the water goal is
+/// derived from `current_weight_kg`, so a weigh-in moves it.
+Future<void> _logWeight(BuildContext context, double current) async {
+  final TrackerCubit tracker = context.read<TrackerCubit>();
+  final ProfileCubit profile = context.read<ProfileCubit>();
+
+  final double? weight = await _askWeight(context, current);
+  if (weight == null) return;
+
+  await tracker.logWeight(weight);
+  await profile.refresh();
+}
+
+/// A number field for a weigh-in.
+///
+/// Always kilograms, unlike the dashboard's wheel picker, which respects the
+/// user's unit setting. That is a gap worth naming rather than hiding: this is
+/// a shortcut for someone who already knows their number, and converting it
+/// silently would be worse than the units being explicit on the field.
+Future<double?> _askWeight(BuildContext context, double current) {
+  final TextEditingController controller = TextEditingController(
+    text: current > 0 ? current.toStringAsFixed(1) : '',
+  );
+
+  return showDialog<double>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      backgroundColor: const Color(0xFF1A1A1A),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12.r),
+        side: const BorderSide(color: AppColors.darkBorder),
+      ),
+      title: Text(
+        'tracker_weigh_in'.tr().toUpperCase(),
+        style: GoogleFonts.anton(
+          color: Colors.white,
+          fontSize: 15.sp,
+          letterSpacing: 1,
+        ),
+      ),
+      content: TextField(
+        controller: controller,
+        autofocus: true,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        style: GoogleFonts.anton(color: Colors.white, fontSize: 22.sp),
+        decoration: InputDecoration(
+          suffixText: 'kg_unit'.tr(),
+          suffixStyle: GoogleFonts.inter(color: _textMuted, fontSize: 12.sp),
+          enabledBorder: const UnderlineInputBorder(
+            borderSide: BorderSide(color: AppColors.darkBorder),
+          ),
+          focusedBorder: const UnderlineInputBorder(
+            borderSide: BorderSide(color: AppColors.primaryNeon),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(),
+          child: Text(
+            'cancel'.tr().toUpperCase(),
+            style: GoogleFonts.inter(color: _textMuted, fontSize: 12.sp),
+          ),
+        ),
+        TextButton(
+          onPressed: () {
+            final double? kg = double.tryParse(controller.text.trim());
+            // An upper bound as well as a lower one: a mistyped 800 would
+            // move the calorie plan and the water goal with it.
+            Navigator.of(dialogContext)
+                .pop(kg != null && kg > 0 && kg < 500 ? kg : null);
+          },
+          child: Text(
+            'save'.tr().toUpperCase(),
+            style: GoogleFonts.inter(
+              color: AppColors.primaryNeon,
+              fontSize: 12.sp,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+      ],
     ),
   );
 }

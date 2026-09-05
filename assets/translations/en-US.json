@@ -462,5 +462,18 @@
   "food_scan_unknown": "Nothing known for that barcode. Try searching by name.",
   "food_scan_tooltip": "Scan a barcode",
   "cancel": "Cancel",
-  "save": "Save"
+  "save": "Save",
+  "tracker_today": "Today",
+  "tracker_weigh_in": "Weigh in",
+  "tracker_weigh_in_none": "Not recorded",
+  "water_title": "Water",
+  "water_progress": "{drunk} / {target} ml",
+  "water_today": "{drunk} ml",
+  "water_set_goal": "Set a goal",
+  "water_add": "+{ml} ml",
+  "water_goal_title": "Daily water goal",
+  "water_goal_derived": "Left alone, your goal is {perKg} ml per kg of bodyweight and moves as you bulk.",
+  "water_goal_auto": "Use my weight",
+  "water_unavailable": "Water isn't set up yet. Run tracker_water.sql and pull to refresh.",
+  "ml_unit": "ml"
 }

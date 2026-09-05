@@ -6,6 +6,7 @@ import '../models/gender.dart';
 import '../models/nutrition_plan.dart';
 import '../models/unit_system.dart';
 import '../models/user_profile.dart';
+import '../models/water_entry.dart';
 import '../models/weight_entry.dart';
 import 'username_generator.dart';
 
@@ -174,6 +175,79 @@ class UserRepository {
 
     await _client.from('users').update({
       'target_weight_kg': targetWeightKg,
+    }).eq('id', userId);
+  }
+
+  // --- Water --------------------------------------------------------------
+
+  /// Every drink recorded on [day], in the order they were drunk.
+  ///
+  /// The whole day rather than a `sum(ml)`, because the tracker needs both the
+  /// total and the ability to take the last one back — and one query that
+  /// answers both beats two that each answer half.
+  Future<List<WaterEntry>> fetchWaterDay(DateTime day) async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) return const <WaterEntry>[];
+
+    final rows = await _client
+        .from('water_logs')
+        .select()
+        .eq('user_id', userId)
+        .eq('log_date', _asDate(day))
+        .order('logged_at', ascending: true);
+
+    return rows.map(WaterEntry.fromRow).toList();
+  }
+
+  /// Records a drink of [millilitres] against [day].
+  ///
+  /// `log_date` is sent as the local day rather than left to a server default,
+  /// for the reason `tracker_water.sql` gives: a default would put the day
+  /// boundary at UTC midnight, which is the wrong midnight for everyone not on
+  /// it. `logged_at` is sent for the same reason — it is the clock the rows are
+  /// ordered by, and it should be the same clock the date came from.
+  Future<void> logWater({required int millilitres, DateTime? day}) async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null || millilitres <= 0) return;
+
+    final DateTime when = day ?? DateTime.now();
+
+    await _client.from('water_logs').insert({
+      'user_id': userId,
+      'log_date': _asDate(when),
+      'ml': millilitres,
+      'logged_at': DateTime.now().toUtc().toIso8601String(),
+    });
+  }
+
+  /// Removes one recorded drink.
+  ///
+  /// Scoped to the signed-in user as well as the id. Redundant against the RLS
+  /// policy, and worth it: a stale id deletes nothing rather than erroring.
+  Future<void> deleteWaterEntry(WaterEntry entry) async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) return;
+
+    await _client
+        .from('water_logs')
+        .delete()
+        .eq('id', entry.id)
+        .eq('user_id', userId);
+  }
+
+  /// Sets or clears the daily water goal.
+  ///
+  /// Null clears it, and clearing is not the same as setting zero: with no
+  /// stored value the goal goes back to being derived from bodyweight, which
+  /// is the normal state and the one that keeps moving as the user bulks. That
+  /// is the whole reason the column is nullable — see section 3 of
+  /// `tracker_water.sql`.
+  Future<void> updateWaterTarget({int? millilitres}) async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) return;
+
+    await _client.from('users').update({
+      'water_target_ml': millilitres,
     }).eq('id', userId);
   }
 
@@ -407,7 +481,8 @@ class UserRepository {
     }
   }
 
-  /// `date_of_birth` is a DATE column — send it without a time component.
+  /// A DATE column — `date_of_birth`, `water_logs.log_date` — takes the day
+  /// without a time component, and for a log that day is the user's local one.
   static String _asDate(DateTime value) =>
       '${value.year.toString().padLeft(4, '0')}-'
       '${value.month.toString().padLeft(2, '0')}-'
