@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../cubit/conversations/conversations_cubit.dart';
 import '../cubit/feed/feed_cubit.dart';
+import '../cubit/notifications/notifications_cubit.dart';
 import '../cubit/meals/meals_cubit.dart';
 import '../cubit/profile/profile_cubit.dart';
 import '../cubit/tracker/tracker_cubit.dart';
@@ -72,6 +73,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     if (state != AppLifecycleState.resumed) return;
 
     context.read<ConversationsCubit>().refresh();
+    context.read<NotificationsCubit>().refreshBadge();
     context.read<TrackerCubit>().refreshIfDayChanged();
   }
 

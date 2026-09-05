@@ -576,5 +576,17 @@
   "repeat_day_all": "The whole day",
   "repeat_day_all_helper": "Every meal and food logged that day",
   "repeat_day_done": "Copied {count} entries.",
-  "repeat_day_nothing": "Nothing was logged that day."
+  "repeat_day_nothing": "Nothing was logged that day.",
+  "notifications_title": "Activity",
+  "notifications_empty": "Nothing yet. Follows, likes and comments show up here.",
+  "notifications_failed": "Couldn't load your activity.",
+  "notifications_clear": "Clear",
+  "notifications_clear_title": "Clear all activity?",
+  "notifications_clear_body": "This only clears the list. The follows, likes and comments themselves stay where they are.",
+  "notifications_clear_failed": "Couldn't clear that. Try again.",
+  "notification_someone": "Someone",
+  "notification_follow": "{name} followed you",
+  "notification_like": "{name} liked your post",
+  "notification_comment": "{name} commented on your post",
+  "notification_reply": "{name} replied to you"
 }

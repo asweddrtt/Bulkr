@@ -9,6 +9,7 @@ import 'core/config/supabase_config.dart';
 import 'cubit/auth/auth_cubit.dart';
 import 'cubit/conversations/conversations_cubit.dart';
 import 'cubit/feed/feed_cubit.dart';
+import 'cubit/notifications/notifications_cubit.dart';
 import 'cubit/meals/meals_cubit.dart';
 import 'cubit/onboarding/onboarding_cubit.dart';
 import 'cubit/tracker/tracker_cubit.dart';
@@ -18,6 +19,7 @@ import 'data/auth_repository.dart';
 import 'data/challenge_repository.dart';
 import 'data/follow_repository.dart';
 import 'data/chat_repository.dart';
+import 'data/notification_repository.dart';
 import 'data/food_repository.dart';
 import 'data/group_repository.dart';
 import 'data/moderation_repository.dart';
@@ -64,6 +66,7 @@ class _BulkrAppState extends State<BulkrApp> {
   late final ChallengeRepository _challengeRepository;
   late final ModerationRepository _moderationRepository;
   late final ChatRepository _chatRepository;
+  late final NotificationRepository _notificationRepository;
   late final PostRepository _postRepository;
   late final GoRouter _router;
 
@@ -82,6 +85,7 @@ class _BulkrAppState extends State<BulkrApp> {
     _challengeRepository = ChallengeRepository();
     _moderationRepository = ModerationRepository();
     _chatRepository = ChatRepository();
+    _notificationRepository = NotificationRepository();
     // For You is "posts by people you follow, plus posts in your groups", and
     // a challenge post carries a challenge — so the post repository reads all
     // three through the repositories that own them rather than querying their
@@ -133,6 +137,7 @@ class _BulkrAppState extends State<BulkrApp> {
         // and because the realtime channel a thread opens is torn down by the
         // cubit, not by the repository.
         RepositoryProvider.value(value: _chatRepository),
+        RepositoryProvider.value(value: _notificationRepository),
       ],
       child: MultiBlocProvider(
       // Above the router on purpose — onboarding answers have to survive
@@ -169,6 +174,12 @@ class _BulkrAppState extends State<BulkrApp> {
         // request before anybody is signed in.
         BlocProvider(
           create: (_) => ConversationsCubit(chatRepository: _chatRepository),
+        ),
+        // Also app-wide, and for the same reason: the dot on the feed header
+        // and the screen behind it have to be the same list.
+        BlocProvider(
+          create: (_) =>
+              NotificationsCubit(repository: _notificationRepository),
         ),
         BlocProvider(
           create: (_) => FeedCubit(
