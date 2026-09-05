@@ -22,6 +22,7 @@ class Post extends Equatable {
     required this.label,
     this.content,
     this.imageUrls = const [],
+    this.imageThumbUrls = const [],
     this.attachedMeal,
     this.likeCount = 0,
     this.commentCount = 0,
@@ -61,6 +62,14 @@ class Post extends Equatable {
   /// feed existed; the migration copied those into `post_images` at position 0,
   /// so this list is the whole truth either way.
   final List<String> imageUrls;
+
+  /// The small copy of each photo, index for index with [imageUrls].
+  ///
+  /// Always the same length: an image with no thumbnail — anything posted
+  /// before thumbnails existed, or a photo already small enough to be its own
+  /// — carries its full-size URL here instead. So a caller can index this list
+  /// wherever it draws small and never has to check which it got.
+  final List<String> imageThumbUrls;
 
   /// The meal hanging off this post, when it was read with the meal joined.
   ///
@@ -189,6 +198,7 @@ class Post extends Equatable {
     PostLabel? label,
     String? content,
     List<String>? imageUrls,
+    List<String>? imageThumbUrls,
     Meal? attachedMeal,
     bool clearAttachedMeal = false,
     int? likeCount,
@@ -208,6 +218,7 @@ class Post extends Equatable {
       label: label ?? this.label,
       content: content ?? this.content,
       imageUrls: imageUrls ?? this.imageUrls,
+      imageThumbUrls: imageThumbUrls ?? this.imageThumbUrls,
       attachedMeal:
           clearAttachedMeal ? null : (attachedMeal ?? this.attachedMeal),
       likeCount: likeCount ?? this.likeCount,
@@ -250,6 +261,7 @@ class Post extends Equatable {
       label: PostLabel.parse(row['label']),
       content: row['content'] as String?,
       imageUrls: _imageUrls(row),
+      imageThumbUrls: _imageThumbUrls(row),
       attachedMeal: _attachedMeal(row, currentUserId: currentUserId),
       likeCount: _parseInt(row['likes_count']),
       commentCount: _parseInt(row['comments_count']),
@@ -303,17 +315,32 @@ class Post extends Equatable {
   /// `order` on an embed, but the ordering of a post's photos is the difference
   /// between a before/after and an after/before, so it is enforced where it
   /// cannot be dropped by a later edit to a query string.
-  static List<String> _imageUrls(Map<String, dynamic> row) {
+  static List<String> _imageUrls(Map<String, dynamic> row) =>
+      _orderedImages(row).map((image) => '${image['url']}').toList(growable: false);
+
+  /// The small copy of each photo, in the same order.
+  ///
+  /// Falls back to the full URL per image rather than per post, so a post with
+  /// one old photo and one new one uses the thumbnail for the new one instead
+  /// of giving up on both.
+  static List<String> _imageThumbUrls(Map<String, dynamic> row) {
+    return _orderedImages(row).map((image) {
+      final String thumb = '${image['thumb_url'] ?? ''}';
+      return thumb.isEmpty ? '${image['url']}' : thumb;
+    }).toList(growable: false);
+  }
+
+  /// The `post_images` rows, in the author's order.
+  static List<Map<String, dynamic>> _orderedImages(Map<String, dynamic> row) {
     final Object? images = row['post_images'];
     if (images is! List) return const [];
 
-    final List<Map<String, dynamic>> rows = images
+    return images
         .whereType<Map<String, dynamic>>()
         .where((image) => '${image['url'] ?? ''}'.isNotEmpty)
         .toList()
-      ..sort((a, b) => _parseInt(a['position']).compareTo(_parseInt(b['position'])));
-
-    return rows.map((image) => '${image['url']}').toList(growable: false);
+      ..sort(
+          (a, b) => _parseInt(a['position']).compareTo(_parseInt(b['position'])));
   }
 
   static Meal? _attachedMeal(
@@ -357,6 +384,7 @@ class Post extends Equatable {
         label,
         content,
         imageUrls,
+        imageThumbUrls,
         attachedMeal,
         likeCount,
         commentCount,

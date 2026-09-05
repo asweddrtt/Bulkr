@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../core/storage_cache.dart';
+import 'image_uploader.dart';
 import '../models/group.dart';
 
 /// Reads and writes groups and who is in them.
@@ -13,6 +13,10 @@ class GroupRepository {
 
   /// Storage bucket for group pictures. Public-read, like the other two.
   static const String imageBucket = 'group-images';
+
+  /// Both sizes of a group's picture. See [ImageUploader].
+  late final ImageUploader _images =
+      ImageUploader(client: _client, bucket: imageBucket);
 
   static const int pageSize = 50;
 
@@ -164,10 +168,10 @@ class GroupRepository {
 
     // The photo goes first, for the same reason it does when creating a meal
     // or a post: a failed upload should not leave a group row behind.
-    String? imageUrl;
+    UploadedImage? uploaded;
     if (imageBytes != null) {
-      imageUrl = await _uploadImage(
-        userId: userId,
+      uploaded = await _images.upload(
+        ownerId: userId,
         bytes: imageBytes,
         extension: imageExtension,
       );
@@ -175,7 +179,11 @@ class GroupRepository {
 
     final Map<String, dynamic> row = await _client
         .from('groups')
-        .insert(draft.toRowValues(ownerId: userId, imageUrl: imageUrl))
+        .insert(draft.toRowValues(
+          ownerId: userId,
+          imageUrl: uploaded?.url,
+          imageThumbUrl: uploaded?.thumbUrl,
+        ))
         .select(_groupColumns)
         .single();
 
@@ -263,42 +271,6 @@ class GroupRepository {
     } catch (error) {
       debugPrint('Bulkr: could not resolve group membership — $error');
       return groups;
-    }
-  }
-
-  Future<String> _uploadImage({
-    required String userId,
-    required Uint8List bytes,
-    required String extension,
-  }) async {
-    final String path =
-        '$userId/${DateTime.now().toUtc().microsecondsSinceEpoch}.$extension';
-
-    await _client.storage.from(imageBucket).uploadBinary(
-          path,
-          bytes,
-          fileOptions: FileOptions(
-            contentType: _contentTypeFor(extension),
-            upsert: false,
-            // The path is unique and never rewritten, so the file behind this
-            // URL cannot change — see StorageCache.
-            cacheControl: StorageCache.immutable,
-          ),
-        );
-
-    return _client.storage.from(imageBucket).getPublicUrl(path);
-  }
-
-  static String _contentTypeFor(String extension) {
-    switch (extension.toLowerCase()) {
-      case 'png':
-        return 'image/png';
-      case 'webp':
-        return 'image/webp';
-      case 'heic':
-        return 'image/heic';
-      default:
-        return 'image/jpeg';
     }
   }
 

@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../core/storage_cache.dart';
+import 'image_uploader.dart';
 import '../models/meal.dart';
 import '../models/post.dart';
 import '../models/post_comment.dart';
@@ -102,6 +102,10 @@ class PostRepository {
   /// still sitting in someone's library.
   static const String imageBucket = 'post-images';
 
+  /// Both sizes of every photo on a post. See [ImageUploader].
+  late final ImageUploader _images =
+      ImageUploader(client: _client, bucket: imageBucket);
+
   /// How many posts a page holds.
   ///
   /// Small, because every row drags an author, its images and possibly a whole
@@ -133,7 +137,7 @@ class PostRepository {
   /// allowed to look at, and the card simply shows no attachment.
   static const String _postColumns = '*, '
       'users!posts_user_id_fkey(username, display_name, avatar_url), '
-      'post_images(url, position), '
+      'post_images(url, thumb_url, position), '
       'groups!posts_group_id_fkey(id, name), '
       'meals!posts_attached_meal_id_fkey(*, '
       'users!meals_creator_id_fkey(username), '
@@ -495,7 +499,7 @@ class PostRepository {
           .eq('creator_id', userId);
     }
 
-    final List<String> urls = await _uploadImages(
+    final List<UploadedImage> uploaded = await _uploadImages(
       userId: userId,
       images: images.take(PostDraft.maxImages).toList(),
     );
@@ -508,12 +512,17 @@ class PostRepository {
 
     final Post post = Post.fromRow(row, currentUserId: userId);
 
-    if (urls.isEmpty) return post;
+    if (uploaded.isEmpty) return post;
 
     try {
       await _client.from('post_images').insert([
-        for (int i = 0; i < urls.length; i++)
-          {'post_id': post.id, 'url': urls[i], 'position': i},
+        for (int i = 0; i < uploaded.length; i++)
+          {
+            'post_id': post.id,
+            'url': uploaded[i].url,
+            'thumb_url': uploaded[i].thumbUrl,
+            'position': i,
+          },
       ]);
     } catch (error) {
       debugPrint('Bulkr: post saved but its images failed — $error');
@@ -522,7 +531,12 @@ class PostRepository {
 
     // The insert above is not reflected in the row already read back, so the
     // URLs are carried over by hand rather than by a second round trip.
-    return post.copyWith(imageUrls: urls);
+    return post.copyWith(
+      imageUrls: [for (final UploadedImage image in uploaded) image.url],
+      imageThumbUrls: [
+        for (final UploadedImage image in uploaded) image.thumbUrl ?? image.url,
+      ],
+    );
   }
 
   /// Writes a post, and the challenge it is announcing.
@@ -967,57 +981,58 @@ class PostRepository {
     return '$column.lt.$value,and($column.eq.$value,id.lt.$id)';
   }
 
-  /// Uploads photos and returns their public URLs, in the order given.
+  /// Uploads a post's photos, in both sizes, in the order given.
   ///
-  /// Sequential rather than concurrent. The order is the post's order — a
-  /// before and an after are not interchangeable — and while a `Future.wait`
-  /// would preserve the result order too, one failure mid-flight would leave an
-  /// unknown number of orphaned files. Doing them in turn means a failure stops
-  /// at a known point.
-  Future<List<String>> _uploadImages({
+  /// Concurrent, and it did not used to be. The old version went one at a time
+  /// so that a failure stopped at a known point and left no orphans behind —
+  /// which mattered, but cost four photos four round trips end to end on a
+  /// phone, and now four more for the thumbnails.
+  ///
+  /// This does both: all of them at once, and if any one fails, the ones that
+  /// already landed are deleted before the error goes up. So the orphan
+  /// guarantee is the same and the wait is a quarter of what it was.
+  ///
+  /// `Future.wait` preserves the argument order regardless of what finishes
+  /// first, which is what makes this safe for a post whose photos are a before
+  /// and an after.
+  Future<List<UploadedImage>> _uploadImages({
     required String userId,
     required List<PostImageUpload> images,
   }) async {
     if (images.isEmpty) return const [];
 
-    final List<String> urls = [];
     // One timestamp for the whole post, indexed per photo, so a post's files
     // sort together in the bucket and two photos picked in the same
     // microsecond cannot collide on a name.
     final int stamp = DateTime.now().toUtc().microsecondsSinceEpoch;
 
-    for (int i = 0; i < images.length; i++) {
-      final PostImageUpload image = images[i];
-      final String path = '$userId/$stamp-$i.${image.extension}';
+    final List<Future<UploadedImage>> uploads = [
+      for (int i = 0; i < images.length; i++)
+        _images.upload(
+          ownerId: userId,
+          bytes: images[i].bytes,
+          extension: images[i].extension,
+          name: '$stamp-$i',
+        ),
+    ];
 
-      await _client.storage.from(imageBucket).uploadBinary(
-            path,
-            image.bytes,
-            fileOptions: FileOptions(
-              contentType: _contentTypeFor(image.extension),
-              upsert: false,
-              // The path is unique and never rewritten, so the file behind
-              // this URL cannot change — see StorageCache.
-              cacheControl: StorageCache.immutable,
-            ),
-          );
+    try {
+      return await Future.wait(uploads);
+    } catch (error) {
+      // eagerError is off by default, so every upload has settled by the time
+      // this runs — the survivors are known and can be swept up.
+      final List<String?> orphans = [];
+      for (final Future<UploadedImage> upload in uploads) {
+        try {
+          final UploadedImage done = await upload;
+          orphans..add(done.url)..add(done.thumbUrl);
+        } catch (_) {
+          // This is the one that failed. Nothing of it to clean up.
+        }
+      }
 
-      urls.add(_client.storage.from(imageBucket).getPublicUrl(path));
-    }
-
-    return urls;
-  }
-
-  static String _contentTypeFor(String extension) {
-    switch (extension.toLowerCase()) {
-      case 'png':
-        return 'image/png';
-      case 'webp':
-        return 'image/webp';
-      case 'heic':
-        return 'image/heic';
-      default:
-        return 'image/jpeg';
+      await _images.remove(orphans);
+      rethrow;
     }
   }
 }

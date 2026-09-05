@@ -94,10 +94,12 @@ class MealCard extends StatelessWidget {
           children: [
             ColoredBox(
               color: _imageColor,
-              child: meal.imageUrl == null
+              child: meal.smallImageUrl == null
                   ? _buildImageFallback()
                   : BulkrImage(
-                      url: meal.imageUrl!,
+                      // The small copy: this is a card in a two-column grid,
+                      // never the full-size photo.
+                      url: meal.smallImageUrl!,
                       // A card is a column of the grid, never the full width.
                       width: 0.5.sw,
                       placeholderColor: _imageColor,

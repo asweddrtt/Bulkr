@@ -32,7 +32,7 @@ class GroupRow extends StatelessWidget {
         child: Row(
           children: [
             GroupAvatar(
-              url: group.imageUrl,
+              url: group.smallImageUrl,
               name: group.name,
               size: 44.w,
             ),

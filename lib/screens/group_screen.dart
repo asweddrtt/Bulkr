@@ -348,7 +348,12 @@ class _GroupHeader extends StatelessWidget {
         children: [
           Row(
             children: [
-              GroupAvatar(url: group.imageUrl, name: group.name, size: 60.w),
+              GroupAvatar(
+                // 60 points: the small copy, even on the group's own screen.
+                url: group.smallImageUrl,
+                name: group.name,
+                size: 60.w,
+              ),
               SizedBox(width: 16.w),
               Expanded(
                 child: Column(

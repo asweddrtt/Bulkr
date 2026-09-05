@@ -24,6 +24,7 @@ class Meal extends Equatable {
     required this.title,
     this.description,
     this.imageUrl,
+    this.thumbUrl,
     this.totals = Macros.zero,
     this.visibility = ContentVisibility.private,
     required this.createdAt,
@@ -50,6 +51,19 @@ class Meal extends Equatable {
   /// Public URL of the user's own photo in the `meal-images` bucket. Never an
   /// Open Food Facts product image.
   final String? imageUrl;
+
+  /// The ~640px copy made at upload time, for anywhere this is drawn small.
+  ///
+  /// Null for every meal saved before thumbnails existed, and for one whose
+  /// photo was already small enough to be its own thumbnail — so read it
+  /// through [smallImageUrl] rather than directly.
+  final String? thumbUrl;
+
+  /// What to load when this is drawn in a card or a tile.
+  ///
+  /// Falls back to the full size, which is where the app was before: an older
+  /// meal renders exactly as it always did, just without the saving.
+  String? get smallImageUrl => thumbUrl ?? imageUrl;
 
   /// The stored `total_*` columns, denormalised on the row so a meal list is
   /// one query rather than one join per card.
@@ -167,6 +181,7 @@ class Meal extends Equatable {
     String? title,
     String? description,
     String? imageUrl,
+    String? thumbUrl,
     Macros? totals,
     ContentVisibility? visibility,
     bool? isMine,
@@ -187,6 +202,7 @@ class Meal extends Equatable {
       title: title ?? this.title,
       description: description ?? this.description,
       imageUrl: imageUrl ?? this.imageUrl,
+      thumbUrl: thumbUrl ?? this.thumbUrl,
       totals: totals ?? this.totals,
       visibility: visibility ?? this.visibility,
       createdAt: createdAt,
@@ -229,6 +245,7 @@ class Meal extends Equatable {
       title: '${row['title'] ?? ''}',
       description: row['description'] as String?,
       imageUrl: row['image_url'] as String?,
+      thumbUrl: row['thumb_url'] as String?,
       totals: Macros(
         calories: parseGrams(row['total_calories']),
         proteinG: parseGrams(row['total_protein_g']),
@@ -273,6 +290,7 @@ class Meal extends Equatable {
         title,
         description,
         imageUrl,
+        thumbUrl,
         totals,
         visibility,
         creatorUsername,

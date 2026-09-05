@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../core/storage_cache.dart';
+import 'image_uploader.dart';
 import '../models/daily_log_entry.dart';
 import '../models/food_item.dart';
 import '../models/macros.dart';
@@ -29,6 +29,10 @@ class MealRepository {
   /// Storage bucket holding the users' own meal photos. Public-read, because
   /// a meal attached to a feed post has to render for everyone who sees it.
   static const String imageBucket = 'meal-images';
+
+  /// Both sizes of every meal photo, and the deletes that go with them.
+  late final ImageUploader _images =
+      ImageUploader(client: _client, bucket: imageBucket);
 
   /// Columns of `meals`, plus the author's handle for meals saved from the feed.
   ///
@@ -283,10 +287,10 @@ class MealRepository {
 
     final Macros totals = draft.totals;
 
-    String? imageUrl;
+    UploadedImage? uploaded;
     if (imageBytes != null) {
-      imageUrl = await _uploadImage(
-        userId: userId,
+      uploaded = await _images.upload(
+        ownerId: userId,
         bytes: imageBytes,
         extension: imageExtension,
       );
@@ -299,7 +303,8 @@ class MealRepository {
           'title': draft.title.trim(),
           'description':
               draft.recipe.trim().isEmpty ? null : draft.recipe.trim(),
-          'image_url': imageUrl,
+          'image_url': uploaded?.url,
+          'thumb_url': uploaded?.thumbUrl,
           'total_calories': totals.caloriesRounded,
           'total_protein_g': totals.proteinRounded,
           'total_carbs_g': totals.carbsRounded,
@@ -388,6 +393,10 @@ class MealRepository {
           'title': meal.title,
           'description': meal.description,
           'image_url': meal.imageUrl,
+          // The same two files, pointed at by a second row. A copy is a new
+          // meal, not a new photo — re-uploading the bytes would double the
+          // storage to no end.
+          'thumb_url': meal.thumbUrl,
           'total_calories': meal.totals.caloriesRounded,
           'total_protein_g': meal.totals.proteinRounded,
           'total_carbs_g': meal.totals.carbsRounded,
@@ -487,12 +496,21 @@ class MealRepository {
     final String? previousUrl = meal.imageUrl;
     String? imageUrl = draft.existingImageUrl;
 
+    String? thumbUrl = meal.thumbUrl;
+
     if (imageBytes != null) {
-      imageUrl = await _uploadImage(
-        userId: userId,
+      final UploadedImage uploaded = await _images.upload(
+        ownerId: userId,
         bytes: imageBytes,
         extension: imageExtension,
       );
+      imageUrl = uploaded.url;
+      thumbUrl = uploaded.thumbUrl;
+    } else if (imageUrl != meal.imageUrl) {
+      // The photo was removed rather than replaced, so the thumbnail of the
+      // one that is gone must go with it — otherwise the card falls back to a
+      // small copy of a picture the meal no longer has.
+      thumbUrl = null;
     }
 
     final Macros totals = draft.totals;
@@ -504,6 +522,7 @@ class MealRepository {
           'description':
               draft.recipe.trim().isEmpty ? null : draft.recipe.trim(),
           'image_url': imageUrl,
+          'thumb_url': thumbUrl,
           'total_calories': totals.caloriesRounded,
           'total_protein_g': totals.proteinRounded,
           'total_carbs_g': totals.carbsRounded,
@@ -520,7 +539,7 @@ class MealRepository {
     // Only once the row no longer points at it. An orphaned file costs a few
     // kilobytes; deleting one the meal still references costs the photo.
     if (previousUrl != null && previousUrl != imageUrl) {
-      await _deleteStoredImage(previousUrl);
+      await _images.remove([previousUrl, meal.thumbUrl]);
     }
 
     return Meal.fromRow(row, currentUserId: userId).copyWith(
@@ -560,18 +579,6 @@ class MealRepository {
     }
   }
 
-  /// Best-effort removal of a photo no meal points at any more.
-  Future<void> _deleteStoredImage(String publicUrl) async {
-    final String? path = storagePathFor(publicUrl);
-    if (path == null) return;
-
-    try {
-      await _client.storage.from(imageBucket).remove([path]);
-    } catch (error) {
-      debugPrint('Bulkr: old meal photo not removed — $error');
-    }
-  }
-
   /// Every ingredient's food needs a `cached_off_foods` row before it can be
   /// referenced, since results straight from the Open Food Facts API have no id
   /// yet.
@@ -585,46 +592,6 @@ class MealRepository {
       for (var i = 0; i < draft.ingredients.length; i++)
         draft.ingredients[i].copyWith(food: cached[i]),
     ];
-  }
-
-  /// Uploads the user's photo and returns its public URL.
-  ///
-  /// Pathed under the owner's id so a storage policy can scope writes to
-  /// `auth.uid()`, the same shape as the table policies.
-  Future<String> _uploadImage({
-    required String userId,
-    required Uint8List bytes,
-    required String extension,
-  }) async {
-    final String path =
-        '$userId/${DateTime.now().toUtc().microsecondsSinceEpoch}.$extension';
-
-    await _client.storage.from(imageBucket).uploadBinary(
-          path,
-          bytes,
-          fileOptions: FileOptions(
-            contentType: _contentTypeFor(extension),
-            upsert: false,
-            // The path is unique and never rewritten, so the file behind this
-            // URL cannot change — see StorageCache.
-            cacheControl: StorageCache.immutable,
-          ),
-        );
-
-    return _client.storage.from(imageBucket).getPublicUrl(path);
-  }
-
-  static String _contentTypeFor(String extension) {
-    switch (extension.toLowerCase()) {
-      case 'png':
-        return 'image/png';
-      case 'webp':
-        return 'image/webp';
-      case 'heic':
-        return 'image/heic';
-      default:
-        return 'image/jpeg';
-    }
   }
 
   /// Deletes a meal the user created, and its photo.
@@ -648,8 +615,7 @@ class MealRepository {
 
     await _client.from('meals').delete().eq('id', meal.id);
 
-    final String? imageUrl = meal.imageUrl;
-    if (imageUrl != null) await _deleteStoredImage(imageUrl);
+    await _images.remove([meal.imageUrl, meal.thumbUrl]);
   }
 
   /// Drops someone else's meal out of this user's library.
@@ -672,18 +638,8 @@ class MealRepository {
   /// Returns null for a meal with no photo, and for a URL that does not belong
   /// to this bucket — an image hosted anywhere else is not ours to delete.
   @visibleForTesting
-  static String? storagePathFor(String? publicUrl) {
-    if (publicUrl == null || publicUrl.isEmpty) return null;
-
-    const String marker = '/public/$imageBucket/';
-    final int start = publicUrl.indexOf(marker);
-    if (start < 0) return null;
-
-    // Query strings appear on signed and transformed URLs, never on the object
-    // path itself.
-    final String path = publicUrl.substring(start + marker.length).split('?').first;
-    return path.isEmpty ? null : Uri.decodeComponent(path);
-  }
+  static String? storagePathFor(String? publicUrl) =>
+      ImageUploader.storagePathFor(publicUrl, bucket: imageBucket);
 
   /// Marks a meal as a favourite, or clears the mark.
   ///
