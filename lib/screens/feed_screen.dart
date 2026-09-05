@@ -211,7 +211,7 @@ class _InboxButtonState extends State<_InboxButton> {
                 clipBehavior: Clip.none,
                 children: [
                   Icon(
-                    Icons.mail_outline_rounded,
+                    Icons.message,
                     color: AppColors.textGray,
                     size: 21.sp,
                   ),
