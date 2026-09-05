@@ -29,40 +29,27 @@ They are client configuration rather than credentials - they ship inside every
 copy of the app either way, which is why committing them to a private repo is
 the normal thing to do rather than plumbing them through CI as secure files.
 
-## 2. Get an iOS OAuth client, and fix the URL scheme
+## 2. The iOS OAuth client - done
 
-Your `GoogleService-Info.plist` has no `CLIENT_ID` and your
-`google-services.json` has `oauth_client: []`. That is not a mistake — Bulkr's
-Google sign-in belongs to the **Google Cloud project behind Supabase Auth**,
-set up long before the Firebase project you made for push. Two projects, doing
-two unrelated jobs. Firebase only sends notifications and needs no OAuth client
-at all.
+Created in the `Bulkr` Google Cloud project (the one behind Supabase Auth, not
+the Firebase one), and `ios/Runner/Info.plist` carries its reversed form as a
+URL scheme.
 
-So the value you need does not come from either file.
+One value still has to go into Codemagic in step 5, **un-reversed**:
 
-**Find the iOS client id:**
-<https://console.cloud.google.com/apis/credentials> → switch to the project
-whose *Web* client id you already use for Supabase Google sign-in → look under
-**OAuth 2.0 Client IDs** for one of type **iOS** with bundle id
-`com.alimahmoud.bulkr`.
+    GOOGLE_IOS_CLIENT_ID = 482455223938-d4m26ijhdn9uoued3dvlu7hd9r10fhc5.apps.googleusercontent.com
 
-If there is no iOS one, create it: **+ Create credentials → OAuth client ID →
-iOS**, bundle id `com.alimahmoud.bulkr`. It needs no review and no secret.
+Two forms of one id, and they are not interchangeable. The URL scheme is
+written host-first — `com.googleusercontent.apps.482455223938-...` — because
+that is what a scheme is. The build define wants the id as Google prints it.
+Getting either one wrong fails the same way: the account picker opens, you
+choose, and nothing comes back.
 
-It looks like `123456789012-abcdefg.apps.googleusercontent.com`.
-
-**Then two places:**
-
-1. `ios/Runner/Info.plist` — replace `REPLACE_WITH_REVERSED_CLIENT_ID` with the
-   same id *reversed*:
-   `com.googleusercontent.apps.123456789012-abcdefg`
-2. Codemagic environment variable `GOOGLE_IOS_CLIENT_ID` — the id as-is, not
-   reversed (step 5)
-
-Commit the Info.plist change.
-
-Skip this and everything still builds and installs; Google sign-in is the only
-thing that breaks, and it breaks by opening the picker and never returning.
+Nothing changes on the Supabase side. `signInWithGoogle` passes
+`serverClientId: googleWebClientId`, so the ID token's audience is the **web**
+client on every platform, and the web client is the only one Supabase has ever
+been configured with. The iOS client exists purely so the native picker can
+run.
 
 ## 3. Apple Developer portal
 

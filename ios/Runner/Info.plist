@@ -68,16 +68,18 @@
 		     iOS client id, so this scheme has to exist or the account picker
 		     opens, the user picks, and nothing comes back.
 
-		     REPLACE the string below with GOOGLE_IOS_CLIENT_ID reversed:
-		     take 123456-abcdef.apps.googleusercontent.com and write it as
-		     com.googleusercontent.apps.123456-abcdef.
+		     Reversed is the whole point. The OAuth client id reads
+		     482455223938-xxx.apps.googleusercontent.com; a URL scheme is
+		     written host-first, so it becomes
+		     com.googleusercontent.apps.482455223938-xxx. Pasting the id as it
+		     comes gives a scheme iOS will never match, and that failure looks
+		     exactly like the scheme being absent.
 
-		     Not from GoogleService-Info.plist. Bulkr's Google sign-in belongs
-		     to the Google Cloud project behind Supabase Auth, which is a
-		     different project from the Firebase one that sends pushes — so
-		     that plist has no CLIENT_ID in it and never will. The id this
-		     needs is the same one passed as the GOOGLE_IOS_CLIENT_ID build
-		     define; see lib/core/config/supabase_config.dart.
+		     The same id un-reversed is what goes in the GOOGLE_IOS_CLIENT_ID
+		     build define; see lib/core/config/supabase_config.dart. It is not
+		     from GoogleService-Info.plist and never will be: Google sign-in
+		     belongs to the Cloud project behind Supabase Auth, and Firebase
+		     here only sends pushes.
 
 		     It is not a secret — it ships inside every copy of the app. -->
 		<dict>
@@ -87,7 +89,7 @@
 			<string>com.alimahmoud.bulkr.google</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>REPLACE_WITH_REVERSED_CLIENT_ID</string>
+				<string>com.googleusercontent.apps.482455223938-d4m26ijhdn9uoued3dvlu7hd9r10fhc5</string>
 			</array>
 		</dict>
 	</array>
