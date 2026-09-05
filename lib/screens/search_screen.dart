@@ -246,6 +246,23 @@ class _Body extends StatelessWidget {
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: EdgeInsets.fromLTRB(20.w, 4.h, 20.w, 30.h),
                 children: [
+                  // First, on a screen with nothing typed into it. These were
+                  // at the bottom, under the suggestions and the history,
+                  // which meant "start a group" was a thing you had to scroll
+                  // to find and therefore a thing nobody found. Nothing typed
+                  // means nothing has been asked for yet, and these two are
+                  // what this screen can offer unprompted.
+                  if (!state.hasQuery) ...[
+                    _ActionRow(
+                      icon: Icons.group_add_outlined,
+                      label: 'search_create_group'.tr(),
+                      helper: 'search_create_group_helper'.tr(),
+                      onTap: () => _createGroup(context),
+                    ),
+                    SizedBox(height: 8.h),
+                    _AllGroupsRow(onTap: () => GroupsScreen.open(context)),
+                    SizedBox(height: 18.h),
+                  ],
                   if (state.hasPeople) ...[
                     _SectionHeader(
                       label: state.hasQuery
@@ -296,30 +313,26 @@ class _Body extends StatelessWidget {
                     _HistorySection(terms: state.history),
                     SizedBox(height: 10.h),
                   ],
-                  // Always last, and always there: browsing and creating
-                  // groups is not something a search field can offer, and this
-                  // is the only route to it now that the header icon is gone.
-                  SizedBox(height: state.isEmptyStart ? 30.h : 20.h),
+                  // Still offered while searching, at the end — a query that
+                  // found nobody is exactly when starting your own group is
+                  // the useful answer.
+                  if (state.hasQuery) ...[
+                    SizedBox(height: 20.h),
+                    _ActionRow(
+                      icon: Icons.group_add_outlined,
+                      label: 'search_create_group'.tr(),
+                      helper: 'search_create_group_helper'.tr(),
+                      onTap: () => _createGroup(context),
+                    ),
+                  ],
                   if (state.isEmptyStart) ...[
+                    SizedBox(height: 20.h),
                     _Message(
                       icon: Icons.search,
                       title: 'search_empty_start'.tr(),
                       body: 'search_empty_start_body'.tr(),
                     ),
-                    SizedBox(height: 20.h),
                   ],
-                  // Creating is offered next to browsing rather than behind
-                  // it. Starting a group used to mean opening the groups
-                  // screen and finding the button on it, which is two steps
-                  // more than a thing with no groups in it can afford.
-                  _ActionRow(
-                    icon: Icons.group_add_outlined,
-                    label: 'search_create_group'.tr(),
-                    helper: 'search_create_group_helper'.tr(),
-                    onTap: () => _createGroup(context),
-                  ),
-                  SizedBox(height: 8.h),
-                  _AllGroupsRow(onTap: () => GroupsScreen.open(context)),
                 ],
               ),
             );

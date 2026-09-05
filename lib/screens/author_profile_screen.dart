@@ -391,16 +391,40 @@ Future<void> _openProfileActions(BuildContext context, AuthorState state) async 
           borderRadius: BorderRadius.circular(12.r),
           border: Border.all(color: AppColors.darkBorder),
         ),
-        child: SheetActionRow(
-          icon: blocked ? Icons.lock_open : Icons.block,
-          label: blocked
-              ? 'profile_unblock'.tr(namedArgs: {'name': name})
-              : 'profile_block'.tr(namedArgs: {'name': name}),
-          helper: blocked
-              ? 'profile_unblock_helper'.tr()
-              : 'post_block_author_helper'.tr(),
-          isDestructive: !blocked,
-          onTap: () => Navigator.of(sheetContext).pop(true),
+        // The Column with a minimum main axis size is what every other sheet
+        // in the app has and this one did not: without it the box stretches
+        // instead of wrapping its one row, which is what made this look
+        // broken next to the rest of them.
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // A header, for the same reason. A single action floating in a
+            // box says nothing about who it applies to — and this is a sheet
+            // opened from a `...` that says nothing either.
+            Text(
+              name.toUpperCase(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.anton(
+                color: Colors.white,
+                fontSize: 16.sp,
+                letterSpacing: 1.1,
+              ),
+            ),
+            SizedBox(height: 14.h),
+            SheetActionRow(
+              icon: blocked ? Icons.lock_open : Icons.block,
+              label: blocked
+                  ? 'profile_unblock'.tr(namedArgs: {'name': name})
+                  : 'profile_block'.tr(namedArgs: {'name': name}),
+              helper: blocked
+                  ? 'profile_unblock_helper'.tr()
+                  : 'post_block_author_helper'.tr(),
+              isDestructive: !blocked,
+              onTap: () => Navigator.of(sheetContext).pop(true),
+            ),
+          ],
         ),
       ),
     ),
