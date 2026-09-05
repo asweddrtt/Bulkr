@@ -1,5 +1,6 @@
 import 'dart:io' show Platform;
 
+import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 
@@ -17,10 +18,22 @@ import 'push_repository.dart';
 class PushService {
   PushService({required PushRepository repository, FirebaseMessaging? messaging})
       : _repository = repository,
-        _messaging = messaging ?? FirebaseMessaging.instance;
+        _injected = messaging;
 
   final PushRepository _repository;
-  final FirebaseMessaging _messaging;
+  final FirebaseMessaging? _injected;
+
+  /// Resolved on first use, never in the constructor.
+  ///
+  /// `FirebaseMessaging.instance` throws `[core/no-app]` when
+  /// `Firebase.initializeApp()` has not run — which is exactly what happens on
+  /// a build with no `GoogleService-Info.plist` in the bundle. Touching it from
+  /// the initialiser list meant merely *constructing* this class threw, inside
+  /// the first `initState`, before the first frame was ever produced: a white
+  /// screen with no error, on a feature nobody was using yet.
+  ///
+  /// Push is optional. Constructing the thing that does it must be free.
+  late final FirebaseMessaging _messaging = _injected ?? FirebaseMessaging.instance;
 
   /// The token this device most recently registered.
   ///
@@ -51,6 +64,19 @@ class PushService {
   Future<void> signIn() async {
     if (!isSupported) {
       debugPrint('Bulkr push: platform does not do notifications, skipping.');
+      return;
+    }
+
+    // Asked before touching the plugin so the log says which of the two things
+    // went wrong. Without this the symptom is `[core/no-app]` thrown from a
+    // getter, which reads like a plugin bug rather than what it is: no
+    // `google-services.json` / `GoogleService-Info.plist` in the bundle.
+    if (Firebase.apps.isEmpty) {
+      debugPrint(
+        'Bulkr push: Firebase never initialised, so there is nothing to '
+        'register with. Check that the config file for this platform is in '
+        'the built app, not just in the repo.',
+      );
       return;
     }
 
