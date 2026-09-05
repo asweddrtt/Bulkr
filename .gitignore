@@ -27,3 +27,34 @@ supabase/.env
 supabase/functions/**/.env
 .env
 .env.local
+
+# Files `flutter pub get` regenerates from pubspec.
+#
+# They were tracked, which meant every `flutter pub get` on any machine dirtied
+# the working tree and the next `git pull` refused to run:
+#
+#   error: Your local changes to the following files would be overwritten by
+#   merge: macos/Flutter/GeneratedPluginRegistrant.swift
+#
+# Nothing in them is a decision — they are a mechanical list of the plugins in
+# pubspec.yaml, rebuilt on every pub get and on every build. Tracking a
+# derived file only creates conflicts between machines that ran the tool at
+# different times.
+#
+# pubspec.lock stays tracked on purpose: it *is* a decision — the exact
+# versions this app is known to work with — and an app (unlike a package)
+# should pin them.
+.flutter-plugins
+.flutter-plugins-dependencies
+linux/flutter/generated_plugin_registrant.cc
+linux/flutter/generated_plugin_registrant.h
+linux/flutter/generated_plugins.cmake
+macos/Flutter/GeneratedPluginRegistrant.swift
+macos/Flutter/Flutter-Generated.xcconfig
+windows/flutter/generated_plugin_registrant.cc
+windows/flutter/generated_plugin_registrant.h
+windows/flutter/generated_plugins.cmake
+ios/Flutter/Generated.xcconfig
+ios/Flutter/flutter_export_environment.sh
+ios/Runner/GeneratedPluginRegistrant.h
+ios/Runner/GeneratedPluginRegistrant.m
