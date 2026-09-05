@@ -116,16 +116,7 @@ class _TrackerView extends StatelessWidget {
             SizedBox(height: 18.h),
             _MacroTotals(state: state),
             SizedBox(height: 18.h),
-            WaterCard(state: state),
-            // Today only. UserRepository writes the weigh-in from the clock and
-            // supersedes the same local day, so there is no honest way to
-            // backdate one — offering the field on a past day would promise
-            // something the write cannot do.
-            if (state.isToday) ...[
-              SizedBox(height: 14.h),
-              _WeightRow(state: state),
-            ],
-            SizedBox(height: 22.h),
+
             for (final MealSlot slot in MealSlot.values) ...[
               _SlotSection(
                 slot: slot,
@@ -144,6 +135,17 @@ class _TrackerView extends StatelessWidget {
                 entries: unsorted,
                 total: state.unsortedTotal,
               ),
+            SizedBox(height: 22.h),
+
+            WaterCard(state: state),
+            // Today only. UserRepository writes the weigh-in from the clock and
+            // supersedes the same local day, so there is no honest way to
+            // backdate one — offering the field on a past day would promise
+            // something the write cannot do.
+            if (state.isToday) ...[
+              SizedBox(height: 14.h),
+              _WeightRow(state: state),
+            ],
           ],
           step: const Duration(milliseconds: 55),
         ),
