@@ -551,5 +551,9 @@
   "nav_meals": "Meals",
   "nav_feed": "Feed",
   "nav_tracker": "Tracker",
-  "nav_profile": "Profile"
+  "nav_profile": "Profile",
+  "meal_discard_title": "Discard these changes?",
+  "meal_discard_confirm": "Discard",
+  "meal_discard_helper": "What you've changed here is lost.",
+  "meal_discard_keep": "Keep editing"
 }

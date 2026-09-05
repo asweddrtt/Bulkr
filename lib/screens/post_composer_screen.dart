@@ -151,66 +151,40 @@ class PostComposerScreen extends StatelessWidget {
           },
         ),
       ],
-      child: Scaffold(
-        backgroundColor: const Color(0xFF121212),
-        body: SafeArea(
-          child: Column(
-            children: [
-              const _ComposerHeader(),
-              Expanded(
-                child: ListView(
-                  padding: EdgeInsets.fromLTRB(20.w, 8.h, 20.w, 40.h),
-                  children: const [
-                    _GroupBanner(),
-                    _LabelPicker(),
-                    _ChallengeFields(),
-                    _ContentField(),
-                    _ImageStrip(),
-                    _MealAttachment(),
-                    _VisibilityField(),
-                  ],
+      // The close button in the header already asks before throwing work
+      // away. The system back gesture did not — it popped the route and the
+      // post went with it, which is the way most people leave a screen on a
+      // phone.
+      child: PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (didPop) return;
+          confirmClose(context);
+        },
+        child: Scaffold(
+          backgroundColor: const Color(0xFF121212),
+          body: SafeArea(
+            child: Column(
+              children: [
+                const _ComposerHeader(),
+                Expanded(
+                  child: ListView(
+                    padding: EdgeInsets.fromLTRB(20.w, 8.h, 20.w, 40.h),
+                    children: const [
+                      _GroupBanner(),
+                      _LabelPicker(),
+                      _ChallengeFields(),
+                      _ContentField(),
+                      _ImageStrip(),
+                      _MealAttachment(),
+                      _VisibilityField(),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-/// Close, title, and the Post button.
-class _ComposerHeader extends StatelessWidget {
-  const _ComposerHeader();
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.fromLTRB(12.w, 8.h, 20.w, 8.h),
-      child: Row(
-        children: [
-          PressScale(
-            child: GestureDetector(
-              onTap: () => _confirmClose(context),
-              behavior: HitTestBehavior.opaque,
-              child: Padding(
-                padding: EdgeInsets.all(8.w),
-                child: Icon(Icons.close, color: Colors.white, size: 20.sp),
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              'post_composer_title'.tr().toUpperCase(),
-              style: GoogleFonts.anton(
-                color: Colors.white,
-                fontSize: 17.sp,
-                letterSpacing: 1.2,
-              ),
-            ),
-          ),
-          const _SubmitButton(),
-        ],
       ),
     );
   }
@@ -220,7 +194,7 @@ class _ComposerHeader extends StatelessWidget {
   /// Only when there is something to lose — a composer opened and closed
   /// without a word typed just closes, because a confirmation for nothing
   /// teaches people to dismiss confirmations.
-  static Future<void> _confirmClose(BuildContext context) async {
+  static Future<void> confirmClose(BuildContext context) async {
     final PostComposerCubit cubit = context.read<PostComposerCubit>();
     final NavigatorState navigator = Navigator.of(context);
 
@@ -253,6 +227,44 @@ class _ComposerHeader extends StatelessWidget {
 
     if (discard == true) navigator.pop();
   }
+}
+
+/// Close, title, and the Post button.
+class _ComposerHeader extends StatelessWidget {
+  const _ComposerHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(12.w, 8.h, 20.w, 8.h),
+      child: Row(
+        children: [
+          PressScale(
+            child: GestureDetector(
+              onTap: () => PostComposerScreen.confirmClose(context),
+              behavior: HitTestBehavior.opaque,
+              child: Padding(
+                padding: EdgeInsets.all(8.w),
+                child: Icon(Icons.close, color: Colors.white, size: 20.sp),
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              'post_composer_title'.tr().toUpperCase(),
+              style: GoogleFonts.anton(
+                color: Colors.white,
+                fontSize: 17.sp,
+                letterSpacing: 1.2,
+              ),
+            ),
+          ),
+          const _SubmitButton(),
+        ],
+      ),
+    );
+  }
+
 }
 
 class _SubmitButton extends StatelessWidget {
