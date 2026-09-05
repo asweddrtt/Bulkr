@@ -4,11 +4,10 @@
 // looks up where that notification should go, sends it through Firebase Cloud
 // Messaging, and deletes any token FCM says is dead.
 //
-// Why a webhook rather than a trigger calling out directly: a trigger that
-// makes an HTTP request holds a transaction open across the network, and a
-// slow or unreachable FCM would turn "somebody liked your post" into a like
-// that takes four seconds to record. The webhook fires after the row is
-// committed, so the like is already saved whatever happens here.
+// Either route into this is a trigger on that table calling `net.http_post`,
+// which is asynchronous: pg_net puts the request on a queue and a background
+// worker drains it. So the insert never waits on the network, and "somebody
+// liked your post" is recorded whether or not FCM is reachable.
 //
 // Why the app never calls this: it has no business being able to. The only
 // input is a notification id, and `push_payload` is granted to `service_role`
