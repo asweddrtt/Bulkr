@@ -20,6 +20,7 @@ import 'data/challenge_repository.dart';
 import 'data/follow_repository.dart';
 import 'data/chat_repository.dart';
 import 'data/notification_repository.dart';
+import 'data/push_repository.dart';
 import 'data/food_repository.dart';
 import 'data/group_repository.dart';
 import 'data/moderation_repository.dart';
@@ -67,6 +68,7 @@ class _BulkrAppState extends State<BulkrApp> {
   late final ModerationRepository _moderationRepository;
   late final ChatRepository _chatRepository;
   late final NotificationRepository _notificationRepository;
+  late final PushRepository _pushRepository;
   late final PostRepository _postRepository;
   late final GoRouter _router;
 
@@ -86,6 +88,7 @@ class _BulkrAppState extends State<BulkrApp> {
     _moderationRepository = ModerationRepository();
     _chatRepository = ChatRepository();
     _notificationRepository = NotificationRepository();
+    _pushRepository = PushRepository();
     // For You is "posts by people you follow, plus posts in your groups", and
     // a challenge post carries a challenge — so the post repository reads all
     // three through the repositories that own them rather than querying their
@@ -138,6 +141,9 @@ class _BulkrAppState extends State<BulkrApp> {
         // cubit, not by the repository.
         RepositoryProvider.value(value: _chatRepository),
         RepositoryProvider.value(value: _notificationRepository),
+        // Registered here so it is reachable the moment Firebase is wired up —
+        // see supabase/functions/send-push/README.md. Nothing calls it yet.
+        RepositoryProvider.value(value: _pushRepository),
       ],
       child: MultiBlocProvider(
       // Above the router on purpose — onboarding answers have to survive
