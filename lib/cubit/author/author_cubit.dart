@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../data/moderation_repository.dart';
 import '../../data/feed_cursor.dart';
 import '../../data/follow_repository.dart';
 import '../../data/post_repository.dart';
@@ -20,13 +21,16 @@ class AuthorCubit extends Cubit<AuthorState> {
   AuthorCubit({
     required FollowRepository followRepository,
     required PostRepository postRepository,
+    required ModerationRepository moderationRepository,
     required String personId,
   })  : _follows = followRepository,
         _posts = postRepository,
+        _moderation = moderationRepository,
         super(AuthorState(personId: personId));
 
   final FollowRepository _follows;
   final PostRepository _posts;
+  final ModerationRepository _moderation;
 
   static const String _actionFailedKey = 'people_action_failed';
 
@@ -60,12 +64,25 @@ class AuthorCubit extends Cubit<AuthorState> {
         return;
       }
 
+      // Asked separately, and non-fatally. Whether this person is blocked is
+      // a detail of the header; a failure to read it should not turn a profile
+      // that loaded into an error screen.
+      bool blocked = state.isBlocked;
+      try {
+        blocked = await _moderation.isBlocked(state.personId);
+      } catch (error) {
+        debugPrint('Bulkr: block state unavailable — $error');
+      }
+
+      if (isClosed) return;
+
       emit(state.copyWith(
         status: AuthorStatus.ready,
         person: person,
         posts: page.posts,
         cursor: page.nextCursor,
         hasMore: page.hasMore,
+        isBlocked: blocked,
         clearError: true,
       ));
     } catch (error) {
@@ -313,6 +330,46 @@ class AuthorCubit extends Cubit<AuthorState> {
       ...existing,
       ...incoming.where((post) => seen.add(post.id)),
     ];
+  }
+
+  /// Blocks or unblocks the person whose profile this is.
+  ///
+  /// Here as well as on a post, and that is the point: someone who has never
+  /// posted cannot be blocked from a post, and "has written nothing" is not a
+  /// reason to be unreachable by the one control that stops them contacting
+  /// you.
+  ///
+  /// Reloads on success rather than patching the state. Blocking changes what
+  /// this screen may read at all — `public.can_view` refuses their posts in
+  /// both directions — so the honest thing is to ask again and render whatever
+  /// comes back.
+  Future<void> setBlocked(bool blocked) async {
+    if (state.isBlockWriting) return;
+
+    emit(state.copyWith(isBlockWriting: true, clearError: true));
+
+    try {
+      if (blocked) {
+        await _moderation.block(state.personId);
+      } else {
+        await _moderation.unblock(state.personId);
+      }
+
+      if (isClosed) return;
+      emit(state.copyWith(isBlocked: blocked, isBlockWriting: false));
+      await load(silent: true);
+    } catch (error) {
+      if (isClosed) return;
+
+      final String detail = _describe(error);
+      debugPrint('Bulkr: block failed — $detail');
+
+      emit(state.copyWith(
+        isBlockWriting: false,
+        actionErrorKey: _actionFailedKey,
+        actionErrorDetail: detail,
+      ));
+    }
   }
 
   static String _describe(Object error) {

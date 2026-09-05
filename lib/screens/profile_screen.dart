@@ -11,6 +11,7 @@ import '../core/post_link.dart';
 import '../cubit/auth/auth_cubit.dart';
 import '../cubit/author/author_cubit.dart';
 import '../cubit/profile/profile_cubit.dart';
+import '../data/moderation_repository.dart';
 import '../data/follow_repository.dart';
 import '../data/post_repository.dart';
 import '../data/user_repository.dart';
@@ -29,6 +30,8 @@ import '../widgets/person_row.dart';
 import '../widgets/post_actions_sheet.dart';
 import '../widgets/post_card.dart';
 import '../widgets/report_sheet.dart';
+import 'saved_posts_screen.dart';
+import 'people_list_screen.dart';
 import 'blocked_people_screen.dart';
 import 'post_comments_sheet.dart';
 import 'post_composer_screen.dart';
@@ -70,6 +73,7 @@ class ProfileScreen extends StatelessWidget {
           create: (_) => AuthorCubit(
             followRepository: context.read<FollowRepository>(),
             postRepository: context.read<PostRepository>(),
+            moderationRepository: context.read<ModerationRepository>(),
             personId: profile.id,
           )..load(),
           child: const _ProfileView(),
@@ -290,6 +294,24 @@ class _Header extends StatelessWidget {
                   ),
                 ),
               ),
+              // Saved posts sit next to settings rather than inside them.
+              // Saving a post is something people do several times a day and
+              // come back to; putting it behind a gear makes it a setting,
+              // which it is not.
+              PressScale(
+                child: GestureDetector(
+                  onTap: () => SavedPostsScreen.open(context),
+                  behavior: HitTestBehavior.opaque,
+                  child: Padding(
+                    padding: EdgeInsets.all(6.w),
+                    child: Icon(
+                      Icons.bookmark_border,
+                      color: AppColors.textGray,
+                      size: 20.sp,
+                    ),
+                  ),
+                ),
+              ),
               // Settings live here now rather than on the dashboard. Which
               // account am I signed in as, and how do I get out of it, are
               // questions about the person — and this is the screen about the
@@ -346,11 +368,21 @@ class _Header extends StatelessWidget {
               _Stat(
                 value: person.followerCount,
                 labelKey: 'profile_followers_label',
+                onTap: () => PeopleListScreen.open(
+                  context,
+                  personId: person.id,
+                  side: FollowSide.followers,
+                ),
               ),
               SizedBox(width: 28.w),
               _Stat(
                 value: person.followingCount,
                 labelKey: 'profile_following_label',
+                onTap: () => PeopleListScreen.open(
+                  context,
+                  personId: person.id,
+                  side: FollowSide.following,
+                ),
               ),
             ],
           ),
@@ -639,13 +671,30 @@ class _EditableAvatarState extends State<_EditableAvatar> {
 }
 
 class _Stat extends StatelessWidget {
-  const _Stat({required this.value, required this.labelKey});
+  const _Stat({required this.value, required this.labelKey, this.onTap});
 
   final int value;
   final String labelKey;
 
+  /// Opens whatever the number counts. Null for a stat with nothing behind it
+  /// — posts are already on the screen the stat is on.
+  final VoidCallback? onTap;
+
   @override
   Widget build(BuildContext context) {
+    final Widget column = _column();
+    if (onTap == null) return column;
+
+    return PressScale(
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: column,
+      ),
+    );
+  }
+
+  Widget _column() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

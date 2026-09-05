@@ -8,16 +8,19 @@ import 'package:google_fonts/google_fonts.dart';
 import '../core/post_link.dart';
 import '../cubit/author/author_cubit.dart';
 import '../cubit/feed/feed_cubit.dart';
+import '../data/moderation_repository.dart';
 import '../data/follow_repository.dart';
 import '../data/post_repository.dart';
 import '../models/person.dart';
 import '../models/post.dart';
 import '../styles/app_color.dart';
+import '../widgets/sheet_action_row.dart';
 import '../widgets/animations/press_scale.dart';
 import '../widgets/person_row.dart';
 import '../widgets/post_actions_sheet.dart';
 import '../widgets/post_card.dart';
 import '../widgets/report_sheet.dart';
+import 'people_list_screen.dart';
 import 'post_comments_sheet.dart';
 
 /// One person's profile: who they are, and everything they have posted.
@@ -36,6 +39,7 @@ class AuthorProfileScreen extends StatelessWidget {
   static Future<void> open(BuildContext context, String personId) async {
     final FollowRepository follows = context.read<FollowRepository>();
     final PostRepository posts = context.read<PostRepository>();
+    final ModerationRepository moderation = context.read<ModerationRepository>();
     final FeedCubit feed = context.read<FeedCubit>();
 
     await Navigator.of(context).push<void>(
@@ -44,6 +48,7 @@ class AuthorProfileScreen extends StatelessWidget {
           create: (_) => AuthorCubit(
             followRepository: follows,
             postRepository: posts,
+            moderationRepository: moderation,
             personId: personId,
           )..load(),
           child: BlocProvider.value(
@@ -325,10 +330,147 @@ class _BackBar extends StatelessWidget {
               ),
             ),
           ),
+          const Spacer(),
+          // Blocking lives here rather than only on a post, because somebody
+          // who has never posted cannot be blocked from a post — and "has
+          // written nothing" is not a reason to be unreachable by the control
+          // that stops them contacting you.
+          BlocBuilder<AuthorCubit, AuthorState>(
+            buildWhen: (previous, current) =>
+                previous.isBlocked != current.isBlocked ||
+                previous.isBlockWriting != current.isBlockWriting ||
+                previous.person != current.person,
+            builder: (context, state) {
+              // Nothing to block on your own profile, and nothing to block
+              // before the row has loaded.
+              if (state.person == null || !state.person!.isFollowable) {
+                return const SizedBox.shrink();
+              }
+
+              return PressScale(
+                enabled: !state.isBlockWriting,
+                child: GestureDetector(
+                  onTap: () => _openProfileActions(context, state),
+                  behavior: HitTestBehavior.opaque,
+                  child: Padding(
+                    padding: EdgeInsets.all(8.w),
+                    child: Icon(
+                      Icons.more_horiz,
+                      color: Colors.white,
+                      size: 20.sp,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
         ],
       ),
     );
   }
+}
+
+/// Block, or take a block back.
+///
+/// A sheet with one option rather than a bare icon that blocks on tap: this is
+/// consequential and the icon it sits under says nothing about what it does.
+Future<void> _openProfileActions(BuildContext context, AuthorState state) async {
+  final AuthorCubit cubit = context.read<AuthorCubit>();
+  final String name = state.person?.name ?? '';
+  final bool blocked = state.isBlocked;
+
+  final bool? chosen = await showModalBottomSheet<bool>(
+    context: context,
+    backgroundColor: Colors.transparent,
+    builder: (sheetContext) => SafeArea(
+      child: Container(
+        margin: EdgeInsets.all(16.w),
+        padding: EdgeInsets.all(16.w),
+        decoration: BoxDecoration(
+          color: const Color(0xFF121212),
+          borderRadius: BorderRadius.circular(12.r),
+          border: Border.all(color: AppColors.darkBorder),
+        ),
+        child: SheetActionRow(
+          icon: blocked ? Icons.lock_open : Icons.block,
+          label: blocked
+              ? 'profile_unblock'.tr(namedArgs: {'name': name})
+              : 'profile_block'.tr(namedArgs: {'name': name}),
+          helper: blocked
+              ? 'profile_unblock_helper'.tr()
+              : 'post_block_author_helper'.tr(),
+          isDestructive: !blocked,
+          onTap: () => Navigator.of(sheetContext).pop(true),
+        ),
+      ),
+    ),
+  );
+
+  if (chosen != true || !context.mounted) return;
+
+  // Unblocking needs no confirmation — it only ever gives access back.
+  if (blocked) {
+    await cubit.setBlocked(false);
+    return;
+  }
+
+  final bool confirmed = await _confirmBlock(context, name);
+  if (confirmed) await cubit.setBlocked(true);
+}
+
+/// The same wording the feed uses, because it is the same act.
+Future<bool> _confirmBlock(BuildContext context, String name) async {
+  final bool? confirmed = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      backgroundColor: const Color(0xFF1A1A1A),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12.r),
+        side: const BorderSide(color: AppColors.darkBorder),
+      ),
+      title: Text(
+        'post_block_confirm_title'.tr(namedArgs: {'name': name}),
+        style: GoogleFonts.anton(
+          color: Colors.white,
+          fontSize: 15.sp,
+          letterSpacing: 1,
+        ),
+      ),
+      content: Text(
+        'post_block_confirm_body'.tr(namedArgs: {'name': name}),
+        style: GoogleFonts.inter(
+          color: AppColors.offWhiteMuted,
+          fontSize: 12.sp,
+          height: 1.5,
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(false),
+          child: Text(
+            'cancel'.tr().toUpperCase(),
+            style: GoogleFonts.inter(
+              color: AppColors.textGray,
+              fontSize: 12.sp,
+            ),
+          ),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(true),
+          child: Text(
+            'post_block_confirm_action'.tr().toUpperCase(),
+            style: GoogleFonts.inter(
+              color: const Color(0xFFFF5722),
+              fontSize: 12.sp,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  return confirmed ?? false;
 }
 
 class _ProfileHeader extends StatelessWidget {
@@ -432,11 +574,21 @@ class _ProfileHeader extends StatelessWidget {
               _Stat(
                 value: person.followerCount,
                 labelKey: 'profile_followers_label',
+                onTap: () => PeopleListScreen.open(
+                  context,
+                  personId: person.id,
+                  side: FollowSide.followers,
+                ),
               ),
               SizedBox(width: 28.w),
               _Stat(
                 value: person.followingCount,
                 labelKey: 'profile_following_label',
+                onTap: () => PeopleListScreen.open(
+                  context,
+                  personId: person.id,
+                  side: FollowSide.following,
+                ),
               ),
             ],
           ),
@@ -463,13 +615,30 @@ class _ProfileHeader extends StatelessWidget {
 }
 
 class _Stat extends StatelessWidget {
-  const _Stat({required this.value, required this.labelKey});
+  const _Stat({required this.value, required this.labelKey, this.onTap});
 
   final int value;
   final String labelKey;
 
+  /// Opens whatever the number counts. Null for a stat with nothing behind it
+  /// — posts are already on the screen the stat is on.
+  final VoidCallback? onTap;
+
   @override
   Widget build(BuildContext context) {
+    final Widget column = _column();
+    if (onTap == null) return column;
+
+    return PressScale(
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: column,
+      ),
+    );
+  }
+
+  Widget _column() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

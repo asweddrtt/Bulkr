@@ -508,5 +508,16 @@
   "blocked_title": "Blocked",
   "blocked_empty": "You haven't blocked anyone.",
   "blocked_failed": "Couldn't load your blocked list.",
-  "blocked_unblock": "Unblock"
+  "blocked_unblock": "Unblock",
+  "follow_list_followers": "Followers",
+  "follow_list_following": "Following",
+  "follow_list_followers_empty": "No followers yet.",
+  "follow_list_following_empty": "Not following anyone yet.",
+  "follow_list_failed": "Couldn't load that list.",
+  "saved_posts_title": "Saved",
+  "saved_posts_empty": "Nothing saved yet. Tap the bookmark on a post to keep it here.",
+  "saved_posts_failed": "Couldn't load your saved posts.",
+  "profile_block": "Block {name}",
+  "profile_unblock": "Unblock {name}",
+  "profile_unblock_helper": "You'll be able to see each other again"
 }

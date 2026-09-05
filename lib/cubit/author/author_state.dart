@@ -17,6 +17,8 @@ class AuthorState extends Equatable {
     this.hasMore = false,
     this.isLoadingMore = false,
     this.isFollowWriting = false,
+    this.isBlocked = false,
+    this.isBlockWriting = false,
     this.errorMessage,
     this.actionErrorKey,
     this.actionErrorDetail,
@@ -45,6 +47,16 @@ class AuthorState extends Equatable {
   /// the button is large and it is the main thing on the screen.
   final bool isFollowWriting;
 
+  /// Whether this user has blocked the person whose profile this is.
+  ///
+  /// Read on load rather than inferred from an empty post list — someone with
+  /// no posts and someone blocked look identical from the feed's side, and
+  /// that is exactly the case that made blocking from a profile necessary.
+  final bool isBlocked;
+
+  /// A block or unblock is in flight.
+  final bool isBlockWriting;
+
   final String? errorMessage;
   final String? actionErrorKey;
   final String? actionErrorDetail;
@@ -63,6 +75,8 @@ class AuthorState extends Equatable {
     bool? hasMore,
     bool? isLoadingMore,
     bool? isFollowWriting,
+    bool? isBlocked,
+    bool? isBlockWriting,
     String? errorMessage,
     String? actionErrorKey,
     String? actionErrorDetail,
@@ -77,6 +91,8 @@ class AuthorState extends Equatable {
       hasMore: hasMore ?? this.hasMore,
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
       isFollowWriting: isFollowWriting ?? this.isFollowWriting,
+      isBlocked: isBlocked ?? this.isBlocked,
+      isBlockWriting: isBlockWriting ?? this.isBlockWriting,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
       actionErrorKey:
           clearError ? null : (actionErrorKey ?? this.actionErrorKey),
@@ -95,6 +111,8 @@ class AuthorState extends Equatable {
         hasMore,
         isLoadingMore,
         isFollowWriting,
+        isBlocked,
+        isBlockWriting,
         errorMessage,
         actionErrorKey,
         actionErrorDetail,

@@ -90,6 +90,7 @@ class PersonRow extends StatelessWidget {
     required this.person,
     required this.onToggleFollow,
     this.onOpen,
+    this.isBusy = false,
   });
 
   final Person person;
@@ -98,6 +99,10 @@ class PersonRow extends StatelessWidget {
 
   /// Opens their profile.
   final VoidCallback? onOpen;
+
+  /// A follow write is in flight for this row. Per-row rather than per-list, so
+  /// one slow request does not freeze every other button on screen.
+  final bool isBusy;
 
   @override
   Widget build(BuildContext context) {
@@ -158,6 +163,7 @@ class PersonRow extends StatelessWidget {
               FollowButton(
                 isFollowing: person.isFollowedByMe,
                 onTap: onToggleFollow,
+                isBusy: isBusy,
                 isCompact: true,
               ),
             ],
