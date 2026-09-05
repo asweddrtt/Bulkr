@@ -30,30 +30,63 @@ import 'data/meal_repository.dart';
 import 'data/post_repository.dart';
 import 'data/user_repository.dart';
 import 'go_router/router_config.dart';
+import 'screens/startup_failure_screen.dart';
 import 'styles/app_color.dart';
+
+/// How long any one startup step may take before it is treated as hung.
+///
+/// A step that throws reports itself. A step that simply never returns is the
+/// worse case: `runApp` is never reached, the app is a white rectangle, and
+/// there is no crash report because nothing crashed. This bounds that.
+///
+/// Fifteen seconds is well past a slow cold start on a bad connection and well
+/// short of the point where somebody force-quits.
+const Duration _startupBudget = Duration(seconds: 15);
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await EasyLocalization.ensureInitialized();
 
-  await Supabase.initialize(
-    url: SupabaseConfig.url,
-    publishableKey: SupabaseConfig.publishableKey,
-  );
+  // Named so a failure can say which one. On a device you cannot attach a
+  // debugger to — which is most devices, and every TestFlight tester — "it
+  // shows white" is otherwise the entire bug report.
+  String step = 'loading translations';
 
-  // Firebase is only here to deliver push notifications, so a failure to
-  // start it must not stop the app starting. On a platform with no
-  // configuration — a desktop build during development — this throws, and the
-  // app should carry on without notifications rather than not run.
-  //
-  // PushService.isSupported gates the same thing on the way out; this gates
-  // the initialisation itself.
-  if (PushService.isSupported) {
-    try {
-      await Firebase.initializeApp();
-    } catch (error) {
-      debugPrint('Bulkr: Firebase unavailable, push is off — $error');
+  try {
+    await EasyLocalization.ensureInitialized().timeout(_startupBudget);
+
+    step = 'connecting to Supabase';
+    await Supabase.initialize(
+      url: SupabaseConfig.url,
+      publishableKey: SupabaseConfig.publishableKey,
+    ).timeout(_startupBudget);
+
+    // Firebase is only here to deliver push notifications, so a failure to
+    // start it must not stop the app starting. On a platform with no
+    // configuration — a desktop build during development — this throws, and
+    // the app should carry on without notifications rather than not run.
+    //
+    // Inside the outer try as well as its own: the timeout is what stops a
+    // hung initialisation holding the whole launch, and a hang is not
+    // something `catch` sees.
+    step = 'starting Firebase';
+    if (PushService.isSupported) {
+      try {
+        await Firebase.initializeApp().timeout(_startupBudget);
+      } catch (error) {
+        debugPrint('Bulkr: Firebase unavailable, push is off — $error');
+      }
     }
+  } catch (error, stackTrace) {
+    debugPrint('Bulkr: startup failed while $step — $error');
+    debugPrintStack(stackTrace: stackTrace);
+
+    // A screen that says what happened, rather than a white one that does not.
+    runApp(StartupFailureScreen.app(
+      step: step,
+      error: error,
+      stackTrace: stackTrace,
+    ));
+    return;
   }
 
   runApp(
