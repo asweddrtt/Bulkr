@@ -110,6 +110,50 @@ missing rather than like the key cannot make one.
 | --- | --- | --- |
 | `GOOGLE_IOS_CLIENT_ID` | the iOS OAuth client id from step 2, un-reversed | no |
 | `APP_STORE_APP_ID` | the Apple ID number from step 4 | no |
+| `CERTIFICATE_PRIVATE_KEY` | see just below | **yes** |
+
+### The certificate private key
+
+Apple issues a signing certificate against a private key that never leaves the
+machine that asked for it. So the distribution certificate already in your
+account — made on a Mac, for your other app — cannot be used here at all. That
+is what
+
+    Cannot save Signing Certificates without certificate private key
+
+means: the certificate was found, the key to use it was not.
+
+Give Codemagic a key of its own and Apple issues a **second** certificate
+against it, leaving the first one alone. (Revoking the old one would also work,
+and would break whatever still signs with it. Apple allows two.)
+
+Generate it once, in PowerShell:
+
+```powershell
+ssh-keygen -t rsa -b 2048 -m PEM -f cert_key -q -N '""'
+```
+
+`ssh-keygen` ships with Windows 10 and 11 — no OpenSSL needed. That writes
+`cert_key` (the private key) and `cert_key.pub` (ignore it).
+
+```powershell
+Get-Content cert_key | Set-Clipboard
+```
+
+Paste into a Codemagic variable named `CERTIFICATE_PRIVATE_KEY` in group
+`bulkr_secrets`, and **tick Secure**. Include the
+`-----BEGIN RSA PRIVATE KEY-----` and `-----END RSA PRIVATE KEY-----` lines.
+
+Then delete the local copy — Codemagic has it now, and it is the one file here
+that genuinely is a credential:
+
+```powershell
+Remove-Item cert_key, cert_key.pub
+```
+
+Generated once and stored, not per build: a fresh key every run would issue a
+new certificate every run, and Apple's limit of two would be gone by the second
+build.
 
 Not from `GoogleService-Info.plist`, which has no `CLIENT_ID` in it — the two
 are different Google Cloud projects, and the plist even says so: its
@@ -167,6 +211,8 @@ already has, so you never have to touch `pubspec.yaml`.
 | --- | --- |
 | `No matching profiles found for bundle identifier ... app_store` | There is no App Store profile yet, which is normal before the first build. The workflow creates one with `--create`; if it still fails, the App Store Connect key is the cause — see below |
 | `No profiles for 'com.alimahmoud.bulkr' were found` | The App ID or the App Store Connect app record does not exist yet — steps 3 and 4 |
+| `Cannot save Signing Certificates without certificate private key` | `CERTIFICATE_PRIVATE_KEY` is missing or truncated — step 5 |
+| `App Store Connect integration "bulkr_asc" does not exist` | The API key is not registered in Codemagic under that exact name |
 | `Provisioning profile doesn't match the entitlements` | Push Notifications not ticked on the App ID |
 | `The bundle version must be higher than the previously uploaded version` | A build with that number already exists; re-run, the counter moves |
 | Pod install fails on a deployment target | A new dependency wants more than iOS 13 — raise it in `ios/Podfile` *and* in Xcode's `IPHONEOS_DEPLOYMENT_TARGET` |

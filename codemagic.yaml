@@ -36,6 +36,21 @@ workflows:
     scripts:
       # Signing, done explicitly rather than through the `ios_signing:` block.
       #
+      # CERTIFICATE_PRIVATE_KEY is the part that is not obvious. Apple issues a
+      # certificate against a private key that never leaves the machine that
+      # made the request — so an existing distribution certificate, made on
+      # someone's Mac for some other app, cannot be reused here at all. That is
+      # what "Cannot save Signing Certificates without certificate private key"
+      # means: the certificate was found, the key to use it was not.
+      #
+      # Handing in a key of our own makes Apple issue a *second* certificate
+      # against it, which leaves the first one alone. Revoking the old one
+      # would also work and would break whatever still signs with it.
+      #
+      # Generated once and stored as a Codemagic secure variable, never
+      # per-build: Apple allows two distribution certificates per account, and
+      # a fresh key each run would burn through that in two builds.
+      #
       # That block fetches whatever profiles already exist and fails with "No
       # matching profiles found for bundle identifier ... and distribution type
       # app_store" when there are none — which is the state every project is in
@@ -49,7 +64,16 @@ workflows:
       # where it was created.
       - name: Fetch or create the signing files
         script: |
-          app-store-connect fetch-signing-files "$BUNDLE_ID" --type IOS_APP_STORE --create
+          if [ -z "$CERTIFICATE_PRIVATE_KEY" ]; then
+            echo "CERTIFICATE_PRIVATE_KEY is not set."
+            echo "See ios/TESTFLIGHT.md, step 5 - it is one ssh-keygen command."
+            exit 1
+          fi
+
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --certificate-key="@env:CERTIFICATE_PRIVATE_KEY" \
+            --create
 
       - name: Load them into a keychain
         script: |
