@@ -120,18 +120,27 @@ Database Webhooks**:
 
     https://supabase.com/dashboard/project/<your ref>/integrations/webhooks/overview
 
-Enable webhooks if prompted, then create the hook:
+Enable webhooks if prompted, then create **two** hooks — identical except for
+the table:
 
 | Field | Value |
 | --- | --- |
-| Table | `public.notifications` |
+| Table | `public.notifications`, and again for `public.messages` |
 | Events | Insert |
 | Type | Supabase Edge Functions |
 | Edge Function | `send-push` |
 | HTTP headers | `x-push-secret` : *the value from step 3* |
 
-If that page will not cooperate, `supabase/push_webhook.sql` sets up the same
-thing in SQL you can read: replace two values at the top and run it.
+Two, because a like and a message are announced differently and only one of
+them has a row in `notifications`. The function tells them apart by the
+`table` field the webhook sends, so nothing else differs.
+
+If that page will not cooperate, the same setup exists as SQL you can read:
+`supabase/push_webhook.sql` for notifications, `supabase/chat_push.sql` for
+messages. Replace two values at the top of each and run it.
+
+`chat_push.sql` also creates `message_push_payload`, which is needed either
+way — run it even if you set the webhook up in the dashboard.
 
 Either route ends up as a trigger calling `net.http_post`, which is
 asynchronous — pg_net queues the request and a background worker drains it, so
@@ -188,10 +197,21 @@ list uses. It returns nothing for a notification already marked read — the
 webhook fires on insert, so that only happens when the user was looking at the
 screen as it arrived, which is when a buzzing phone is most annoying.
 
-Direct messages are not wired to push. They do not go through `notifications`
-at all, by design — see the note at the top of `supabase/notifications.sql`.
-Adding them means a second webhook on `public.messages` and a second payload
-function; the shape here is meant to be copied for it.
+Direct messages take the other route. They still do not go through
+`notifications` — a message that produced both a thread badge and an inbox row
+would be one event announced twice — so `message_push_payload` in
+`supabase/chat_push.sql` reads the message directly. It differs from the
+notification path in three ways worth knowing:
+
+- The title is the sender's name rather than `Bulkr`. A message is from a
+  person, and hiding who it is from means opening the app to find out.
+- The body is the message, trimmed to 140 characters.
+- It sends nothing to somebody whose `last_read_at` is already past the
+  message. pg_net is asynchronous, so this runs a moment after the insert —
+  long enough for whoever had the thread open to have marked it read over
+  Realtime.
+
+Blocked pairs are skipped in both directions.
 
 ## Checking it works
 
@@ -205,3 +225,26 @@ Then have a second account follow the first. Dashboard → Edge Functions →
 send-push → Logs. `{"sent":1}` is success. `{"sent":0}` means the row was
 found but no device was registered for that user; a 403 means the webhook
 header does not match the secret.
+
+The response also carries `kind`, so a log line says which of the two hooks
+fired. If messages push and notifications do not, or the other way round, that
+is the field that tells you which webhook is missing.
+
+To see what Postgres actually sent, rather than what the function received:
+
+```sql
+select id, created, status_code, content
+  from net._http_response
+ order by created desc
+ limit 5;
+```
+
+Empty means nothing fired at all — no webhook, and no trigger either.
+
+### iOS sends nothing without an APNs key
+
+Worth ruling out first on an iPhone, because the symptom is silence rather
+than an error: no `.p8` uploaded to Firebase → Cloud Messaging means
+`getToken()` returns null, the device never registers, and every push reports
+`{"sent":0}` for that user however correct everything else is. See
+`ios/TESTFLIGHT.md`.

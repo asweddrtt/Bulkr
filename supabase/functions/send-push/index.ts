@@ -32,6 +32,8 @@ interface PushTarget {
   platform: string | null;
   title: string;
   body: string;
+  /// Only on message pushes: what to open when the notification is tapped.
+  conversation_id?: string;
 }
 
 function json(body: unknown, status: number): Response {
@@ -148,22 +150,29 @@ Deno.serve(async (request: Request) => {
     return json({ error: "not_configured" }, 500);
   }
 
-  let notificationId: string | undefined;
+  let rowId: string | undefined;
+  // Two webhooks land here: one on `notifications`, one on `messages`. They
+  // are the same POST with a different `table`, so the table decides which
+  // query knows how to turn the row into something worth waking a phone for.
+  // Anything else is treated as a notification, which is what the original
+  // single-purpose webhook sent before this function had two callers.
+  let kind: "notification" | "message" = "notification";
   try {
     const payload = await request.json();
     // The webhook sends the whole row under `record`.
-    notificationId = payload?.record?.id ?? payload?.id;
+    rowId = payload?.record?.id ?? payload?.id;
+    if (payload?.table === "messages") kind = "message";
   } catch {
     return json({ error: "bad_request" }, 400);
   }
 
-  if (!notificationId) return json({ error: "bad_request" }, 400);
+  if (!rowId) return json({ error: "bad_request" }, 400);
 
   const admin = createClient(url, serviceRole);
 
-  const { data, error } = await admin.rpc("push_payload", {
-    p_notification: notificationId,
-  });
+  const { data, error } = kind === "message"
+    ? await admin.rpc("message_push_payload", { p_message: rowId })
+    : await admin.rpc("push_payload", { p_notification: rowId });
 
   if (error) return json({ error: error.message }, 500);
 
@@ -172,7 +181,7 @@ Deno.serve(async (request: Request) => {
   // Nothing to do is a success. A user with no devices registered, or one who
   // read the notification before this fired, is not a failure — and returning
   // an error would make the webhook retry something that will never work.
-  if (targets.length === 0) return json({ sent: 0 }, 200);
+  if (targets.length === 0) return json({ sent: 0, kind }, 200);
 
   const bearer = await accessToken();
   const endpoint =
@@ -194,7 +203,14 @@ Deno.serve(async (request: Request) => {
         message: {
           token: target.token,
           notification: { title: target.title, body: target.body },
-          data: { notification_id: notificationId },
+          // Read by the app when a notification is tapped. A message carries
+          // the thread rather than a notification id, because there is no
+          // notifications row behind it — direct messages stay out of that
+          // table on purpose, so the inbox does not announce what the thread
+          // badge already has.
+          data: kind === "message"
+            ? { kind, conversation_id: target.conversation_id ?? "" }
+            : { kind, notification_id: rowId },
           android: { priority: "high" },
         },
       }),
@@ -217,5 +233,5 @@ Deno.serve(async (request: Request) => {
     await admin.from("device_tokens").delete().in("token", dead);
   }
 
-  return json({ sent, removed: dead.length }, 200);
+  return json({ sent, removed: dead.length, kind }, 200);
 });
