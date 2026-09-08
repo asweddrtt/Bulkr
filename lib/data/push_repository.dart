@@ -41,9 +41,11 @@ class PushRepository {
           'token': token,
           'user_id': userId,
           'platform': platform,
-          // Bumped on every registration, which is every app start. What tells
-          // a live device from one uninstalled a year ago.
-          'last_seen_at': DateTime.now().toUtc().toIso8601String(),
+          // `last_seen_at` is deliberately absent. A trigger sets it to the
+          // server's `now()` on every insert and update — see
+          // `supabase/chat_read_clock.sql`. Sending this phone's clock instead
+          // is what put a `last_seen_at` earlier than its own `created_at` in
+          // the table.
         },
         onConflict: 'token',
       );

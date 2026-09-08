@@ -170,18 +170,35 @@ Deno.serve(async (request: Request) => {
 
   const admin = createClient(url, serviceRole);
 
+  const rpc = kind === "message" ? "message_push_payload" : "push_payload";
   const { data, error } = kind === "message"
-    ? await admin.rpc("message_push_payload", { p_message: rowId })
-    : await admin.rpc("push_payload", { p_notification: rowId });
+    ? await admin.rpc(rpc, { p_message: rowId })
+    : await admin.rpc(rpc, { p_notification: rowId });
 
-  if (error) return json({ error: error.message }, 500);
+  // Named, and with the code. `PGRST202` is "no such function" — the SQL for
+  // this route was never run — and that is worth reading off a log line rather
+  // than deducing.
+  if (error) {
+    return json({ error: error.message, code: error.code, rpc, kind }, 500);
+  }
 
-  const targets = (data ?? []) as PushTarget[];
+  // A query that returned nothing at all is not a query that returned no rows,
+  // and the two must not print the same thing. `data ?? []` collapsed them, so
+  // one 200 {"sent":0} covered both "nobody to wake" and "that call did not do
+  // what I think it did" — which cost a debugging round working out which.
+  if (!Array.isArray(data)) {
+    return json(
+      { error: "unexpected_payload", rpc, kind, got: data === null ? "null" : typeof data },
+      500,
+    );
+  }
+
+  const targets = data as PushTarget[];
 
   // Nothing to do is a success. A user with no devices registered, or one who
   // read the notification before this fired, is not a failure — and returning
   // an error would make the webhook retry something that will never work.
-  if (targets.length === 0) return json({ sent: 0, kind }, 200);
+  if (targets.length === 0) return json({ sent: 0, kind, rpc }, 200);
 
   const bearer = await accessToken();
   const endpoint =
