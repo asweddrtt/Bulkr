@@ -183,9 +183,36 @@ class ChatRepository {
   /// A timestamp rather than a counter — see the note on
   /// `conversation_members.last_read_at`. Non-fatal by contract: the caller
   /// treats a failure as "the badge is stale", which the next open corrects.
+  ///
+  /// Written by the server, not by this phone. `last_read_at` is only ever
+  /// compared against `messages.created_at`, which is the server's `now()` —
+  /// for the unread badge, for the read receipt, and for whether a message is
+  /// worth pushing. Sending a device timestamp made that a comparison between
+  /// two clocks with no reason to agree: a phone running a minute fast writes
+  /// a read time in the future and quietly marks the next minute of messages
+  /// as already seen. PostgREST cannot put `now()` in an update payload, so it
+  /// takes a function.
   Future<void> markRead(String conversationId) async {
     final String? userId = _userId;
     if (userId == null) return;
+
+    try {
+      await _client.rpc(
+        'mark_conversation_read',
+        params: {'p_conversation': conversationId},
+      );
+      return;
+    } on PostgrestException catch (error) {
+      // PGRST202 is "no such function": a project that has not run
+      // `chat_read_clock.sql` yet. Falling back keeps chat working there
+      // rather than breaking the badge outright — with this phone's clock,
+      // which is the old behaviour and the old flaw.
+      if (error.code != 'PGRST202') rethrow;
+      debugPrint(
+        'Bulkr: mark_conversation_read is missing — falling back to this '
+        "device's clock. Run supabase/chat_read_clock.sql.",
+      );
+    }
 
     await _client
         .from('conversation_members')
