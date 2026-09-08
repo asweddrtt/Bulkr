@@ -274,6 +274,48 @@ Android is unaffected by all of this — a `{"sent":1}` beside a 401 in the same
 minute is one platform working and the other refused, not an intermittent
 fault.
 
+#### When the Key ID and Team ID are demonstrably right
+
+Then it is the file, and Firebase cannot tell you so. It stores the `.p8` you
+picked and the Key ID you *typed*, and never checks one against the other — so
+a screen showing the correct Key ID and Team ID beside the wrong key file
+looks exactly like a screen showing a correct setup. Apple is the first thing
+in the chain that verifies the signature, and `InvalidProviderToken` is what
+that verification failing sounds like.
+
+There is no way to confirm the file from Firebase's side, and Apple only
+allows a key to be downloaded once, so an existing key cannot be re-fetched to
+compare. The way out is a new key rather than an audit:
+
+- Create a second APNs key and upload that. An account may hold two.
+- Do **not** revoke the old one first if it also carries Sign In with Apple —
+  Supabase's Apple provider is configured with that same `.p8`, and revoking
+  it breaks the browser sign-in flow on Android.
+- Prefer a key with APNs and nothing else. One key serving both push and
+  sign-in means one revocation breaking both, and it is why the wrong file
+  ends up uploaded in the first place: two `.p8` downloads, months apart, for
+  two different purposes.
+
+### `{"sent":1}` is FCM accepting, not a phone displaying
+
+Worth being precise about, because it is easy to read as proof and it is not.
+FCM validates the token's shape and queues the message; a token belonging to a
+phone that has been wiped, or an app uninstalled weeks ago, is accepted just
+the same. So `sent:1` against a stale row in `device_tokens` is a success
+line for a notification nobody will ever see.
+
+Which devices are actually live:
+
+```sql
+select platform, last_seen_at, now() - last_seen_at as idle
+  from public.device_tokens
+ order by last_seen_at desc;
+```
+
+`last_seen_at` is bumped on every app start. A row idle for days is a device
+that is not going to show anything, and it will keep inflating `sent` until it
+is deleted.
+
 ### iOS sends nothing without an APNs key at all
 
 Worth ruling out first on an iPhone, because the symptom is silence rather
