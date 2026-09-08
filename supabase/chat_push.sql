@@ -164,7 +164,52 @@ create trigger messages_send_push
 --    order by created desc
 --    limit 5;
 --
--- 200 with {"sent":1} is delivery. {"sent":0} means the query above found no
--- devices to send to — usually no `device_tokens` row for the recipient, or
--- they had the thread open. 403 is the secret not matching. 401 is the
+-- 200 with {"sent":1} is delivery. 403 is the secret not matching. 401 is the
 -- function deployed without --no-verify-jwt.
+--
+-- ---------------------------------------------------------------------------
+-- 4. {"sent":0} — which gate closed
+-- ---------------------------------------------------------------------------
+-- Zero is not a failure on its own: it means the webhook fired, the function
+-- ran, and the query above found nobody to wake. Three conditions can do that
+-- and the response cannot tell them apart, so ask directly. This reports the
+-- most recent message and, for every recipient of it, what each condition
+-- says:
+--
+--   devices = 0            no `device_tokens` row. On iPhone this is usually
+--                          no APNs key uploaded to Firebase, so the app never
+--                          received a token to register.
+--   unread = false         `last_read_at` is already past the message. Either
+--                          they really were reading it, or the app marked it
+--                          read over Realtime moments after it arrived.
+--   blocked = true         a block in one direction or the other.
+--
+-- All three false-ish and it should have sent — in which case the message id
+-- printed here is the one to pass to `message_push_payload` by hand.
+
+with recent as (
+  select id, conversation_id, sender_id, created_at, body
+    from public.messages
+   order by created_at desc
+   limit 1
+)
+select
+  m.id            as message_id,
+  m.created_at    as sent_at,
+  coalesce(su.username, '(deleted)') as from_user,
+  coalesce(ru.username, '(unknown)') as to_user,
+  (select count(*) from public.device_tokens d where d.user_id = r.user_id)
+                  as devices,
+  r.last_read_at,
+  r.last_read_at < m.created_at as unread,
+  exists (
+    select 1 from public.blocks b
+     where (b.blocker_id = r.user_id and b.blocked_id = m.sender_id)
+        or (b.blocker_id = m.sender_id and b.blocked_id = r.user_id)
+  )               as blocked
+from recent m
+join public.conversation_members r
+  on r.conversation_id = m.conversation_id
+ and r.user_id is distinct from m.sender_id
+left join public.users ru on ru.id = r.user_id
+left join public.users su on su.id = m.sender_id;
