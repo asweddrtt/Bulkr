@@ -241,7 +241,40 @@ select id, created, status_code, content
 
 Empty means nothing fired at all — no webhook, and no trigger either.
 
-### iOS sends nothing without an APNs key
+### `Invalid APNs credential` / `THIRD_PARTY_AUTH_ERROR`
+
+A 401 with this body means the key is uploaded and **Apple rejected it**.
+Firebase mints a JWT from the `.p8` plus the Key ID and Team ID you typed in
+beside it, and Apple threw that JWT out. So all three are suspect, and the
+same error covers every one of them:
+
+1. **Is it actually an APNs key?** Both an APNs key and an App Store Connect
+   API key are `.p8` files downloaded exactly once, and Bulkr needs one of
+   each — the API key goes to Codemagic, the APNs key goes to Firebase.
+   Uploading the wrong one produces precisely this error. An APNs key comes
+   from Certificates, Identifiers & Profiles -> **Keys** with **Apple Push
+   Notifications service (APNs)** ticked. If in doubt, make a new one: an
+   account can hold two.
+
+2. **Is the Team ID a Team ID?** Ten characters, letters and digits, from
+   developer.apple.com -> Membership details. The App Store Connect key has an
+   **Issuer ID** instead, which is a dashed UUID. They sit next to each other
+   in the same workflow and pasting the UUID here fails exactly like this.
+
+3. **Does the Key ID match the file?** Ten characters, shown against the key
+   in the Keys list. It is not interchangeable with the API key's own Key ID,
+   which is also ten characters.
+
+Then check it landed on the right app: Cloud Messaging lists Apple app
+configuration per iOS app, and a project with more than one has more than one
+place to put it. It belongs under the app whose bundle ID is
+`com.alimahmoud.bulkr`.
+
+Android is unaffected by all of this — a `{"sent":1}` beside a 401 in the same
+minute is one platform working and the other refused, not an intermittent
+fault.
+
+### iOS sends nothing without an APNs key at all
 
 Worth ruling out first on an iPhone, because the symptom is silence rather
 than an error: no `.p8` uploaded to Firebase → Cloud Messaging means

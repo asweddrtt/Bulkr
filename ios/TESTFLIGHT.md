@@ -233,6 +233,7 @@ already has, so you never have to touch `pubspec.yaml`.
 | `The sandbox is not in sync with the Podfile.lock` | Something reintroduced a Podfile. All plugins are Swift Packages; there should not be one |
 | A pod wants a higher deployment target | Raise `IPHONEOS_DEPLOYMENT_TARGET` in `project.pbxproj` and `MinimumOSVersion` in `ios/Flutter/AppFrameworkInfo.plist` — both, or Flutter rewrites them mid-build |
 | Google sign-in opens and returns nothing | Step 2 was skipped |
+| Push logs `401` `Invalid APNs credential` / `THIRD_PARTY_AUTH_ERROR` | The APNs key is uploaded and Apple rejected it. Usually the App Store Connect API key `.p8` uploaded to Firebase by mistake, or its Issuer ID (a dashed UUID) pasted where the 10-character Team ID goes. See `supabase/functions/send-push/README.md` |
 | `Passed nonce and nonce in id_token should either both exist or not` | The app and Supabase disagreed about whether a nonce exists. Handled in `lib/core/oauth_nonce.dart` now; if it returns, the ID token's `nonce` claim is something neither branch there expects |
 | `PlatformException(Error, Error while launching https://...authorize?provider=apple)` | The browser flow. iOS should never reach it — check `_isApplePlatform` in `auth_repository.dart` |
 | Apple sheet appears, then an audience or client error | Step 3b was skipped |
