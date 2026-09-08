@@ -245,7 +245,13 @@ Deno.serve(async (request: Request) => {
     }
 
     const detail = await response.text().catch(() => "");
-    failures.push({ status: response.status, detail: detail.slice(0, 400) });
+    // 400 was too short by about thirty characters. FCM nests Apple's own
+    // reason inside its reply — an `ApnsError` with the 403 and a `reason`
+    // like `InvalidProviderToken` — and that nested reason is the only part
+    // that says which of the three credential fields Apple objected to. It
+    // arrived cut off mid-word. These bodies are under a kilobyte; there was
+    // never anything to save by trimming them this hard.
+    failures.push({ status: response.status, detail: detail.slice(0, 1500) });
 
     // 404 is UNREGISTERED: the app was uninstalled or the token was rotated,
     // and that row will never deliver again, so it goes.
