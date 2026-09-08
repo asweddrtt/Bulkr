@@ -6,6 +6,62 @@ import 'package:flutter/foundation.dart';
 
 import 'push_repository.dart';
 
+/// A notification the user tapped.
+///
+/// Parsed out of the `data` map `send-push` attaches, and kept a plain value
+/// so the parsing can be tested — none of the rest of this file can be, since
+/// permission dialogs and platform channels do not run in a unit test, and the
+/// part that decides where a tap goes should not be trapped behind them.
+@immutable
+class PushTap {
+  const PushTap({required this.kind, this.conversationId, this.notificationId});
+
+  /// `message` or `notification`. Not an enum: it arrives as a string from a
+  /// server that may be a version ahead of this app, and an unrecognised kind
+  /// should land somewhere sensible rather than crash.
+  final String kind;
+
+  /// The thread to open, for a direct message.
+  final String? conversationId;
+
+  /// The row to highlight, for anything in the notifications inbox.
+  final String? notificationId;
+
+  /// Whether this is a message rather than feed activity.
+  bool get isMessage => kind == 'message';
+
+  /// Null when there is nothing here worth acting on.
+  ///
+  /// A tap with no usable data still opens the app — that is iOS's doing, not
+  /// ours — and returning null lets the caller leave the user where they were
+  /// instead of navigating somewhere arbitrary.
+  static PushTap? fromData(Map<String, dynamic> data) {
+    String? text(String key) {
+      final Object? value = data[key];
+      if (value is! String) return null;
+      final String trimmed = value.trim();
+      return trimmed.isEmpty ? null : trimmed;
+    }
+
+    final String? conversationId = text('conversation_id');
+    final String? notificationId = text('notification_id');
+    final String? kind = text('kind');
+
+    if (kind == null && conversationId == null && notificationId == null) {
+      return null;
+    }
+
+    return PushTap(
+      // Inferred from what is present when the server did not say. Builds of
+      // the function predating the `kind` field sent one identifier and no
+      // label, and their notifications are still in people's trays.
+      kind: kind ?? (conversationId != null ? 'message' : 'notification'),
+      conversationId: conversationId,
+      notificationId: notificationId,
+    );
+  }
+}
+
 /// Firebase Cloud Messaging, and nothing else.
 ///
 /// Split from [PushRepository] on purpose. That one writes a token to a table
@@ -131,6 +187,49 @@ class PushService {
       });
     } catch (error) {
       debugPrint('Bulkr push: registration failed — $error');
+    }
+  }
+
+  /// Notifications tapped while the app was running in the background.
+  ///
+  /// Empty rather than throwing when Firebase never initialised: a listener
+  /// that has to ask whether push exists before subscribing is a listener
+  /// every caller gets wrong once.
+  Stream<PushTap> get taps {
+    if (!isSupported || Firebase.apps.isEmpty) {
+      return const Stream<PushTap>.empty();
+    }
+
+    try {
+      // Static on the plugin, not per-instance — so unlike the rest of this
+      // class it cannot be pointed at an injected fake.
+      return FirebaseMessaging.onMessageOpenedApp
+          .map((RemoteMessage message) => PushTap.fromData(message.data))
+          .where((PushTap? tap) => tap != null)
+          .cast<PushTap>();
+    } catch (error) {
+      debugPrint('Bulkr push: tap stream unavailable — $error');
+      return const Stream<PushTap>.empty();
+    }
+  }
+
+  bool _initialTapTaken = false;
+
+  /// The notification that launched the app from cold, if one did.
+  ///
+  /// Answers once. The plugin will hand the same message back on a second ask,
+  /// and two answers means the thread opens twice — one screen stacked on an
+  /// identical screen, with a back gesture that appears not to work.
+  Future<PushTap?> takeInitialTap() async {
+    if (_initialTapTaken || !isSupported || Firebase.apps.isEmpty) return null;
+    _initialTapTaken = true;
+
+    try {
+      final RemoteMessage? message = await _messaging.getInitialMessage();
+      return message == null ? null : PushTap.fromData(message.data);
+    } catch (error) {
+      debugPrint('Bulkr push: launch notification unavailable — $error');
+      return null;
     }
   }
 

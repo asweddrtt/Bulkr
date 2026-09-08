@@ -66,6 +66,12 @@ class AccountSheet extends StatelessWidget {
     return showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
+      // Without this the sheet is capped at nine sixteenths of the screen, and
+      // this one is taller than that: five rows with helper text, sign out,
+      // and delete. Everything past the cap was not clipped-but-reachable, it
+      // was simply gone — sign out included, on a sheet that exists to let
+      // somebody sign out.
+      isScrollControlled: true,
       builder: (_) => AccountSheet(
         email: email,
         username: username,
@@ -92,157 +98,165 @@ class AccountSheet extends StatelessWidget {
             top: BorderSide(color: AppColors.darkBorder, width: 1.h),
           ),
         ),
-        padding: EdgeInsets.fromLTRB(20.w, 10.h, 20.w, 20.h),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Center(
-              child: Container(
-                width: 40.w,
-                height: 4.h,
-                decoration: BoxDecoration(
-                  color: AppColors.darkBorder,
-                  borderRadius: BorderRadius.circular(4.r),
+        // Nine tenths rather than all of it: the strip left over is what the
+        // user taps to dismiss, and a sheet with no way out but a button is
+        // its own bug.
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.9,
+        ),
+        child: SingleChildScrollView(
+          // The padding belongs to the scroll view rather than the box around
+          // it, so the last row can clear the bottom edge instead of stopping
+          // short of it.
+          padding: EdgeInsets.fromLTRB(20.w, 10.h, 20.w, 20.h),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 40.w,
+                  height: 4.h,
+                  decoration: BoxDecoration(
+                    color: AppColors.darkBorder,
+                    borderRadius: BorderRadius.circular(4.r),
+                  ),
                 ),
               ),
-            ),
-            SizedBox(height: 18.h),
-            Text(
-              'account_title'.tr().toUpperCase(),
-              style: GoogleFonts.anton(
-                fontSize: 18.sp,
-                color: Colors.white,
-                letterSpacing: 1,
+              SizedBox(height: 18.h),
+              Text(
+                'account_title'.tr().toUpperCase(),
+                style: GoogleFonts.anton(
+                  fontSize: 18.sp,
+                  color: Colors.white,
+                  letterSpacing: 1,
+                ),
               ),
-            ),
-            SizedBox(height: 12.h),
-            Text(
-              email ?? 'account_no_email'.tr(),
-              style: GoogleFonts.inter(
-                fontSize: 13.sp,
-                color: Colors.white,
+              SizedBox(height: 12.h),
+              Text(
+                email ?? 'account_no_email'.tr(),
+                style: GoogleFonts.inter(fontSize: 13.sp, color: Colors.white),
               ),
-            ),
-            SizedBox(height: 2.h),
-            Text(
-              '@$username',
-              style: GoogleFonts.inter(
-                fontSize: 11.sp,
-                color: const Color(0xFF9CA3AF),
+              SizedBox(height: 2.h),
+              Text(
+                '@$username',
+                style: GoogleFonts.inter(
+                  fontSize: 11.sp,
+                  color: const Color(0xFF9CA3AF),
+                ),
               ),
-            ),
-            SizedBox(height: 24.h),
-            SizedBox(
-              width: double.infinity,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Ordered by how often they are wanted: your own details,
-                  // then what you kept, then making something, then the
-                  // moderation list nobody opens unless they mean to.
-                  if (onEditProfile != null) ...[
+              SizedBox(height: 24.h),
+              SizedBox(
+                width: double.infinity,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Ordered by how often they are wanted: your own details,
+                    // then what you kept, then making something, then the
+                    // moderation list nobody opens unless they mean to.
+                    if (onEditProfile != null) ...[
+                      SheetActionRow(
+                        icon: Icons.edit_outlined,
+                        label: 'account_edit_profile'.tr(),
+                        helper: 'account_edit_profile_helper'.tr(),
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          onEditProfile!();
+                        },
+                      ),
+                      SizedBox(height: 10.h),
+                    ],
                     SheetActionRow(
-                      icon: Icons.edit_outlined,
-                      label: 'account_edit_profile'.tr(),
-                      helper: 'account_edit_profile_helper'.tr(),
+                      icon: Icons.bookmark_border,
+                      label: 'account_saved_posts'.tr(),
+                      helper: 'account_saved_posts_helper'.tr(),
                       onTap: () {
                         Navigator.of(context).pop();
-                        onEditProfile!();
+                        onSavedPosts();
+                      },
+                    ),
+                    SizedBox(height: 10.h),
+                    SheetActionRow(
+                      icon: Icons.emoji_events_outlined,
+                      label: 'account_challenges'.tr(),
+                      helper: 'account_challenges_helper'.tr(),
+                      onTap: () {
+                        Navigator.of(context).pop();
+                        onChallenges();
+                      },
+                    ),
+                    SizedBox(height: 10.h),
+                    SheetActionRow(
+                      icon: Icons.group_add_outlined,
+                      label: 'account_create_group'.tr(),
+                      helper: 'account_create_group_helper'.tr(),
+                      onTap: () {
+                        Navigator.of(context).pop();
+                        onCreateGroup();
                       },
                     ),
                     SizedBox(height: 10.h),
                   ],
-                  SheetActionRow(
-                    icon: Icons.bookmark_border,
-                    label: 'account_saved_posts'.tr(),
-                    helper: 'account_saved_posts_helper'.tr(),
-                    onTap: () {
-                      Navigator.of(context).pop();
-                      onSavedPosts();
-                    },
-                  ),
-                  SizedBox(height: 10.h),
-                  SheetActionRow(
-                    icon: Icons.emoji_events_outlined,
-                    label: 'account_challenges'.tr(),
-                    helper: 'account_challenges_helper'.tr(),
-                    onTap: () {
-                      Navigator.of(context).pop();
-                      onChallenges();
-                    },
-                  ),
-                  SizedBox(height: 10.h),
-                  SheetActionRow(
-                    icon: Icons.group_add_outlined,
-                    label: 'account_create_group'.tr(),
-                    helper: 'account_create_group_helper'.tr(),
-                    onTap: () {
-                      Navigator.of(context).pop();
-                      onCreateGroup();
-                    },
-                  ),
-                  SizedBox(height: 10.h),
-                ],
-              ),
-            ),
-            SizedBox(
-              width: double.infinity,
-              child: SheetActionRow(
-                icon: Icons.block,
-                label: 'account_blocked'.tr(),
-                helper: 'account_blocked_helper'.tr(),
-                onTap: () {
-                  Navigator.of(context).pop();
-                  onManageBlocked();
-                },
-              ),
-            ),
-            SizedBox(height: 14.h),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton(
-                onPressed: () async {
-                  Navigator.of(context).pop();
-                  await onSignOut();
-                },
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFFFF5722),
-                  side: const BorderSide(color: Color(0xFFFF5722)),
-                  padding: EdgeInsets.symmetric(vertical: 14.h),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8.r),
-                  ),
-                ),
-                child: Text(
-                  'sign_out_btn'.tr().toUpperCase(),
-                  style: GoogleFonts.anton(fontSize: 16.sp, letterSpacing: 1),
                 ),
               ),
-            ),
-            SizedBox(height: 18.h),
-            // Last, quiet, and a text button rather than an outlined one. It
-            // should be findable by someone looking for it and not by someone
-            // aiming at sign out — those two are one tap apart and only one of
-            // them can be undone.
-            Center(
-              child: TextButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  onDeleteAccount();
-                },
-                child: Text(
-                  'account_delete'.tr(),
-                  style: GoogleFonts.inter(
-                    color: AppColors.textGray,
-                    fontSize: 11.sp,
-                    decoration: TextDecoration.underline,
-                    decorationColor: AppColors.textGray,
+              SizedBox(
+                width: double.infinity,
+                child: SheetActionRow(
+                  icon: Icons.block,
+                  label: 'account_blocked'.tr(),
+                  helper: 'account_blocked_helper'.tr(),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    onManageBlocked();
+                  },
+                ),
+              ),
+              SizedBox(height: 14.h),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: () async {
+                    Navigator.of(context).pop();
+                    await onSignOut();
+                  },
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFFFF5722),
+                    side: const BorderSide(color: Color(0xFFFF5722)),
+                    padding: EdgeInsets.symmetric(vertical: 14.h),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8.r),
+                    ),
+                  ),
+                  child: Text(
+                    'sign_out_btn'.tr().toUpperCase(),
+                    style: GoogleFonts.anton(fontSize: 16.sp, letterSpacing: 1),
                   ),
                 ),
               ),
-            ),
-          ],
+              SizedBox(height: 18.h),
+              // Last, quiet, and a text button rather than an outlined one. It
+              // should be findable by someone looking for it and not by someone
+              // aiming at sign out — those two are one tap apart and only one of
+              // them can be undone.
+              Center(
+                child: TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    onDeleteAccount();
+                  },
+                  child: Text(
+                    'account_delete'.tr(),
+                    style: GoogleFonts.inter(
+                      color: AppColors.textGray,
+                      fontSize: 11.sp,
+                      decoration: TextDecoration.underline,
+                      decorationColor: AppColors.textGray,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

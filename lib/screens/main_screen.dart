@@ -1,10 +1,15 @@
+import 'dart:async';
+
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../cubit/conversations/conversations_cubit.dart';
 import '../cubit/feed/feed_cubit.dart';
 import '../cubit/notifications/notifications_cubit.dart';
+import '../data/chat_repository.dart';
 import '../data/push_service.dart';
+import '../models/conversation.dart';
 import '../cubit/meals/meals_cubit.dart';
 import '../cubit/profile/profile_cubit.dart';
 import '../cubit/tracker/tracker_cubit.dart';
@@ -14,6 +19,9 @@ import 'meals_screen.dart';
 import 'profile_screen.dart';
 import 'tracker_screen.dart';
 import 'dashboard_screen.dart';
+import 'chat_screen.dart';
+import 'conversations_screen.dart';
+import 'notifications_screen.dart';
 
 /// Post-onboarding shell: bottom navigation over the main sections.
 class MainScreen extends StatefulWidget {
@@ -41,6 +49,8 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   int _currentIndex = 2;
 
+  StreamSubscription<PushTap>? _taps;
+
   @override
   void initState() {
     super.initState();
@@ -50,7 +60,17 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     // on first open, before anyone has seen what the app is, is the one most
     // reliably denied — and on iOS a denial is close to permanent, since the
     // app cannot ask a second time.
-    context.read<PushService>().signIn();
+    final PushService push = context.read<PushService>();
+    push.signIn();
+
+    // A notification that opens the app and then drops you on whatever tab you
+    // last used is a notification that wasted the tap. Two sources: one for a
+    // tap while the app was in the background, one for a tap that launched it
+    // from cold.
+    _taps = push.taps.listen(_openFromPush);
+    push.takeInitialTap().then((PushTap? tap) {
+      if (tap != null) _openFromPush(tap);
+    });
 
     // Fetched once when the shell mounts rather than on each tab switch, so
     // moving between tabs doesn't re-hit the network.
@@ -62,8 +82,84 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _taps?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  /// Where a tapped notification lands.
+  ///
+  /// Never throws: this runs on a stream nobody awaits and on a future nobody
+  /// catches, so an exception here would be an unhandled one — on the launch
+  /// path, which is the worst place in the app to have one.
+  Future<void> _openFromPush(PushTap tap) async {
+    if (!mounted) return;
+
+    try {
+      if (!tap.isMessage) {
+        await NotificationsScreen.open(context);
+        return;
+      }
+
+      final String? conversationId = tap.conversationId;
+      if (conversationId == null) {
+        // A message with no thread on it. The inbox is still the right answer
+        // — it is where the message is.
+        await ConversationsScreen.open(context);
+        return;
+      }
+
+      await _openThread(conversationId);
+    } catch (error) {
+      debugPrint('Bulkr: could not open a tapped notification — $error');
+    }
+  }
+
+  /// Opens one thread, having worked out whose it is.
+  ///
+  /// The push carries a conversation id and nothing else, while the chat screen
+  /// needs a name for its title. Rather than a new endpoint for one field, this
+  /// reads the inbox the user already has and takes the row — one call, a list
+  /// bounded by how many people they talk to, and it doubles as the check that
+  /// the thread is still theirs to open.
+  Future<void> _openThread(String conversationId) async {
+    final ChatRepository chat = context.read<ChatRepository>();
+    final ConversationsCubit conversations = context.read<ConversationsCubit>();
+    final NavigatorState navigator = Navigator.of(context);
+
+    final List<Conversation> threads = await chat.fetchConversations();
+    if (!mounted) return;
+
+    final Conversation? thread = threads
+        .where((Conversation c) => c.id == conversationId)
+        .firstOrNull;
+
+    // Gone, or never theirs. The inbox rather than an error: by the time
+    // somebody taps a notification the thread may have been deleted, and a
+    // screen that says so is less use than the list of the ones that remain.
+    if (thread == null) {
+      await ConversationsScreen.open(context);
+      return;
+    }
+
+    // Same as opening it from the inbox: zero the badge before the screen
+    // rather than after, so the list behind it is not still counting what is
+    // on screen.
+    conversations.markSeen(thread.id);
+
+    await ChatScreen.open(
+      navigator: navigator,
+      chat: chat,
+      conversationId: thread.id,
+      currentUserId: chat.currentUserId,
+      title: thread.otherName.isEmpty
+          ? 'chat_person_gone'.tr()
+          : thread.otherName,
+      otherId: thread.otherId,
+      avatarUrl: thread.otherAvatarUrl,
+    );
+
+    await conversations.refresh();
   }
 
   /// Two things that go stale while the app is not being looked at.

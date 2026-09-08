@@ -87,4 +87,91 @@ void main() {
           reason: 'the Gradle plugin fails the build without it');
     });
   });
+
+  group('PushTap.fromData decides where a tap lands', () {
+    // The `data` map send-push attaches. Getting this wrong does not crash
+    // anything — it just drops the user on the wrong screen after they took
+    // the trouble to tap, which is the sort of bug nobody reports.
+    test('a message carries its thread', () {
+      final PushTap? tap = PushTap.fromData(<String, dynamic>{
+        'kind': 'message',
+        'conversation_id': 'c-1',
+      });
+
+      expect(tap, isNotNull);
+      expect(tap!.isMessage, isTrue);
+      expect(tap.conversationId, 'c-1');
+    });
+
+    test('feed activity carries its notification', () {
+      final PushTap? tap = PushTap.fromData(<String, dynamic>{
+        'kind': 'notification',
+        'notification_id': 'n-1',
+      });
+
+      expect(tap!.isMessage, isFalse);
+      expect(tap.notificationId, 'n-1');
+    });
+
+    test('a payload with no kind is read from what it does carry', () {
+      // Builds of the function before `kind` existed sent one identifier and
+      // no label, and their notifications are still sitting in trays.
+      expect(
+        PushTap.fromData(<String, dynamic>{'conversation_id': 'c-9'})!.isMessage,
+        isTrue,
+      );
+      expect(
+        PushTap.fromData(<String, dynamic>{'notification_id': 'n-9'})!.isMessage,
+        isFalse,
+      );
+    });
+
+    test('an empty string is not an id', () {
+      // FCM data values are always strings, so an absent conversation arrives
+      // as "" rather than as null — and "" would send the app looking for a
+      // thread that cannot exist.
+      final PushTap? tap = PushTap.fromData(<String, dynamic>{
+        'kind': 'message',
+        'conversation_id': '   ',
+      });
+
+      expect(tap, isNotNull);
+      expect(tap!.isMessage, isTrue);
+      expect(tap.conversationId, isNull,
+          reason: 'the caller opens the inbox on a null, and would otherwise '
+              'query for a blank id');
+    });
+
+    test('nothing usable returns null rather than a default', () {
+      // A tap with no data still opens the app; that is iOS, not us. Null lets
+      // the caller leave the user where they were instead of navigating
+      // somewhere arbitrary.
+      expect(PushTap.fromData(<String, dynamic>{}), isNull);
+      expect(PushTap.fromData(<String, dynamic>{'other': 'thing'}), isNull);
+      expect(PushTap.fromData(<String, dynamic>{'kind': ''}), isNull);
+    });
+
+    test('a non-string value is ignored rather than crashing', () {
+      // The map is typed dynamic. A server sending a number here should be a
+      // missing id, not an exception on the launch path.
+      final PushTap? tap = PushTap.fromData(<String, dynamic>{
+        'kind': 'message',
+        'conversation_id': 42,
+      });
+
+      expect(tap!.conversationId, isNull);
+    });
+
+    test('an unknown kind is treated as feed activity', () {
+      // A server a version ahead of this app. Anything that is not a message
+      // belongs in the notifications inbox, which is where everything else
+      // lives.
+      final PushTap? tap = PushTap.fromData(<String, dynamic>{
+        'kind': 'something_new',
+        'notification_id': 'n-2',
+      });
+
+      expect(tap!.isMessage, isFalse);
+    });
+  });
 }
