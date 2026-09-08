@@ -205,6 +205,12 @@ Deno.serve(async (request: Request) => {
     `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`;
 
   const dead: string[] = [];
+  // What FCM refused, and why it said so. Without this a rejection is
+  // invisible: `sent` simply fails to increment, and the response is the same
+  // 200 {"sent":0} as having nobody to send to. The two are nothing alike —
+  // the commonest cause of the first is no APNs key uploaded to Firebase, and
+  // FCM says exactly that if anyone reads the reply.
+  const failures: Array<{ status: number; detail: string }> = [];
   let sent = 0;
 
   // One request per device. FCM v1 has no batch endpoint any more, and the
@@ -238,10 +244,23 @@ Deno.serve(async (request: Request) => {
       return;
     }
 
-    // 404 is UNREGISTERED and 400 is usually an invalid token: the app was
-    // uninstalled, or the token was rotated. Both mean this row will never
-    // deliver again, so it goes rather than being retried forever.
-    if (response.status === 404 || response.status === 400) {
+    const detail = await response.text().catch(() => "");
+    failures.push({ status: response.status, detail: detail.slice(0, 400) });
+
+    // 404 is UNREGISTERED: the app was uninstalled or the token was rotated,
+    // and that row will never deliver again, so it goes.
+    //
+    // 400 used to be treated the same way, which was a mistake worth naming.
+    // FCM returns 400 INVALID_ARGUMENT for a bad *token* and for a bad
+    // *payload*, and a payload this function got wrong would come back 400 for
+    // every device at once — deleting every registration in the table because
+    // of one malformed field. Only the reply distinguishes them, so a 400 now
+    // has to say it is about the token.
+    if (response.status === 404) {
+      dead.push(target.token);
+    } else if (
+      response.status === 400 && /registration token/i.test(detail)
+    ) {
       dead.push(target.token);
     }
   }));
@@ -250,5 +269,14 @@ Deno.serve(async (request: Request) => {
     await admin.from("device_tokens").delete().in("token", dead);
   }
 
-  return json({ sent, removed: dead.length, kind }, 200);
+  // Only the first few: this is a log line, and one person's devices number in
+  // the single digits but the same rejection repeats for every one of them.
+  return json({
+    sent,
+    removed: dead.length,
+    kind,
+    ...(failures.length > 0
+      ? { failed: failures.length, failures: failures.slice(0, 3) }
+      : {}),
+  }, 200);
 });
