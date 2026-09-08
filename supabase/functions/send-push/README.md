@@ -296,6 +296,20 @@ compare. The way out is a new key rather than an audit:
   ends up uploaded in the first place: two `.p8` downloads, months apart, for
   two different purposes.
 
+### A notification that arrives in silence
+
+Sound is not a default, it is a field. FCM v1 sends nothing audible for a
+message carrying only a top-level `notification`: the alert appears, the phone
+stays quiet, and because sound permission was granted and the phone is not on
+silent it reads as a device setting rather than a missing line of JSON. The
+legacy API had `notification.sound`; v1 moved it into the per-platform blocks,
+so it lives in `apns.payload.aps.sound` and `android.notification.sound` and
+has to be set in both.
+
+`apns-priority: 10` goes with it. The default of 5 lets iOS hold an alert back
+to save power, which is the wrong trade for a direct message — that is the one
+notification somebody is actually waiting on.
+
 ### `{"sent":1}` is FCM accepting, not a phone displaying
 
 Worth being precise about, because it is easy to read as proof and it is not.

@@ -234,7 +234,35 @@ Deno.serve(async (request: Request) => {
           data: kind === "message"
             ? { kind, conversation_id: target.conversation_id ?? "" }
             : { kind, notification_id: rowId },
-          android: { priority: "high" },
+          // Sound has to be asked for. FCM v1 does not add one: a message with
+          // a `notification` and nothing else arrives, displays, and makes no
+          // noise — on a phone that is not on silent, with sound permission
+          // granted, which is why it reads as a phone setting rather than as a
+          // missing field. The legacy API had `notification.sound`; v1 moved it
+          // into the per-platform blocks, and there was no `apns` block here at
+          // all.
+          android: {
+            priority: "high",
+            notification: { sound: "default" },
+          },
+          apns: {
+            headers: {
+              // 10 is "deliver immediately". The default of 5 lets iOS hold an
+              // alert back to save power, which for a direct message is the
+              // wrong trade — it is the one notification the user is waiting
+              // on.
+              "apns-priority": "10",
+              // Required by APNs for anything that shows an alert. FCM fills it
+              // in, but only by inferring from the payload, and it is cheaper
+              // to say so than to depend on the inference.
+              "apns-push-type": "alert",
+            },
+            payload: {
+              // The alert itself still comes from `notification` above; this
+              // adds to that rather than replacing it.
+              aps: { sound: "default" },
+            },
+          },
         },
       }),
     });
