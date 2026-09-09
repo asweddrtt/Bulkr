@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:bulkr/core/image_safety.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 import 'package:nsfw_detect/nsfw_detect.dart';
 
 /// The threshold, the score it is compared against, and the direction the
@@ -127,6 +128,70 @@ void main() {
   test('a scan with no labels scores zero rather than throwing', () {
     // What a `skipped` result or a cache hit with nothing in it looks like.
     expect(ImageSafety.scoreOf(resultWith(const <NsfwLabel>[])), 0.0);
+  });
+
+  group('the channel-order experiment', () {
+    // The reason every image is scored twice: the bundled model declares an
+    // RGB input but bakes in open_nsfw's BGR means, and nothing in it reverses
+    // the channels back. Scoring both orders settles by measurement what
+    // reading the weights cannot.
+    //
+    // If this swap silently did nothing, two identical renderings would be
+    // scored twice and every log line would look exactly like the experiment
+    // having been run. So it is tested for real.
+    test('exchanges red and blue and leaves green alone', () {
+      final img.Image source = img.Image(width: 2, height: 1);
+      source.setPixelRgb(0, 0, 10, 20, 30);
+      source.setPixelRgb(1, 0, 200, 100, 0);
+
+      final img.Image swapped = swapRedAndBlue(source);
+
+      expect(
+        <num>[
+          swapped.getPixel(0, 0).r,
+          swapped.getPixel(0, 0).g,
+          swapped.getPixel(0, 0).b,
+        ],
+        <num>[30, 20, 10],
+      );
+      expect(
+        <num>[
+          swapped.getPixel(1, 0).r,
+          swapped.getPixel(1, 0).g,
+          swapped.getPixel(1, 0).b,
+        ],
+        <num>[0, 100, 200],
+      );
+    });
+
+    test('leaves the image it was given untouched', () {
+      // The two renderings are scored one after the other, so mutating the
+      // source in place would make the first one meaningless.
+      final img.Image source = img.Image(width: 1, height: 1);
+      source.setPixelRgb(0, 0, 10, 20, 30);
+
+      swapRedAndBlue(source);
+
+      expect(
+        <num>[
+          source.getPixel(0, 0).r,
+          source.getPixel(0, 0).g,
+          source.getPixel(0, 0).b,
+        ],
+        <num>[10, 20, 30],
+      );
+    });
+
+    test('a grey image is its own swap, so it proves nothing on its own', () {
+      // Worth stating: on a greyscale photo both renderings are identical and
+      // the doubled scan is pure cost. It is the colour photos that carry the
+      // signal, which is most of them.
+      final img.Image grey = img.Image(width: 1, height: 1);
+      grey.setPixelRgb(0, 0, 128, 128, 128);
+
+      final img.Pixel swapped = swapRedAndBlue(grey).getPixel(0, 0);
+      expect(<num>[swapped.r, swapped.g, swapped.b], <num>[128, 128, 128]);
+    });
   });
 
   test('empty bytes are not an image and are not refused', () async {
