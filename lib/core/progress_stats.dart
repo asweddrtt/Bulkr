@@ -13,8 +13,8 @@ class ProgressStats {
     required List<WeightEntry> history,
     required this.targetWeightKg,
     DateTime? asOf,
-  })  : _history = _sorted(history),
-        _asOf = asOf ?? DateTime.now();
+  }) : _history = _sorted(history),
+       _asOf = asOf ?? DateTime.now();
 
   /// Oldest first.
   final List<WeightEntry> _history;
@@ -35,9 +35,11 @@ class ProgressStats {
   /// A rate needs two points at different times.
   bool get hasTrend => _history.length >= 2;
 
-  double? get startWeightKg => _history.isEmpty ? null : _history.first.weightKg;
+  double? get startWeightKg =>
+      _history.isEmpty ? null : _history.first.weightKg;
 
-  double? get latestWeightKg => _history.isEmpty ? null : _history.last.weightKg;
+  double? get latestWeightKg =>
+      _history.isEmpty ? null : _history.last.weightKg;
 
   DateTime? get lastLoggedAt =>
       _history.isEmpty ? null : _history.last.loggedAt;
@@ -75,9 +77,8 @@ class ProgressStats {
     final List<WeightEntry> window = _windowForRate();
     if (window.length < 2) return null;
 
-    final double days = window.last.loggedAt
-        .difference(window.first.loggedAt)
-        .inMinutes /
+    final double days =
+        window.last.loggedAt.difference(window.first.loggedAt).inMinutes /
         (60 * 24);
     // Two entries the same day describe a scale, not a week.
     if (days < 1) return null;

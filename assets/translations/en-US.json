@@ -441,7 +441,7 @@
   "tracker_add_meal": "A meal",
   "tracker_add_meal_helper": "Something already in your library",
   "tracker_add_food": "A food",
-  "tracker_add_food_helper": "One-off \u2014 it won't be added to your meals",
+  "tracker_add_food_helper": "One-off — it won't be added to your meals",
   "tracker_add_food_subtitle": "Search or scan. Logged straight to your day.",
   "tracker_pick_meal": "Which meal?",
   "tracker_no_meals": "Your library is empty. Create a meal first.",
@@ -484,7 +484,7 @@
   "visibility_public": "Everyone",
   "visibility_public_helper": "Anyone on Bulkr, and it can appear in Discover",
   "visibility_followers": "People who follow me",
-  "visibility_followers_helper": "Your followers only \u2014 not Discover",
+  "visibility_followers_helper": "Your followers only — not Discover",
   "visibility_private": "Only me",
   "visibility_private_helper": "Nobody else sees it",
   "post_visibility_title": "Who can see this post",
@@ -597,5 +597,6 @@
   "challenge_not_started": "Not started yet",
   "challenge_goal_short": "{amount} {unit} goal",
   "account_challenges": "Challenges",
-  "account_challenges_helper": "The ones you've joined, and where you stand"
+  "account_challenges_helper": "The ones you've joined, and where you stand",
+  "image_explicit_refused": "That photo looks explicit, so it wasn't uploaded. Pick another one."
 }

@@ -15,7 +15,11 @@ enum FoodSource { system, cached, hosted, openFoodFacts }
 
 /// A candidate result, before it has earned its place in the list.
 class ScoredFood {
-  const ScoredFood({required this.food, required this.source, required this.score});
+  const ScoredFood({
+    required this.food,
+    required this.source,
+    required this.score,
+  });
 
   final FoodItem food;
   final FoodSource source;
@@ -51,7 +55,15 @@ class FoodSearchRanking {
 
   /// Words too generic to count as a match on their own.
   static const Set<String> _stopWords = {
-    'and', 'the', 'with', 'of', 'in', 'a', 'an', 'or', 'for',
+    'and',
+    'the',
+    'with',
+    'of',
+    'in',
+    'a',
+    'an',
+    'or',
+    'for',
   };
 
   /// The score a result reaches when every word typed appears in its name:
@@ -66,8 +78,7 @@ class FoodSearchRanking {
     Iterable<ScoredFood> candidates,
     String query, {
     int limit = 15,
-  }) =>
-      rankScored(candidates, query, limit: limit).map((c) => c.food).toList();
+  }) => rankScored(candidates, query, limit: limit).map((c) => c.food).toList();
 
   /// As [rank], but keeping each result's final score.
   ///
@@ -90,11 +101,13 @@ class FoodSearchRanking {
       final double score = scoreFor(candidate.food, queryTokens);
       if (score == _rejected) continue;
 
-      scored.add(ScoredFood(
-        food: candidate.food,
-        source: candidate.source,
-        score: score + _sourceBonus(candidate.source),
-      ));
+      scored.add(
+        ScoredFood(
+          food: candidate.food,
+          source: candidate.source,
+          score: score + _sourceBonus(candidate.source),
+        ),
+      );
     }
 
     scored.sort((a, b) {
@@ -171,7 +184,8 @@ class FoodSearchRanking {
       final int extraWords = nameTokens.length - queryTokens.length;
       if (extraWords > 0) {
         score -=
-            8 * (extraWords > _lengthPenaltyCap ? _lengthPenaltyCap : extraWords);
+            8 *
+            (extraWords > _lengthPenaltyCap ? _lengthPenaltyCap : extraWords);
       }
     }
 
@@ -210,11 +224,11 @@ class FoodSearchRanking {
   }
 
   static double _sourceBonus(FoodSource source) => switch (source) {
-        FoodSource.system => 120,
-        FoodSource.cached => 60,
-        FoodSource.hosted => 40,
-        FoodSource.openFoodFacts => 0,
-      };
+    FoodSource.system => 120,
+    FoodSource.cached => 60,
+    FoodSource.hosted => 40,
+    FoodSource.openFoodFacts => 0,
+  };
 
   /// Rejects entries whose numbers cannot describe a food.
   ///

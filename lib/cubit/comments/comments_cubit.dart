@@ -252,6 +252,9 @@ class CommentsCubit extends Cubit<CommentsState> {
     final String? refused = blockedTermRefusal(error);
     if (refused != null) return refused;
 
+    final String? explicit = explicitImageRefusal(error);
+    if (explicit != null) return explicit;
+
     if (error is PostgrestException) {
       return [
         error.message,

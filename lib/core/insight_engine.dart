@@ -58,10 +58,7 @@ class InsightEngine {
     final List<Insight> habits = _habitAdvice(profile, progress);
     final int remaining = math.max(0, limit - urgent.length);
 
-    return [
-      ...urgent.take(limit),
-      ..._rotate(habits, now).take(remaining),
-    ];
+    return [...urgent.take(limit), ..._rotate(habits, now).take(remaining)];
   }
 
   /// Rotates the general advice by day of year, so a user opening the app on
@@ -169,8 +166,9 @@ class InsightEngine {
           bodyKey: 'insight_pace_fast_body',
           args: {
             'rate': rate.toStringAsFixed(2),
-            'ceiling':
-                CalorieEngine.leanBulkCeilingKgPerWeek.toStringAsFixed(1),
+            'ceiling': CalorieEngine.leanBulkCeilingKgPerWeek.toStringAsFixed(
+              1,
+            ),
           },
           tone: InsightTone.warning,
           action: InsightAction.recalculate,

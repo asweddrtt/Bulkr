@@ -9,6 +9,7 @@ import '../models/unit_system.dart';
 import '../models/user_profile.dart';
 import '../models/water_entry.dart';
 import '../models/weight_entry.dart';
+import '../core/image_safety.dart';
 import 'username_generator.dart';
 
 /// Raised when the handle the user typed themselves is already taken. A
@@ -25,8 +26,8 @@ class UsernameTakenException implements Exception {
 /// Writes the one row the whole onboarding flow has been building up to.
 class UserRepository {
   UserRepository({SupabaseClient? client, UsernameGenerator? usernameGenerator})
-      : _client = client ?? Supabase.instance.client,
-        _usernames = usernameGenerator ?? UsernameGenerator();
+    : _client = client ?? Supabase.instance.client,
+      _usernames = usernameGenerator ?? UsernameGenerator();
 
   final SupabaseClient _client;
   final UsernameGenerator _usernames;
@@ -127,10 +128,13 @@ class UserRepository {
 
     await _writeDailyWeightLog(userId: userId, weightKg: weightKg);
 
-    await _client.from('users').update({
-      'current_weight_kg': weightKg,
-      'last_active_at': DateTime.now().toUtc().toIso8601String(),
-    }).eq('id', userId);
+    await _client
+        .from('users')
+        .update({
+          'current_weight_kg': weightKg,
+          'last_active_at': DateTime.now().toUtc().toIso8601String(),
+        })
+        .eq('id', userId);
   }
 
   /// Writes one weigh-in and clears whatever the same local day already held.
@@ -148,8 +152,11 @@ class UserRepository {
     required double weightKg,
   }) async {
     final DateTime loggedAt = DateTime.now();
-    final DateTime startOfDay =
-        DateTime(loggedAt.year, loggedAt.month, loggedAt.day);
+    final DateTime startOfDay = DateTime(
+      loggedAt.year,
+      loggedAt.month,
+      loggedAt.day,
+    );
     final String stamp = loggedAt.toUtc().toIso8601String();
 
     await _client.from('weight_logs').insert({
@@ -174,9 +181,10 @@ class UserRepository {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) return;
 
-    await _client.from('users').update({
-      'target_weight_kg': targetWeightKg,
-    }).eq('id', userId);
+    await _client
+        .from('users')
+        .update({'target_weight_kg': targetWeightKg})
+        .eq('id', userId);
   }
 
   /// The three biometrics a person can correct after onboarding.
@@ -286,9 +294,10 @@ class UserRepository {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) return;
 
-    await _client.from('users').update({
-      'water_target_ml': millilitres,
-    }).eq('id', userId);
+    await _client
+        .from('users')
+        .update({'water_target_ml': millilitres})
+        .eq('id', userId);
   }
 
   // --- Leaving --------------------------------------------------------------
@@ -330,8 +339,8 @@ class UserRepository {
     final String detail = data is Map && data['detail'] != null
         ? '${data['detail']}'
         : data is Map && data['error'] != null
-            ? '${data['error']}'
-            : 'HTTP ${response.status}';
+        ? '${data['error']}'
+        : 'HTTP ${response.status}';
 
     debugPrint('Bulkr: account deletion failed — $detail');
     throw Exception(detail);
@@ -348,24 +357,25 @@ class UserRepository {
   /// [UserProfile.preferredName] falls back to the handle the way it does for
   /// someone who never set one. Same for the bio, so "has no about" is one
   /// value in the database instead of two.
-  Future<void> updateProfile({
-    String? displayName,
-    String? bio,
-  }) async {
+  Future<void> updateProfile({String? displayName, String? bio}) async {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) return;
 
     final String? name = displayName?.trim();
     final String? about = bio?.trim();
 
-    await _client.from('users').update({
-      // Only the fields the caller passed. A null argument means "leave it
-      // alone"; an empty string means "clear it", and those are different
-      // instructions that would otherwise both arrive as null.
-      if (displayName != null)
-        'display_name': (name == null || name.isEmpty) ? null : name,
-      if (bio != null) 'bio': (about == null || about.isEmpty) ? null : about,
-    }).eq('id', userId);
+    await _client
+        .from('users')
+        .update({
+          // Only the fields the caller passed. A null argument means "leave it
+          // alone"; an empty string means "clear it", and those are different
+          // instructions that would otherwise both arrive as null.
+          if (displayName != null)
+            'display_name': (name == null || name.isEmpty) ? null : name,
+          if (bio != null)
+            'bio': (about == null || about.isEmpty) ? null : about,
+        })
+        .eq('id', userId);
   }
 
   /// Storage bucket holding profile pictures. Public-read, because an avatar
@@ -398,10 +408,18 @@ class UserRepository {
       throw StateError('Cannot change the avatar without a signed-in user');
     }
 
+    // Avatars do not go through [ImageUploader], so the check that lives there
+    // has to be repeated here. Worth catching: an avatar is the most-seen image
+    // in the app — it sits next to every post and every comment its owner has
+    // written — so it is the last one that should have been the exception.
+    await ImageSafety.refuseIfExplicit(bytes);
+
     final String path =
         '$userId/${DateTime.now().toUtc().microsecondsSinceEpoch}.$extension';
 
-    await _client.storage.from(avatarBucket).uploadBinary(
+    await _client.storage
+        .from(avatarBucket)
+        .uploadBinary(
           path,
           bytes,
           fileOptions: FileOptions(
@@ -453,12 +471,15 @@ class UserRepository {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) return;
 
-    await _client.from('users').update({
-      'daily_calorie_target': plan.calories,
-      'protein_target_g': plan.proteinG,
-      'carbs_target_g': plan.carbsG,
-      'fat_target_g': plan.fatG,
-    }).eq('id', userId);
+    await _client
+        .from('users')
+        .update({
+          'daily_calorie_target': plan.calories,
+          'protein_target_g': plan.proteinG,
+          'carbs_target_g': plan.carbsG,
+          'fat_target_g': plan.fatG,
+        })
+        .eq('id', userId);
   }
 
   /// Commits every field gathered across screens 1-5 as a single row, flags
@@ -527,7 +548,8 @@ class UserRepository {
         await _seedWeightLog(userId: activeUserId, weightKg: currentWeightKg);
         return candidate;
       } on PostgrestException catch (error) {
-        final isUsernameCollision = error.code == _uniqueViolation &&
+        final isUsernameCollision =
+            error.code == _uniqueViolation &&
             (error.message.contains('username') ||
                 (error.details?.toString().contains('username') ?? false));
 

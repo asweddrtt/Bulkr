@@ -85,6 +85,7 @@ dependencies:
   image: ^4.9.2
   firebase_core: ^4.14.0
   firebase_messaging: ^16.6.0
+  nsfw_detector_flutter: ^2.0.2
   # NOTE: `intl` (DateFormat/NumberFormat) is not listed here on purpose —
   # easy_localization re-exports it, which is how NumberFormat is already used
   # in the reveal screen. Adding it explicitly risks a resolution conflict with

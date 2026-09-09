@@ -221,6 +221,9 @@ class PostComposerCubit extends Cubit<PostComposerState> {
     final String? refused = blockedTermRefusal(error);
     if (refused != null) return refused;
 
+    final String? explicit = explicitImageRefusal(error);
+    if (explicit != null) return explicit;
+
     if (error is PostgrestException) {
       return [
         error.message,

@@ -58,8 +58,9 @@ Uint8List? _resize(Uint8List bytes) {
     final img.Image? decoded = img.decodeImage(bytes);
     if (decoded == null) return null;
 
-    final int longEdge =
-        decoded.width > decoded.height ? decoded.width : decoded.height;
+    final int longEdge = decoded.width > decoded.height
+        ? decoded.width
+        : decoded.height;
 
     // Already small enough. Re-encoding it would spend CPU to produce a file
     // that is not usefully smaller and is one generation more compressed.

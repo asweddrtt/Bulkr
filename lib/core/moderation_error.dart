@@ -1,4 +1,7 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+import 'image_safety.dart';
 
 /// The SQLSTATE `supabase/moderation_terms.sql` raises when a post or comment
 /// contains a blocked term.
@@ -31,4 +34,15 @@ String? blockedTermRefusal(Object error) {
 
   if (hint == null || hint.isEmpty) return message;
   return '$message $hint';
+}
+
+/// The refusal to show when a picked image was judged explicit.
+///
+/// A real translation key rather than a string from the database, unlike
+/// [blockedTermRefusal]: adding the on-device check needs a store build for its
+/// native model anyway, so there was nothing to buy by keeping this
+/// patch-shaped.
+String? explicitImageRefusal(Object error) {
+  if (error is! ExplicitImageException) return null;
+  return 'image_explicit_refused'.tr();
 }

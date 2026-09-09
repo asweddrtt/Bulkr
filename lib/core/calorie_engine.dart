@@ -28,7 +28,8 @@ class CalorieEngine {
   static int ageFromDateOfBirth(DateTime dateOfBirth, {DateTime? asOf}) {
     final now = asOf ?? DateTime.now();
     var age = now.year - dateOfBirth.year;
-    final hadBirthdayThisYear = now.month > dateOfBirth.month ||
+    final hadBirthdayThisYear =
+        now.month > dateOfBirth.month ||
         (now.month == dateOfBirth.month && now.day >= dateOfBirth.day);
     if (!hadBirthdayThisYear) age -= 1;
     return math.max(0, age);
@@ -65,11 +66,14 @@ class CalorieEngine {
   }
 
   /// Maintenance calories.
-  static double tdee({required double bmr, required ActivityLevel activityLevel}) =>
-      bmr * activityLevel.multiplier;
+  static double tdee({
+    required double bmr,
+    required ActivityLevel activityLevel,
+  }) => bmr * activityLevel.multiplier;
 
   /// Daily calories above maintenance needed to gain [weeklyGainKg] per week.
-  static double dailySurplus(double weeklyGainKg) => weeklyGainKg * kcalPerKg / 7;
+  static double dailySurplus(double weeklyGainKg) =>
+      weeklyGainKg * kcalPerKg / 7;
 
   /// The inverse of [dailySurplus]: the weekly rate a given daily surplus buys.
   static double weeklyGainForSurplus(double dailySurplusKcal) =>

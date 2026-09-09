@@ -32,10 +32,7 @@ class RelativeTime {
     if (elapsed.inMinutes < 1) return (key: 'time_now', args: null);
 
     if (elapsed.inHours < 1) {
-      return (
-        key: 'time_minutes',
-        args: {'count': '${elapsed.inMinutes}'},
-      );
+      return (key: 'time_minutes', args: {'count': '${elapsed.inMinutes}'});
     }
 
     if (elapsed.inDays < 1) {

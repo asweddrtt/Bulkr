@@ -4,6 +4,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/image_resize.dart';
 import '../core/storage_cache.dart';
 
+import '../core/image_safety.dart';
+
 /// A picture in the two sizes the app shows it at.
 @immutable
 class UploadedImage {
@@ -30,7 +32,7 @@ class UploadedImage {
 /// so the same policy covers it with no change.
 class ImageUploader {
   const ImageUploader({required SupabaseClient client, required this.bucket})
-      : _client = client;
+    : _client = client;
 
   final SupabaseClient _client;
 
@@ -51,7 +53,14 @@ class ImageUploader {
     required String extension,
     String? name,
   }) async {
-    final String stem = name ?? '${DateTime.now().toUtc().microsecondsSinceEpoch}';
+    // Before anything is written. Every image in the app arrives here — post
+    // photos, meal photos, avatars, group pictures — so this is the one place
+    // the check has to exist, and putting it before `_put` means an explicit
+    // image never reaches a public URL at all.
+    await ImageSafety.refuseIfExplicit(bytes);
+
+    final String stem =
+        name ?? '${DateTime.now().toUtc().microsecondsSinceEpoch}';
     final String path = '$ownerId/$stem.$extension';
 
     await _put(path, bytes, _contentTypeFor(extension));
@@ -59,7 +68,11 @@ class ImageUploader {
 
     return UploadedImage(
       url: url,
-      thumbUrl: await _uploadThumbnail(ownerId: ownerId, stem: stem, bytes: bytes),
+      thumbUrl: await _uploadThumbnail(
+        ownerId: ownerId,
+        stem: stem,
+        bytes: bytes,
+      ),
     );
   }
 
@@ -87,7 +100,9 @@ class ImageUploader {
   }
 
   Future<void> _put(String path, Uint8List bytes, String contentType) {
-    return _client.storage.from(bucket).uploadBinary(
+    return _client.storage
+        .from(bucket)
+        .uploadBinary(
           path,
           bytes,
           fileOptions: FileOptions(
@@ -135,8 +150,10 @@ class ImageUploader {
 
     // Query strings appear on signed and transformed URLs, never on the object
     // path itself.
-    final String path =
-        publicUrl.substring(start + marker.length).split('?').first;
+    final String path = publicUrl
+        .substring(start + marker.length)
+        .split('?')
+        .first;
     return path.isEmpty ? null : Uri.decodeComponent(path);
   }
 

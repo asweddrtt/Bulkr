@@ -30,7 +30,8 @@ class SupabaseConfig {
   ///
   /// The scheme is the app's bundle ID (reverse-DNS, per RFC 8252) and must
   /// match AndroidManifest.xml and ios/Runner/Info.plist.
-  static const String oauthRedirectUrl = 'com.alimahmoud.bulkr://login-callback';
+  static const String oauthRedirectUrl =
+      'com.alimahmoud.bulkr://login-callback';
 
   /// Google **Web** OAuth client ID — the same one whose secret is pasted into
   /// Supabase under Auth -> Providers -> Google.
@@ -52,6 +53,7 @@ class SupabaseConfig {
 
   /// Google **iOS** OAuth client ID. Only used on iOS/macOS; Android ignores
   /// it. Empty until an iOS client is created in Google Cloud.
-  static const String googleIosClientId =
-      String.fromEnvironment('GOOGLE_IOS_CLIENT_ID');
+  static const String googleIosClientId = String.fromEnvironment(
+    'GOOGLE_IOS_CLIENT_ID',
+  );
 }

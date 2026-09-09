@@ -22,8 +22,7 @@ abstract final class OAuthNonce {
 
   /// 32 bytes of entropy, url-safe so it survives every transport.
   static String generate() {
-    final List<int> bytes =
-        List<int>.generate(32, (_) => _random.nextInt(256));
+    final List<int> bytes = List<int>.generate(32, (_) => _random.nextInt(256));
     return base64UrlEncode(bytes).replaceAll('=', '');
   }
 
