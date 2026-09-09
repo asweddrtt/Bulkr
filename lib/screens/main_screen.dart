@@ -52,11 +52,11 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 
   StreamSubscription<PushTap>? _taps;
 
-  /// Whether the nav bar is showing.
+  /// Whether the nav bar is drawn small.
   ///
   /// Driven by scroll direction rather than position: what matters is that the
   /// user is reading downwards, not how far down they have got.
-  bool _navVisible = true;
+  bool _navCompact = false;
 
   @override
   void initState() {
@@ -191,7 +191,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   /// Index of the Tracker tab, which needs a nudge the others do not.
   static const int _trackerIndex = 3;
 
-  /// Hides the bar while scrolling down, brings it back on the way up.
+  /// Shrinks the bar while scrolling down, restores it on the way up.
   ///
   /// One listener on the shell rather than a controller per screen. Every tab
   /// scrolls its own list and two of them scroll horizontally as well, and a
@@ -208,7 +208,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     if (notification.metrics.axis != Axis.vertical) return false;
 
     // A list shorter than its viewport still reports scroll direction as the
-    // overscroll bounces. Hiding the bar because somebody tugged at a list
+    // overscroll bounces. Resizing the bar because somebody tugged at a list
     // with four items in it would make it flicker for no reason.
     if (!notification.metrics.hasContentDimensions ||
         notification.metrics.maxScrollExtent <= BulkrNavBar.barHeight) {
@@ -218,11 +218,11 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     switch (notification.direction) {
       // Content moving up the screen: reading onwards.
       case ScrollDirection.reverse:
-        _setNavVisible(false);
+        _setNavCompact(true);
       case ScrollDirection.forward:
-        _setNavVisible(true);
-      // Idle arrives at the end of every gesture. Leaving the bar where it is
-      // means it stays hidden through a pause mid-article, and comes back the
+        _setNavCompact(false);
+      // Idle arrives at the end of every gesture. Leaving the bar as it is
+      // means it stays small through a pause mid-scroll, and comes back the
       // moment the user heads back up.
       case ScrollDirection.idle:
         break;
@@ -231,17 +231,17 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     return false;
   }
 
-  void _setNavVisible(bool visible) {
-    if (_navVisible == visible) return;
-    setState(() => _navVisible = visible);
+  void _setNavCompact(bool compact) {
+    if (_navCompact == compact) return;
+    setState(() => _navCompact = compact);
   }
 
   void _select(int index) {
     setState(() => _currentIndex = index);
 
-    // A tab arrived at from a hidden bar should not start with the bar hidden:
-    // the new screen is at the top of its own list and nobody has scrolled it.
-    _setNavVisible(true);
+    // A new tab is at the top of its own list and nobody has scrolled it, so
+    // the bar goes back to full size.
+    _setNavCompact(false);
 
     // Everything here lives in an IndexedStack, so each screen is built once
     // and kept alive — which is what makes switching tabs instant, and what
@@ -281,7 +281,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         destinations: MainScreen.destinations,
         currentIndex: _currentIndex,
         onSelected: _select,
-        visible: _navVisible,
+        compact: _navCompact,
       ),
     );
   }

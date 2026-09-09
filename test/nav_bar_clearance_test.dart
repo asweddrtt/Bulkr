@@ -148,12 +148,15 @@ void main() {
             'fallback applies rather than a bare safe-area inset');
   });
 
-  testWidgets('the bar leaves the screen when hidden', (tester) async {
+  testWidgets('the bar shrinks while scrolling but stays put and tappable',
+      (tester) async {
     tester.view.physicalSize = viewport;
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
-    Future<Rect> pump({required bool visible}) async {
+    int taps = 0;
+
+    Future<Rect> pump({required bool compact}) async {
       await tester.pumpWidget(
         MediaQuery(
           data: const MediaQueryData(size: viewport),
@@ -168,8 +171,8 @@ void main() {
                   key: const Key('bar'),
                   destinations: MainScreen.destinations,
                   currentIndex: 2,
-                  onSelected: (_) {},
-                  visible: visible,
+                  onSelected: (_) => taps++,
+                  compact: compact,
                 ),
               ),
             ),
@@ -190,13 +193,33 @@ void main() {
       );
     }
 
-    final Rect shown = await pump(visible: true);
-    final Rect hidden = await pump(visible: false);
+    final Rect full = await pump(compact: false);
+    final Rect small = await pump(compact: true);
 
-    expect(hidden.top, greaterThan(shown.top),
-        reason: 'hiding the bar should move it down, not fade it');
-    expect(hidden.top >= viewport.height, isTrue,
-        reason: 'it should be off the bottom edge entirely, margin included — '
-            'top ${hidden.top} against a ${viewport.height} tall screen');
+    // Smaller, by the stated amount and no more. The point of the feature is
+    // that it is subtle; a bar that halved would read as a different bar.
+    expect(small.width, lessThan(full.width));
+    expect(small.height, lessThan(full.height));
+    expect(
+      small.height / full.height,
+      closeTo(BulkrNavBar.compactScale, 0.01),
+      reason: 'shrunk from ${full.height} to ${small.height}',
+    );
+
+    // Still on screen, which is the whole correction: it gets out of the way
+    // by taking less room, not by leaving.
+    expect(small.bottom, lessThanOrEqualTo(viewport.height));
+    expect(small.top, greaterThanOrEqualTo(0));
+
+    // Anchored to the bottom, so it draws in towards the corner it already
+    // occupies rather than drifting up off its own margin.
+    expect(small.bottom, closeTo(full.bottom, 0.5));
+
+    // And still a nav bar. A control that shrinks out of reach would be worse
+    // than one that hides honestly.
+    await tester.tap(find.byKey(const Key('bar')));
+    await tester.pumpAndSettle();
+    expect(taps, greaterThan(0),
+        reason: 'the shrunken bar did not answer a tap');
   });
 }
