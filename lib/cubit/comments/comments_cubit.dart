@@ -7,6 +7,8 @@ import '../../data/post_repository.dart';
 import '../../models/post.dart';
 import '../../models/post_comment.dart';
 
+import '../../core/moderation_error.dart';
+
 part 'comments_state.dart';
 
 /// Drives one post's conversation.
@@ -16,11 +18,9 @@ part 'comments_state.dart';
 /// back three days later attached to a thread the user has forgotten is not a
 /// feature.
 class CommentsCubit extends Cubit<CommentsState> {
-  CommentsCubit({
-    required PostRepository postRepository,
-    required Post post,
-  })  : _posts = postRepository,
-        super(CommentsState(post: post));
+  CommentsCubit({required PostRepository postRepository, required Post post})
+    : _posts = postRepository,
+      super(CommentsState(post: post));
 
   final PostRepository _posts;
 
@@ -38,11 +38,13 @@ class CommentsCubit extends Cubit<CommentsState> {
       );
       if (isClosed) return;
 
-      emit(state.copyWith(
-        status: CommentsStatus.ready,
-        threads: threads,
-        clearError: true,
-      ));
+      emit(
+        state.copyWith(
+          status: CommentsStatus.ready,
+          threads: threads,
+          clearError: true,
+        ),
+      );
     } catch (error) {
       if (isClosed) return;
 
@@ -52,17 +54,18 @@ class CommentsCubit extends Cubit<CommentsState> {
       // A silent refresh that fails leaves the thread alone. The user asked for
       // fresher comments, not for the ones they were reading to disappear.
       if (silent && state.status == CommentsStatus.ready) {
-        emit(state.copyWith(
-          actionErrorKey: _actionFailedKey,
-          actionErrorDetail: detail,
-        ));
+        emit(
+          state.copyWith(
+            actionErrorKey: _actionFailedKey,
+            actionErrorDetail: detail,
+          ),
+        );
         return;
       }
 
-      emit(state.copyWith(
-        status: CommentsStatus.failure,
-        errorMessage: detail,
-      ));
+      emit(
+        state.copyWith(status: CommentsStatus.failure, errorMessage: detail),
+      );
     }
   }
 
@@ -84,16 +87,19 @@ class CommentsCubit extends Cubit<CommentsState> {
     // A reply to a reply is not a thing — the database refuses it — so
     // tapping Reply on one aims at its parent instead of at itself. That is
     // what the user meant anyway: they are answering in that thread.
-    final String? target =
-        comment == null ? null : (comment.parentId ?? comment.id);
+    final String? target = comment == null
+        ? null
+        : (comment.parentId ?? comment.id);
 
     if (state.replyingToId == target) return;
 
-    emit(state.copyWith(
-      replyingToId: target,
-      clearReplyTarget: target == null,
-      replyingToName: comment?.authorName,
-    ));
+    emit(
+      state.copyWith(
+        replyingToId: target,
+        clearReplyTarget: target == null,
+        replyingToName: comment?.authorName,
+      ),
+    );
   }
 
   void cancelReply() => replyTo(null);
@@ -116,12 +122,14 @@ class CommentsCubit extends Cubit<CommentsState> {
 
     final String? parentId = state.replyingToId;
 
-    emit(state.copyWith(
-      isSubmitting: true,
-      draft: '',
-      clearReplyTarget: true,
-      clearError: true,
-    ));
+    emit(
+      state.copyWith(
+        isSubmitting: true,
+        draft: '',
+        clearReplyTarget: true,
+        clearError: true,
+      ),
+    );
 
     try {
       final PostComment comment = await _posts.addComment(
@@ -132,10 +140,12 @@ class CommentsCubit extends Cubit<CommentsState> {
       );
       if (isClosed) return;
 
-      emit(state.copyWith(
-        isSubmitting: false,
-        threads: _inserted(state.threads, comment),
-      ));
+      emit(
+        state.copyWith(
+          isSubmitting: false,
+          threads: _inserted(state.threads, comment),
+        ),
+      );
     } catch (error) {
       if (isClosed) return;
 
@@ -144,14 +154,16 @@ class CommentsCubit extends Cubit<CommentsState> {
 
       // The text goes back in the field. Losing what someone wrote because a
       // request failed is the one outcome worth going out of the way to avoid.
-      emit(state.copyWith(
-        isSubmitting: false,
-        draft: content,
-        replyingToId: parentId,
-        clearReplyTarget: parentId == null,
-        actionErrorKey: _actionFailedKey,
-        actionErrorDetail: detail,
-      ));
+      emit(
+        state.copyWith(
+          isSubmitting: false,
+          draft: content,
+          replyingToId: parentId,
+          clearReplyTarget: parentId == null,
+          actionErrorKey: _actionFailedKey,
+          actionErrorDetail: detail,
+        ),
+      );
     }
   }
 
@@ -166,10 +178,9 @@ class CommentsCubit extends Cubit<CommentsState> {
 
     final List<PostComment> before = state.threads;
 
-    emit(state.copyWith(
-      threads: _removed(before, comment.id),
-      clearError: true,
-    ));
+    emit(
+      state.copyWith(threads: _removed(before, comment.id), clearError: true),
+    );
 
     try {
       await _posts.deleteComment(comment.id);
@@ -179,11 +190,13 @@ class CommentsCubit extends Cubit<CommentsState> {
       final String detail = _describe(error);
       debugPrint('Bulkr: comment delete failed — $detail');
 
-      emit(state.copyWith(
-        threads: before,
-        actionErrorKey: _actionFailedKey,
-        actionErrorDetail: detail,
-      ));
+      emit(
+        state.copyWith(
+          threads: before,
+          actionErrorKey: _actionFailedKey,
+          actionErrorDetail: detail,
+        ),
+      );
     }
   }
 
@@ -204,9 +217,11 @@ class CommentsCubit extends Cubit<CommentsState> {
     if (!comment.isReply) return [...threads, comment];
 
     return threads
-        .map((thread) => thread.id == comment.parentId
-            ? thread.copyWith(replies: [...thread.replies, comment])
-            : thread)
+        .map(
+          (thread) => thread.id == comment.parentId
+              ? thread.copyWith(replies: [...thread.replies, comment])
+              : thread,
+        )
         .toList(growable: false);
   }
 
@@ -218,19 +233,30 @@ class CommentsCubit extends Cubit<CommentsState> {
   static List<PostComment> _removed(List<PostComment> threads, String id) {
     return threads
         .where((thread) => thread.id != id)
-        .map((thread) => thread.replies.any((reply) => reply.id == id)
-            ? thread.copyWith(
-                replies:
-                    thread.replies.where((reply) => reply.id != id).toList(),
-              )
-            : thread)
+        .map(
+          (thread) => thread.replies.any((reply) => reply.id == id)
+              ? thread.copyWith(
+                  replies: thread.replies
+                      .where((reply) => reply.id != id)
+                      .toList(),
+                )
+              : thread,
+        )
         .toList(growable: false);
   }
 
   static String _describe(Object error) {
+    // Before the generic Postgres formatting: a blocked term is not a fault
+    // to report, it is an answer to give, and "(BLKR1)" appended to it is not
+    // an improvement.
+    final String? refused = blockedTermRefusal(error);
+    if (refused != null) return refused;
+
     if (error is PostgrestException) {
-      return [error.message, if (error.code != null) '(${error.code})']
-          .join(' ');
+      return [
+        error.message,
+        if (error.code != null) '(${error.code})',
+      ].join(' ');
     }
     return '$error';
   }

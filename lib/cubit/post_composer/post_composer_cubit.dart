@@ -12,6 +12,8 @@ import '../../models/challenge.dart';
 import '../../models/post_draft.dart';
 import '../../models/post_label.dart';
 
+import '../../core/moderation_error.dart';
+
 part 'post_composer_state.dart';
 
 /// Drives writing a post.
@@ -28,22 +30,24 @@ class PostComposerCubit extends Cubit<PostComposerState> {
     Meal? attachedMeal,
     String? groupId,
     String? groupName,
-  })  : _posts = postRepository,
-        _meals = mealRepository,
-        super(PostComposerState(
-          draft: PostDraft(
-            label: initialLabel,
-            attachedMeal: attachedMeal,
-            groupId: groupId,
-            // A challenge post opens with a blank challenge already attached,
-            // so the fields are there to fill in rather than behind another
-            // tap. Switching away from the label drops it again.
-            challenge: initialLabel == PostLabel.challenge
-                ? const ChallengeDraft()
-                : null,
-          ),
-          groupName: groupName,
-        ));
+  }) : _posts = postRepository,
+       _meals = mealRepository,
+       super(
+         PostComposerState(
+           draft: PostDraft(
+             label: initialLabel,
+             attachedMeal: attachedMeal,
+             groupId: groupId,
+             // A challenge post opens with a blank challenge already attached,
+             // so the fields are there to fill in rather than behind another
+             // tap. Switching away from the label drops it again.
+             challenge: initialLabel == PostLabel.challenge
+                 ? const ChallengeDraft()
+                 : null,
+           ),
+           groupName: groupName,
+         ),
+       );
 
   final PostRepository _posts;
   final MealRepository _meals;
@@ -58,15 +62,17 @@ class PostComposerCubit extends Cubit<PostComposerState> {
 
     final bool wantsChallenge = label == PostLabel.challenge;
 
-    emit(state.copyWith(
-      draft: state.draft.copyWith(
-        label: label,
-        challenge: wantsChallenge
-            ? (state.draft.challenge ?? const ChallengeDraft())
-            : null,
-        clearChallenge: !wantsChallenge,
+    emit(
+      state.copyWith(
+        draft: state.draft.copyWith(
+          label: label,
+          challenge: wantsChallenge
+              ? (state.draft.challenge ?? const ChallengeDraft())
+              : null,
+          clearChallenge: !wantsChallenge,
+        ),
       ),
-    ));
+    );
   }
 
   /// Updates the challenge being set up.
@@ -108,22 +114,21 @@ class PostComposerCubit extends Cubit<PostComposerState> {
     // but never what anyone meant.
     if (state.draft.imagePaths.contains(path)) return;
 
-    emit(state.copyWith(
-      draft: state.draft.withImage(path),
-      images: {
-        ...state.images,
-        path: PostImageUpload(path: path, bytes: bytes, extension: extension),
-      },
-    ));
+    emit(
+      state.copyWith(
+        draft: state.draft.withImage(path),
+        images: {
+          ...state.images,
+          path: PostImageUpload(path: path, bytes: bytes, extension: extension),
+        },
+      ),
+    );
   }
 
   void removeImage(String path) {
     final Map<String, PostImageUpload> images = {...state.images}..remove(path);
 
-    emit(state.copyWith(
-      draft: state.draft.withoutImage(path),
-      images: images,
-    ));
+    emit(state.copyWith(draft: state.draft.withoutImage(path), images: images));
   }
 
   /// Hangs one of the user's own meals off the post.
@@ -132,9 +137,7 @@ class PostComposerCubit extends Cubit<PostComposerState> {
   }
 
   void removeMeal() {
-    emit(state.copyWith(
-      draft: state.draft.copyWith(clearAttachedMeal: true),
-    ));
+    emit(state.copyWith(draft: state.draft.copyWith(clearAttachedMeal: true)));
   }
 
   /// Loads the meals this post could carry.
@@ -151,11 +154,14 @@ class PostComposerCubit extends Cubit<PostComposerState> {
       final List<Meal> library = await _meals.fetchLibrary();
       if (isClosed) return;
 
-      emit(state.copyWith(
-        mealsStatus: ComposerMealsStatus.ready,
-        attachableMeals:
-            library.where((meal) => meal.isMine).toList(growable: false),
-      ));
+      emit(
+        state.copyWith(
+          mealsStatus: ComposerMealsStatus.ready,
+          attachableMeals: library
+              .where((meal) => meal.isMine)
+              .toList(growable: false),
+        ),
+      );
     } catch (error) {
       if (isClosed) return;
 
@@ -209,9 +215,17 @@ class PostComposerCubit extends Cubit<PostComposerState> {
   }
 
   static String _describe(Object error) {
+    // Before the generic Postgres formatting: a blocked term is not a fault
+    // to report, it is an answer to give, and "(BLKR1)" appended to it is not
+    // an improvement.
+    final String? refused = blockedTermRefusal(error);
+    if (refused != null) return refused;
+
     if (error is PostgrestException) {
-      return [error.message, if (error.code != null) '(${error.code})']
-          .join(' ');
+      return [
+        error.message,
+        if (error.code != null) '(${error.code})',
+      ].join(' ');
     }
     if (error is StorageException) return error.message;
     return '$error';
