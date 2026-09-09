@@ -8,6 +8,7 @@ import '../../core/insight_engine.dart';
 import '../../core/progress_stats.dart';
 import '../../data/app_preferences.dart';
 import '../../data/user_repository.dart';
+import '../../models/activity_level.dart';
 import '../../models/gender.dart';
 import '../../models/insight.dart';
 import '../../models/nutrition_plan.dart';
@@ -204,6 +205,26 @@ class ProfileCubit extends Cubit<ProfileState> {
   Future<void> updateTargetWeight(double targetWeightKg) {
     return _write(
       () => _userRepository.updateTargetWeight(targetWeightKg: targetWeightKg),
+    );
+  }
+
+  /// Corrects the biometrics behind the target.
+  ///
+  /// Does not recalculate the plan. The numbers on screen would change under
+  /// the user without being asked, and a calorie target is the one thing in
+  /// this app somebody has actually committed to — so the dashboard offers a
+  /// recalculation afterwards instead of performing one.
+  Future<void> updateBodyStats({
+    DateTime? dateOfBirth,
+    double? heightCm,
+    ActivityLevel? activityLevel,
+  }) {
+    return _write(
+      () => _userRepository.updateBodyStats(
+        dateOfBirth: dateOfBirth,
+        heightCm: heightCm,
+        activityLevel: activityLevel,
+      ),
     );
   }
 

@@ -179,6 +179,45 @@ class UserRepository {
     }).eq('id', userId);
   }
 
+  /// The three biometrics a person can correct after onboarding.
+  ///
+  /// Separate from [updateProfile] on purpose: that one writes what somebody
+  /// says about themselves, and these are inputs the calorie engine derives a
+  /// target from. Changing any of them makes the stored plan stale, which is
+  /// the caller's business to deal with — see the dashboard, which offers a
+  /// recalculation immediately afterwards.
+  ///
+  /// Gender is deliberately not here. It is a term in the Mifflin-St Jeor
+  /// equation rather than a profile field, and the ways it is wrong for
+  /// somebody are not fixed by a toggle between two values — so it stays as
+  /// entered rather than becoming a setting that implies otherwise.
+  ///
+  /// Null means "leave it alone", as in [updateProfile]. None of the three can
+  /// be *cleared* — a null height or activity level would break the engine, and
+  /// a null date of birth is a state only an account that never finished
+  /// onboarding is in.
+  Future<void> updateBodyStats({
+    DateTime? dateOfBirth,
+    double? heightCm,
+    ActivityLevel? activityLevel,
+  }) async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) return;
+
+    final Map<String, dynamic> changes = {
+      // Date only. The column is a `date`, and sending an instant would make
+      // the stored birthday depend on the timezone of the phone that set it —
+      // which for somebody born on the 1st is a birthday that moves.
+      if (dateOfBirth != null) 'date_of_birth': _asDate(dateOfBirth),
+      if (heightCm != null) 'height_cm': heightCm,
+      if (activityLevel != null) 'activity_level': activityLevel.dbValue,
+    };
+
+    if (changes.isEmpty) return;
+
+    await _client.from('users').update(changes).eq('id', userId);
+  }
+
   // --- Water --------------------------------------------------------------
 
   /// Every drink recorded on [day], in the order they were drunk.

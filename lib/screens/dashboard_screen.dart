@@ -18,6 +18,7 @@ import '../widgets/bulkr_nav_bar.dart';
 import '../widgets/animations/entrance.dart';
 import '../widgets/animations/press_scale.dart';
 import '../widgets/insight_list.dart';
+import '../widgets/body_stats_sheet.dart';
 import '../widgets/recalculate_sheet.dart';
 import '../widgets/weight_chart.dart';
 import '../widgets/wheel_picker_sheet.dart';
@@ -61,47 +62,48 @@ class DashboardScreen extends StatelessWidget {
         context.read<ProfileCubit>().clearActionError();
       },
       child: BlocBuilder<ProfileCubit, ProfileState>(
-      builder: (context, state) {
-        switch (state.status) {
-          case ProfileStatus.initial:
-          case ProfileStatus.loading:
-            return const Center(
-              child: CircularProgressIndicator(color: accentColor),
-            );
+        builder: (context, state) {
+          switch (state.status) {
+            case ProfileStatus.initial:
+            case ProfileStatus.loading:
+              return const Center(
+                child: CircularProgressIndicator(color: accentColor),
+              );
 
-          case ProfileStatus.missing:
-            return _ProfileMessage(
-              icon: Icons.person_off_outlined,
-              message: 'profile_missing'.tr(),
-              actionLabel: 'retry'.tr(),
-              onAction: () => context.read<ProfileCubit>().load(),
-            );
+            case ProfileStatus.missing:
+              return _ProfileMessage(
+                icon: Icons.person_off_outlined,
+                message: 'profile_missing'.tr(),
+                actionLabel: 'retry'.tr(),
+                onAction: () => context.read<ProfileCubit>().load(),
+              );
 
-          case ProfileStatus.failure:
-            return _ProfileMessage(
-              icon: Icons.cloud_off_outlined,
-              message: state.errorMessage ?? 'profile_load_failed'.tr(),
-              actionLabel: 'retry'.tr(),
-              onAction: () => context.read<ProfileCubit>().load(),
-            );
+            case ProfileStatus.failure:
+              return _ProfileMessage(
+                icon: Icons.cloud_off_outlined,
+                message: state.errorMessage ?? 'profile_load_failed'.tr(),
+                actionLabel: 'retry'.tr(),
+                onAction: () => context.read<ProfileCubit>().load(),
+              );
 
-          case ProfileStatus.ready:
-            return _ProfileView(
-              profile: state.profile!,
-              weightHistory: state.weightHistory,
-              progress: context.read<ProfileCubit>().progress!,
-              insights: context.read<ProfileCubit>().insights,
-              breakdown: context.read<ProfileCubit>().planBreakdown,
-              historyErrorDetail: state.historyErrorDetail,
-              isSaving: state.isSaving,
-              onRefresh: () => context.read<ProfileCubit>().refresh(),
-              onLogWeight: (kg) => context.read<ProfileCubit>().logWeight(kg),
-              onEditTarget: (kg) =>
-                  context.read<ProfileCubit>().updateTargetWeight(kg),
-              onRecalculate: () => _openRecalculateSheet(context),
-            );
-        }
-      },
+            case ProfileStatus.ready:
+              return _ProfileView(
+                profile: state.profile!,
+                weightHistory: state.weightHistory,
+                progress: context.read<ProfileCubit>().progress!,
+                insights: context.read<ProfileCubit>().insights,
+                breakdown: context.read<ProfileCubit>().planBreakdown,
+                historyErrorDetail: state.historyErrorDetail,
+                isSaving: state.isSaving,
+                onRefresh: () => context.read<ProfileCubit>().refresh(),
+                onLogWeight: (kg) => context.read<ProfileCubit>().logWeight(kg),
+                onEditTarget: (kg) =>
+                    context.read<ProfileCubit>().updateTargetWeight(kg),
+                onRecalculate: () => _openRecalculateSheet(context),
+                onEditBodyStats: () => _openBodyStatsSheet(context),
+              );
+          }
+        },
       ),
     );
   }
@@ -144,6 +146,51 @@ class DashboardScreen extends StatelessWidget {
 
     if (plan != null) await cubit.applyPlan(plan);
   }
+
+  /// Corrects the biometrics, then offers to move the target that follows from
+  /// them.
+  ///
+  /// Two steps rather than one write. Changing a height or an activity level
+  /// changes what the engine would compute, but not what is stored — and
+  /// silently rewriting somebody's calorie target because they fixed a typo in
+  /// their height would be the app deciding something it was not asked to
+  /// decide. So the stats are saved, and then the existing recalculation sheet
+  /// shows what they now imply, with the same confirm-or-dismiss it always
+  /// has.
+  ///
+  /// Skipped when nothing changed, and skipped when the sheet was dismissed.
+  Future<void> _openBodyStatsSheet(BuildContext context) async {
+    final ProfileCubit cubit = context.read<ProfileCubit>();
+    final UserProfile? profile = cubit.state.profile;
+    if (profile == null) return;
+
+    final BodyStatsEdit initial = BodyStatsEdit(
+      dateOfBirth: profile.dateOfBirth,
+      heightCm: profile.heightCm,
+      activityLevel: profile.activityLevel,
+    );
+
+    final BodyStatsEdit? edited = await BodyStatsSheet.show(
+      context,
+      initial: initial,
+      units: profile.units,
+    );
+
+    if (edited == null || !edited.differsFrom(initial)) return;
+
+    await cubit.updateBodyStats(
+      dateOfBirth: edited.dateOfBirth,
+      heightCm: edited.heightCm,
+      activityLevel: edited.activityLevel,
+    );
+
+    // Only if the write landed. Following a failed save with "here is your new
+    // target" would offer to apply a plan derived from numbers that are not in
+    // the database.
+    if (!context.mounted || cubit.state.actionErrorKey != null) return;
+
+    await _openRecalculateSheet(context);
+  }
 }
 
 class _ProfileView extends StatelessWidget {
@@ -159,6 +206,7 @@ class _ProfileView extends StatelessWidget {
     required this.onLogWeight,
     required this.onEditTarget,
     required this.onRecalculate,
+    required this.onEditBodyStats,
   });
 
   final UserProfile profile;
@@ -179,6 +227,9 @@ class _ProfileView extends StatelessWidget {
 
   final bool isSaving;
   final Future<void> Function() onRefresh;
+
+  /// Opens the sheet that corrects date of birth, height and activity level.
+  final VoidCallback onEditBodyStats;
   final ValueChanged<double> onLogWeight;
   final ValueChanged<double> onEditTarget;
   final Future<void> Function() onRecalculate;
@@ -208,7 +259,11 @@ class _ProfileView extends StatelessWidget {
               // Bottom reserves room for the floating nav bar, which the content
               // scrolls under rather than stopping above.
               padding: EdgeInsets.fromLTRB(
-                  16.w, 16.w, 16.w, BulkrNavBar.contentInset),
+                16.w,
+                16.w,
+                16.w,
+                BulkrNavBar.contentInset,
+              ),
               children: staggered([
                 _buildWeightProgress(context),
                 SizedBox(height: 16.h),
@@ -248,8 +303,10 @@ class _ProfileView extends StatelessWidget {
                 Container(
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    border:
-                        Border.all(color: DashboardScreen.accentColor, width: 2.w),
+                    border: Border.all(
+                      color: DashboardScreen.accentColor,
+                      width: 2.w,
+                    ),
                   ),
                   child: CircleAvatar(
                     radius: 18.r,
@@ -258,8 +315,11 @@ class _ProfileView extends StatelessWidget {
                         ? null
                         : BulkrImage.provider(profile.avatarUrl!),
                     child: profile.avatarUrl == null
-                        ? Icon(Icons.person,
-                            color: DashboardScreen.textMuted, size: 20.sp)
+                        ? Icon(
+                            Icons.person,
+                            color: DashboardScreen.textMuted,
+                            size: 20.sp,
+                          )
                         : null,
                   ),
                 ),
@@ -372,8 +432,10 @@ class _ProfileView extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(_chartDate(weightHistory.first.loggedAt),
-                      style: _chartLabelStyle),
+                  Text(
+                    _chartDate(weightHistory.first.loggedAt),
+                    style: _chartLabelStyle,
+                  ),
                   Text('today'.tr(), style: _chartLabelStyle),
                 ],
               ),
@@ -553,7 +615,9 @@ class _ProfileView extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: GoogleFonts.anton(
-                  color: value == null ? DashboardScreen.textMuted : Colors.white,
+                  color: value == null
+                      ? DashboardScreen.textMuted
+                      : Colors.white,
                   fontSize: 18.sp,
                   letterSpacing: 0.5,
                 ),
@@ -642,8 +706,11 @@ class _ProfileView extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.warning_amber_rounded,
-                  color: const Color(0xFFFF5722), size: 14.sp),
+              Icon(
+                Icons.warning_amber_rounded,
+                color: const Color(0xFFFF5722),
+                size: 14.sp,
+              ),
               SizedBox(width: 8.w),
               Expanded(
                 child: Text(
@@ -711,8 +778,11 @@ class _ProfileView extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.warning_amber_rounded,
-              color: const Color(0xFFFF9E3D), size: 16.sp),
+          Icon(
+            Icons.warning_amber_rounded,
+            color: const Color(0xFFFF9E3D),
+            size: 16.sp,
+          ),
           SizedBox(width: 8.w),
           Expanded(
             child: Column(
@@ -754,11 +824,11 @@ class _ProfileView extends StatelessWidget {
           onPressed: isSaving
               ? null
               : () => _pickWeight(
-                    context,
-                    title: 'log_weight_title'.tr(),
-                    currentKg: profile.currentWeightKg,
-                    onPicked: onLogWeight,
-                  ),
+                  context,
+                  title: 'log_weight_title'.tr(),
+                  currentKg: profile.currentWeightKg,
+                  onPicked: onLogWeight,
+                ),
           style: ElevatedButton.styleFrom(
             backgroundColor: DashboardScreen.accentColor,
             foregroundColor: Colors.black,
@@ -829,11 +899,11 @@ class _ProfileView extends StatelessWidget {
   static String _chartDate(DateTime date) => DateFormat.MMMd().format(date);
 
   static TextStyle get _chartLabelStyle => GoogleFonts.inter(
-        color: DashboardScreen.textMuted,
-        fontSize: 10.sp,
-        fontWeight: FontWeight.bold,
-        letterSpacing: 1.2,
-      );
+    color: DashboardScreen.textMuted,
+    fontSize: 10.sp,
+    fontWeight: FontWeight.bold,
+    letterSpacing: 1.2,
+  );
 
   /// IntrinsicHeight bounds the row before it stretches. Inside a ListView the
   /// height is unbounded, and CrossAxisAlignment.stretch then demands an
@@ -900,8 +970,7 @@ class _ProfileView extends StatelessWidget {
     required ValueChanged<double> onPicked,
   }) async {
     final bool metric = _isMetric;
-    final double initial =
-        metric ? currentKg : UnitConverter.kgToLb(currentKg);
+    final double initial = metric ? currentKg : UnitConverter.kgToLb(currentKg);
 
     final double? picked = await WheelPickerSheet.showValue(
       context: context,
@@ -960,8 +1029,7 @@ class _ProfileView extends StatelessWidget {
                 ),
               ),
               if (isEditable)
-                Icon(Icons.edit,
-                    color: DashboardScreen.textMuted, size: 14.sp),
+                Icon(Icons.edit, color: DashboardScreen.textMuted, size: 14.sp),
             ],
           ),
           SizedBox(height: 12.h),
@@ -1030,8 +1098,9 @@ class _ProfileView extends StatelessWidget {
             Text(
               'current_daily_goal'.tr(
                 namedArgs: {
-                  'calories':
-                      NumberFormat('#,###').format(profile.dailyCalorieTarget),
+                  'calories': NumberFormat(
+                    '#,###',
+                  ).format(profile.dailyCalorieTarget),
                 },
               ),
               style: GoogleFonts.anton(
@@ -1062,7 +1131,9 @@ class _ProfileView extends StatelessWidget {
                   onPressed: isSaving ? null : () => onRecalculate(),
                   style: OutlinedButton.styleFrom(
                     side: BorderSide(
-                        color: DashboardScreen.accentColor, width: 2.w),
+                      color: DashboardScreen.accentColor,
+                      width: 2.w,
+                    ),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(4.r),
                     ),
@@ -1105,14 +1176,23 @@ class _ProfileView extends StatelessWidget {
               ),
             ),
           ),
-          _buildMacroRow('macro_protein'.tr(), profile.proteinTargetG,
-              AppColors.primaryNeon),
+          _buildMacroRow(
+            'macro_protein'.tr(),
+            profile.proteinTargetG,
+            AppColors.primaryNeon,
+          ),
           SizedBox(height: 2.h),
           _buildMacroRow(
-              'macro_carbs'.tr(), profile.carbsTargetG, const Color(0xFF6FD3FF)),
+            'macro_carbs'.tr(),
+            profile.carbsTargetG,
+            const Color(0xFF6FD3FF),
+          ),
           SizedBox(height: 2.h),
           _buildMacroRow(
-              'macro_fat'.tr(), profile.fatTargetG, const Color(0xFFFF9E3D)),
+            'macro_fat'.tr(),
+            profile.fatTargetG,
+            const Color(0xFFFF9E3D),
+          ),
           SizedBox(height: 2.h),
         ],
       ),
@@ -1126,66 +1206,87 @@ class _ProfileView extends StatelessWidget {
     final double? bmi = progress.bmi(profile.heightCm);
 
     return _buildBorderedCard(
-      child: Padding(
-        padding: EdgeInsets.all(16.w),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'body_stats_title'.tr().toUpperCase(),
-              style: GoogleFonts.anton(
-                color: Colors.white,
-                fontSize: 14.sp,
-                letterSpacing: 1.5,
-              ),
-            ),
-            SizedBox(height: 16.h),
-            Row(
+      child: PressScale(
+        child: GestureDetector(
+          onTap: isSaving ? null : onEditBodyStats,
+          behavior: HitTestBehavior.opaque,
+          child: Padding(
+            padding: EdgeInsets.all(16.w),
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: _buildStatTile(
-                    'height_label'.tr(),
-                    _heightValue(),
-                    _isMetric ? 'cm_unit'.tr().toLowerCase() : null,
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'body_stats_title'.tr().toUpperCase(),
+                        style: GoogleFonts.anton(
+                          color: Colors.white,
+                          fontSize: 14.sp,
+                          letterSpacing: 1.5,
+                        ),
+                      ),
+                    ),
+                    // The same pencil the weight cards use. Two of the four values
+                    // on this card are typed once during onboarding and were then
+                    // permanent; nothing said they could be changed because
+                    // nothing could.
+                    Icon(
+                      Icons.edit,
+                      color: DashboardScreen.textMuted,
+                      size: 14.sp,
+                    ),
+                  ],
                 ),
-                Expanded(
-                  child: _buildStatTile(
-                    'stat_age'.tr(),
-                    age?.toString(),
-                    age == null ? null : 'stat_years_short'.tr(),
-                  ),
+                SizedBox(height: 16.h),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: _buildStatTile(
+                        'height_label'.tr(),
+                        _heightValue(),
+                        _isMetric ? 'cm_unit'.tr().toLowerCase() : null,
+                      ),
+                    ),
+                    Expanded(
+                      child: _buildStatTile(
+                        'stat_age'.tr(),
+                        age?.toString(),
+                        age == null ? null : 'stat_years_short'.tr(),
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 16.h),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: _buildStatTile(
+                        'gender_label'.tr(),
+                        profile.gender?.labelKey.tr(),
+                        null,
+                      ),
+                    ),
+                    Expanded(
+                      child: _buildStatTile(
+                        'stat_bmi'.tr(),
+                        bmi?.toStringAsFixed(1),
+                        null,
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 16.h),
+                _buildStatTile(
+                  'stat_activity'.tr(),
+                  profile.activityLevel.titleKey.tr(),
+                  '${profile.activityLevel.multiplier}x',
                 ),
               ],
             ),
-            SizedBox(height: 16.h),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: _buildStatTile(
-                    'gender_label'.tr(),
-                    profile.gender?.labelKey.tr(),
-                    null,
-                  ),
-                ),
-                Expanded(
-                  child: _buildStatTile(
-                    'stat_bmi'.tr(),
-                    bmi?.toStringAsFixed(1),
-                    null,
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: 16.h),
-            _buildStatTile(
-              'stat_activity'.tr(),
-              profile.activityLevel.titleKey.tr(),
-              '${profile.activityLevel.multiplier}x',
-            ),
-          ],
+          ),
         ),
       ),
     );
