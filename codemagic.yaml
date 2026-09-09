@@ -1,99 +1,155 @@
 # Building Bulkr for iOS without owning a Mac.
 #
-# Codemagic rents one per build. It checks this file out, runs the workflow
-# below on a real macOS machine, signs with certificates it generates from your
-# App Store Connect API key, and uploads the result to TestFlight.
+# Codemagic rents one per build. It checks this file out, runs a workflow below
+# on a real macOS machine, signs with certificates it generates from your App
+# Store Connect API key, and either uploads a build to TestFlight or publishes
+# a Shorebird patch.
+#
+# Two workflows, and the difference matters:
+#
+#   ios-testflight   A store build. Goes through review/TestFlight, and is the
+#                    only way to ship native code, new plugins, or assets.
+#                    Also the thing a patch is a patch *of* — nothing can be
+#                    patched onto a build this workflow did not make.
+#
+#   ios-patch        Dart-only changes, straight to phones already running a
+#                    release, no upload and no review. Minutes, not days.
 #
 # The whole setup is at ios/TESTFLIGHT.md. This file is the part that does not
 # need explaining twice.
 
+definitions:
+  environment: &ios_environment
+    # Pinned, not `stable`. Two reasons, and the second one is the load-bearing
+    # one: a floating channel means the next Flutter release changes this build
+    # machine's SDK without anybody touching the repo, and a Shorebird patch
+    # only applies to a release built on the same Flutter. `shorebird patch`
+    # takes no --flutter-version at all — it inherits the release's — so the
+    # release is the only place this can be got right.
+    #
+    # This must match `shorebird flutter versions list` and the SDK the project
+    # is developed on. All three are 3.47.2.
+    flutter: &flutter_version 3.47.2
+    xcode: latest
+
+    groups:
+      # Codemagic -> Environment variables. See ios/TESTFLIGHT.md for what goes
+      # in them.
+      - bulkr_secrets
+      # SHOREBIRD_TOKEN, from the Shorebird console under Account -> API Keys.
+      - shorebird
+
+    vars:
+      BUNDLE_ID: com.alimahmoud.bulkr
+      FLUTTER_VERSION: *flutter_version
+
+  scripts:
+    # Signing, done explicitly rather than through the `ios_signing:` block.
+    #
+    # CERTIFICATE_PRIVATE_KEY is the part that is not obvious. Apple issues a
+    # certificate against a private key that never leaves the machine that made
+    # the request — so an existing distribution certificate, made on someone's
+    # Mac for some other app, cannot be reused here at all. That is what
+    # "Cannot save Signing Certificates without certificate private key" means:
+    # the certificate was found, the key to use it was not.
+    #
+    # Handing in a key of our own makes Apple issue a *second* certificate
+    # against it, which leaves the first one alone. Revoking the old one would
+    # also work and would break whatever still signs with it.
+    #
+    # Generated once and stored as a Codemagic secure variable, never
+    # per-build: Apple allows two distribution certificates per account, and a
+    # fresh key each run would burn through that in two builds.
+    #
+    # `fetch-signing-files` fetches whatever profiles already exist and fails
+    # with "No matching profiles found for bundle identifier ... and
+    # distribution type app_store" when there are none — the state every
+    # project is in before its first build. `--create` is the difference: it
+    # issues the distribution certificate and the provisioning profile if they
+    # are missing, and reuses them every time after.
+    #
+    # This needs the App Store Connect key to be a **Team Key** with App
+    # Manager or Admin access. A key scoped to an individual app cannot manage
+    # certificates at all, and fails here rather than where it was created.
+    - &fetch_signing_files
+      name: Fetch or create the signing files
+      script: |
+        if [ -z "$CERTIFICATE_PRIVATE_KEY" ]; then
+          echo "CERTIFICATE_PRIVATE_KEY is not set."
+          echo "See ios/TESTFLIGHT.md, step 5 - it is one ssh-keygen command."
+          exit 1
+        fi
+
+        app-store-connect fetch-signing-files "$BUNDLE_ID" \
+          --type IOS_APP_STORE \
+          --certificate-key="@env:CERTIFICATE_PRIVATE_KEY" \
+          --create
+
+    - &load_keychain
+      name: Load them into a keychain
+      script: |
+        keychain initialize
+        keychain add-certificates
+
+    # Rewrites the Xcode project to point at the profile just fetched, and
+    # writes the export options plist both build commands read.
+    - &use_profiles
+      name: Point Xcode at the profile
+      script: xcode-project use-profiles
+
+    - &fetch_packages
+      name: Fetch packages
+      script: flutter pub get
+
+    - &analyze_and_test
+      name: Analyze and test
+      script: |
+        flutter analyze
+        flutter test
+
+    # Codemagic's macOS images may already carry it; installing over the top
+    # would just cost a minute. `command -v` decides.
+    - &install_shorebird
+      name: Install the Shorebird CLI
+      script: |
+        if [ -z "$SHOREBIRD_TOKEN" ]; then
+          echo "SHOREBIRD_TOKEN is not set."
+          echo "Shorebird console -> Account -> API Keys, then add it to the"
+          echo "'shorebird' environment variable group in Codemagic."
+          exit 1
+        fi
+
+        if ! command -v shorebird >/dev/null 2>&1; then
+          curl -fsSL https://raw.githubusercontent.com/shorebirdtech/install/main/install.sh | bash
+          echo "PATH=$HOME/.shorebird/bin:$PATH" >> "$CM_ENV"
+          export PATH="$HOME/.shorebird/bin:$PATH"
+        fi
+
+        shorebird --version
+
 workflows:
+  # ---------------------------------------------------------------------------
+  # A store build, and the release a patch attaches to
+  # ---------------------------------------------------------------------------
   ios-testflight:
-    name: iOS - TestFlight
+    name: iOS - TestFlight release
     instance_type: mac_mini_m2
     max_build_duration: 60
 
     integrations:
       # Created in Codemagic under Teams -> Integrations -> Developer Portal.
       # This is what lets Codemagic issue its own signing certificate and
-      # provisioning profile, which is the part that would otherwise need a Mac
-      # with Xcode on it.
+      # provisioning profile — the part that would otherwise need a Mac with
+      # Xcode on it.
       app_store_connect: bulkr_asc
 
-    environment:
-      # Pinned, not `stable`. Two reasons, and the second one is new: a floating
-      # channel means the next Flutter release changes this build machine's SDK
-      # without anybody touching the repo, and Shorebird patches only apply to a
-      # release built on the same Flutter. A drifting SDK would quietly make
-      # every patch unappliable to the build already on people's phones.
-      #
-      # Must match `shorebird flutter versions list`'s selected version and the
-      # SDK the project is developed on. All three are 3.47.2.
-      flutter: 3.47.2
-      xcode: latest
-
-      groups:
-        # Codemagic -> Environment variables. See ios/TESTFLIGHT.md for what
-        # goes in it.
-        - bulkr_secrets
-
-      vars:
-        BUNDLE_ID: com.alimahmoud.bulkr
+    environment: *ios_environment
 
     scripts:
-      # Signing, done explicitly rather than through the `ios_signing:` block.
-      #
-      # CERTIFICATE_PRIVATE_KEY is the part that is not obvious. Apple issues a
-      # certificate against a private key that never leaves the machine that
-      # made the request — so an existing distribution certificate, made on
-      # someone's Mac for some other app, cannot be reused here at all. That is
-      # what "Cannot save Signing Certificates without certificate private key"
-      # means: the certificate was found, the key to use it was not.
-      #
-      # Handing in a key of our own makes Apple issue a *second* certificate
-      # against it, which leaves the first one alone. Revoking the old one
-      # would also work and would break whatever still signs with it.
-      #
-      # Generated once and stored as a Codemagic secure variable, never
-      # per-build: Apple allows two distribution certificates per account, and
-      # a fresh key each run would burn through that in two builds.
-      #
-      # That block fetches whatever profiles already exist and fails with "No
-      # matching profiles found for bundle identifier ... and distribution type
-      # app_store" when there are none — which is the state every project is in
-      # before its first build. `--create` is the difference: it issues the
-      # distribution certificate and the provisioning profile if they are
-      # missing, and reuses them every time after.
-      #
-      # This needs the App Store Connect key to be a **Team Key** with App
-      # Manager or Admin access. A key scoped to an individual app cannot
-      # manage certificates at all, and fails here rather than at the point
-      # where it was created.
-      - name: Fetch or create the signing files
-        script: |
-          if [ -z "$CERTIFICATE_PRIVATE_KEY" ]; then
-            echo "CERTIFICATE_PRIVATE_KEY is not set."
-            echo "See ios/TESTFLIGHT.md, step 5 - it is one ssh-keygen command."
-            exit 1
-          fi
-
-          app-store-connect fetch-signing-files "$BUNDLE_ID" \
-            --type IOS_APP_STORE \
-            --certificate-key="@env:CERTIFICATE_PRIVATE_KEY" \
-            --create
-
-      - name: Load them into a keychain
-        script: |
-          keychain initialize
-          keychain add-certificates
-
-      # Rewrites the Xcode project to point at the profile just fetched, and
-      # writes the export options plist the ipa build reads.
-      - name: Point Xcode at the profile
-        script: xcode-project use-profiles
-
-      - name: Fetch packages
-        script: flutter pub get
+      - *fetch_signing_files
+      - *load_keychain
+      - *use_profiles
+      - *fetch_packages
 
       # The build number has to rise on every upload or App Store Connect
       # refuses the build, and pubspec is pinned at +1. Codemagic's own counter
@@ -102,22 +158,30 @@ workflows:
         script: |
           echo "BUILD_NUMBER=$(($(app-store-connect get-latest-testflight-build-number "$APP_STORE_APP_ID" 2>/dev/null || echo 0) + 1))" >> $CM_ENV
 
-      - name: Analyze and test
-        script: |
-          flutter analyze
-          flutter test
+      - *analyze_and_test
+      - *install_shorebird
 
-      - name: Build the ipa
+      # `shorebird release` in place of `flutter build ipa`. It runs the same
+      # build through Shorebird's Flutter and additionally uploads the release
+      # artifacts, which is what later patches are diffed against. An ipa built
+      # by plain `flutter build` cannot be patched at all — so this command is
+      # the whole point of the exercise.
+      #
+      # --export-options-plist rather than --export-method: the plist was
+      # written by `xcode-project use-profiles` above and already names the
+      # right profile, and passing both is an error.
+      - name: Release with Shorebird
         script: |
-          flutter build ipa --release \
-            --build-number=$BUILD_NUMBER \
-            --dart-define=GOOGLE_IOS_CLIENT_ID="$GOOGLE_IOS_CLIENT_ID" \
-            --export-options-plist=$HOME/export_options.plist
+          shorebird release \
+            --platforms ios \
+            --flutter-version "$FLUTTER_VERSION" \
+            --build-number="$BUILD_NUMBER" \
+            --export-options-plist="$HOME/export_options.plist" \
+            --dart-define=GOOGLE_IOS_CLIENT_ID="$GOOGLE_IOS_CLIENT_ID"
 
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
-      - flutter_drive.log
 
     publishing:
       app_store_connect:
@@ -127,6 +191,66 @@ workflows:
         # app; adding testers is a decision, not a build step.
         submit_to_testflight: false
 
+      email:
+        recipients:
+          - ahmed.elrashidy@mafi-egypt.com
+        notify:
+          success: true
+          failure: true
+
+  # ---------------------------------------------------------------------------
+  # A Dart-only change, onto phones already running a release
+  # ---------------------------------------------------------------------------
+  ios-patch:
+    name: iOS - Shorebird patch
+    instance_type: mac_mini_m2
+    # Shorter than the release on purpose. Nothing here waits on App Store
+    # Connect, so a run this long means something is stuck rather than slow.
+    max_build_duration: 40
+
+    integrations:
+      # Still needed. A patch is built and codesigned like any other iOS
+      # build; it is only the upload that does not happen.
+      app_store_connect: bulkr_asc
+
+    environment: *ios_environment
+
+    scripts:
+      - *fetch_signing_files
+      - *load_keychain
+      - *use_profiles
+      - *fetch_packages
+      - *analyze_and_test
+      - *install_shorebird
+
+      # Which release to patch. `latest` is the most recently updated one,
+      # which is usually right and is wrong exactly when it matters — if a
+      # newer release exists that testers have not installed yet, a patch
+      # aimed at `latest` will not reach the build on their phones. Set
+      # SHOREBIRD_RELEASE_VERSION in Codemagic (e.g. 1.0.6+12) to be explicit.
+      #
+      # No --allow-native-diffs and no --allow-asset-diffs, deliberately.
+      # Native code and assets cannot travel in a patch, and those flags do
+      # not make them travel — they just stop Shorebird from refusing, and
+      # ship something that behaves unpredictably on a real phone. A refusal
+      # here means the change needs the release workflow instead.
+      #
+      # The dart-defines have to match the release's or they read as a diff.
+      - name: Patch with Shorebird
+        script: |
+          shorebird patch \
+            --platforms ios \
+            --release-version "${SHOREBIRD_RELEASE_VERSION:-latest}" \
+            --export-options-plist="$HOME/export_options.plist" \
+            --dart-define=GOOGLE_IOS_CLIENT_ID="$GOOGLE_IOS_CLIENT_ID"
+
+    artifacts:
+      - /tmp/xcodebuild_logs/*.log
+
+    # No app_store_connect block. A patch is not a build to upload, and
+    # publishing one here would put an ipa into TestFlight that nobody asked
+    # for and that carries the patch baked in rather than as a patch.
+    publishing:
       email:
         recipients:
           - ahmed.elrashidy@mafi-egypt.com

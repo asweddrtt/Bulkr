@@ -217,8 +217,50 @@ symptom is silence, not an error.
 git push
 ```
 
-Then Start new build. The build number increments itself from what TestFlight
-already has, so you never have to touch `pubspec.yaml`.
+Then Start new build, choosing **iOS - TestFlight release**. The build number
+increments itself from what TestFlight already has, so you never have to touch
+`pubspec.yaml`.
+
+## Or don't build at all — patch it
+
+Shorebird ships Dart changes straight to phones already running a release. No
+upload, no review, minutes instead of days. Start new build and choose
+**iOS - Shorebird patch**.
+
+What travels in a patch:
+
+| Change | Patch | Store build |
+| --- | --- | --- |
+| Dart code, anywhere in `lib/` | yes | |
+| A pure-Dart package version | yes | |
+| Swift, Info.plist, entitlements, the Xcode project | | yes |
+| A new plugin with native code | | yes |
+| Images, fonts, `assets/translations/*.json` | | yes |
+| `pubspec.yaml` version bump | | yes |
+
+Two things worth knowing before you rely on it.
+
+**A patch attaches to a release, and only to that release.** Nothing can be
+patched onto a build made by plain `flutter build ipa` — the release workflow
+now runs `shorebird release` for exactly this reason. The first TestFlight
+build made this way is the first one that can ever receive a patch.
+
+**`--release-version` defaults to `latest`**, which is the most recently
+updated release. That is usually what you want and is wrong precisely when it
+matters: if you have since made a newer release that your testers have not
+installed, a patch aimed at `latest` never reaches the build on their phones.
+Set `SHOREBIRD_RELEASE_VERSION` in Codemagic (e.g. `1.0.6+12`) when you need
+to be explicit.
+
+The workflow deliberately does **not** pass `--allow-native-diffs` or
+`--allow-asset-diffs`. Those flags do not make native code or assets travel in
+a patch; they only stop Shorebird refusing, and ship something that misbehaves
+on a real phone. A refusal means that change needs the release workflow — the
+refusal is the feature.
+
+Patches are free to create; you are billed on installs. `auto_update` is on in
+`shorebird.yaml`, so the app fetches a patch in the background at launch and
+runs it the next time it starts.
 
 ## When it fails
 
@@ -230,6 +272,9 @@ already has, so you never have to touch `pubspec.yaml`.
 | `App Store Connect integration "bulkr_asc" does not exist` | The API key is not registered in Codemagic under that exact name |
 | `Provisioning profile doesn't match the entitlements` | Push Notifications not ticked on the App ID |
 | `The bundle version must be higher than the previously uploaded version` | A build with that number already exists; re-run, the counter moves |
+| A patch refuses with native or asset diffs detected | That change cannot travel in a patch. Ship it as a TestFlight release; do not reach for `--allow-*-diffs` |
+| `shorebird patch` cannot find a release to patch | The build on the phone was made by `flutter build ipa`, before the release workflow used `shorebird release`. Only a Shorebird release can receive patches |
+| A patch installs and changes nothing | Usually the release version — `latest` pointed at a release nobody has installed. Set `SHOREBIRD_RELEASE_VERSION` explicitly |
 | `The sandbox is not in sync with the Podfile.lock` | Something reintroduced a Podfile. All plugins are Swift Packages; there should not be one |
 | A pod wants a higher deployment target | Raise `IPHONEOS_DEPLOYMENT_TARGET` in `project.pbxproj` and `MinimumOSVersion` in `ios/Flutter/AppFrameworkInfo.plist` — both, or Flutter rewrites them mid-build |
 | Google sign-in opens and returns nothing | Step 2 was skipped |
