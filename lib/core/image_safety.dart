@@ -37,14 +37,32 @@ abstract final class ImageSafety {
   /// physique shot is precisely the wrong sensitivity. 0.7 would refuse posts
   /// this app exists to collect.
   ///
-  /// 0.92 is deliberately near the top: a miss shows up as one bad post that
-  /// reports and blocking then handle, while a false positive shows up as a
-  /// user who cannot post their progress and concludes the app is broken. The
-  /// asymmetry is not close.
+  /// Was 0.92, which was too far up: an actual nude went through untouched.
+  /// 0.75 is just above the package's own 0.7 — close enough to catch what the
+  /// model is sure about, with a little room left for the shirtless physique
+  /// shots this app exists to collect.
+  ///
+  /// The asymmetry behind picking a high number still holds — a miss is one bad
+  /// post that reports and blocking then handle, a false positive is somebody
+  /// who cannot post their progress — but 0.92 bought so much of one that it
+  /// caught nothing at all.
   ///
   /// This is a Dart constant with no asset behind it, so moving it after
   /// testing on real photos is a Shorebird patch rather than a build.
-  static const double threshold = 0.92;
+  static const double threshold = 0.75;
+
+  /// Temporary: report the score for every image, allowed or not.
+  ///
+  /// On while the threshold is being calibrated, because three different
+  /// failures look identical from outside the app — a score under the
+  /// threshold, a native library that did not load, and an app that was never
+  /// updated to a build containing any of this. Only a number distinguishes
+  /// them, and a device log is a bad way to ask for one.
+  ///
+  /// It refuses every image while it is on. That is the point: an answer on the
+  /// first attempt beats a log nobody can reach. Turn it off in a patch once
+  /// the number is known.
+  static const bool reportEveryScore = true;
 
   /// Refuses an explicit image, and lets everything else through.
   ///
@@ -82,7 +100,9 @@ abstract final class ImageSafety {
 
     debugPrint('Bulkr: image scored ${result.score.toStringAsFixed(3)}.');
 
-    if (isExplicit(result.score)) throw ExplicitImageException(result.score);
+    if (reportEveryScore || isExplicit(result.score)) {
+      throw ExplicitImageException(result.score);
+    }
   }
 
   /// Whether a score is refused, as a pure function so it can be tested.

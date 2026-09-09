@@ -10,6 +10,12 @@ import 'package:flutter_test/flutter_test.dart';
 /// sensitivity. The number here is the one thing in this feature worth being
 /// deliberate about, so it gets a test rather than a comment alone.
 void main() {
+  // NOTE: `ImageSafety.reportEveryScore` is on while the threshold is being
+  // calibrated, so `refuseIfExplicit` throws for every image. The two tests
+  // below that call it assert only that it completes on inputs the model never
+  // reaches, so they are unaffected — but any test asserting an allowed image
+  // uploads would fail, and correctly: right now none do.
+  //
   // Without this, `refuseIfExplicit` throws on the binding before it reaches
   // the model at all — and the fail-open tests below then pass for a reason
   // that has nothing to do with fail-open. With it initialized, the native
@@ -32,7 +38,12 @@ void main() {
     // The band a shirtless physique shot lands in. The package would call
     // anything from 0.4 "questionable" and anything from 0.7 NSFW; both would
     // refuse posts this app exists to collect.
-    for (final double score in <double>[0.45, 0.6, 0.7, 0.85]) {
+    // 0.85 used to be in this list, when the threshold was 0.92. It is not any
+    // more, and that is the trade made deliberately rather than discovered
+    // later: an actual nude went through at 0.92, so the ceiling came down and
+    // a physique shot scoring 0.85 will now be refused. If real photos land
+    // there the number moves again — with this list as the record of the cost.
+    for (final double score in <double>[0.45, 0.6, 0.7, 0.74]) {
       expect(
         ImageSafety.isExplicit(score),
         isFalse,
@@ -48,7 +59,7 @@ void main() {
     // progress and concludes the app is broken.
     expect(
       ImageSafety.threshold,
-      greaterThan(0.7),
+      greaterThanOrEqualTo(0.7),
       reason: 'below the package default is the wrong side of the trade',
     );
     expect(
@@ -64,8 +75,7 @@ void main() {
     await expectLater(ImageSafety.refuseIfExplicit(Uint8List(0)), completes);
   });
 
-  test('an unavailable model allows the upload instead of blocking it',
-      () async {
+  test('an unavailable model allows the upload instead of blocking it', () async {
     // The whole posture of this check, and the case that actually happens on a
     // device: the native library fails to load, or the asset is missing from
     // the bundle. A moderation step that can take "post a photo" down with it

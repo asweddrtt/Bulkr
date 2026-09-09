@@ -44,5 +44,14 @@ String? blockedTermRefusal(Object error) {
 /// patch-shaped.
 String? explicitImageRefusal(Object error) {
   if (error is! ExplicitImageException) return null;
+
+  // While calibrating, the number is the whole message. It is the only thing
+  // that separates "scored below the threshold" from "the check never ran",
+  // and the person testing has no other way to see it.
+  if (ImageSafety.reportEveryScore) {
+    return 'Image check ran: scored ${error.score.toStringAsFixed(3)} '
+        '(threshold ${ImageSafety.threshold}).';
+  }
+
   return 'image_explicit_refused'.tr();
 }
