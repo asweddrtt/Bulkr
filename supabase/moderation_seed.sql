@@ -212,24 +212,32 @@ on conflict (term) do nothing;
 -- sentences your users would write. `contains_banned_term` is the whole test.
 
 -- ---------------------------------------------------------------------------
--- 6. Severe sexual abuse — your call, commented out
+-- 6. Severe sexual abuse
 -- ---------------------------------------------------------------------------
--- These are not protected-class hate, they are sexual and misogynistic insults.
--- In Egyptian Arabic several are common casual profanity, and you said swearing
--- is fine — so they are here rather than active, for you to decide about.
--- Uncomment what you want.
+-- Not protected-class hate: sexual and misogynistic insults, enabled on the
+-- owner's decision after being shown the trade.
 --
--- insert into public.banned_terms (term, note) values
---   ('شرموطه', 'sexual slur'),
---   ('شراميط', 'sexual slur, plural'),
---   ('sharmouta', 'sexual slur, Arabizi'),
---   ('sharmoota', 'sexual slur, Arabizi'),
---   ('قحبه', 'sexual slur'),
---   ('gahba', 'sexual slur, Arabizi'),
---   ('qahba', 'sexual slur, Arabizi'),
---   ('عرص', 'sexual slur'),
---   ('3ars', 'sexual slur, Arabizi')
--- on conflict (term) do nothing;
+-- Worth knowing what that trade is, because it is the one place this list
+-- reaches past hate into ordinary rudeness. Several of these are everyday
+-- profanity in Egyptian Arabic — closer in register to "bastard" than to a
+-- slur — and unlike the terms in sections 3 and 4 they will be typed by people
+-- with no intention of abusing anyone in particular. Expect them to fire more
+-- often than everything above combined.
+--
+-- Removing any of them is one delete and needs no build:
+--
+--   delete from public.banned_terms where term = '<term>';
+insert into public.banned_terms (term, note) values
+  ('شرموطه', 'sexual slur'),
+  ('شراميط', 'sexual slur, plural'),
+  ('sharmouta', 'sexual slur, Arabizi'),
+  ('sharmoota', 'sexual slur, Arabizi'),
+  ('قحبه', 'sexual slur'),
+  ('gahba', 'sexual slur, Arabizi'),
+  ('qahba', 'sexual slur, Arabizi'),
+  ('عرص', 'sexual slur'),
+  ('3ars', 'sexual slur, Arabizi')
+on conflict (term) do nothing;
 
 -- ---------------------------------------------------------------------------
 -- 7. Verify
