@@ -2,27 +2,31 @@ import 'dart:typed_data';
 
 import 'package:bulkr/core/image_safety.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:nsfw_detect/nsfw_detect.dart';
 
-/// The threshold, and the direction it errs in.
+/// The threshold, the score it is compared against, and the direction the
+/// whole thing errs in.
 ///
-/// Yahoo's open_nsfw defaults to 0.7 and is sensitive to bare skin, which in an
+/// OpenNSFW2 is Yahoo's open_nsfw and is sensitive to bare skin, which in an
 /// app whose best content is a shirtless progress photo is exactly the wrong
-/// sensitivity. The number here is the one thing in this feature worth being
-/// deliberate about, so it gets a test rather than a comment alone.
+/// sensitivity. These are the two decisions in this feature worth being
+/// deliberate about, so they get tests rather than comments alone.
 void main() {
-  // NOTE: `ImageSafety.reportEveryScore` is on while the threshold is being
-  // calibrated, so `refuseIfExplicit` throws for every image. The two tests
-  // below that call it assert only that it completes on inputs the model never
-  // reaches, so they are unaffected — but any test asserting an allowed image
-  // uploads would fail, and correctly: right now none do.
-  //
-  // Without this, `refuseIfExplicit` throws on the binding before it reaches
-  // the model at all — and the fail-open tests below then pass for a reason
-  // that has nothing to do with fail-open. With it initialized, the native
-  // TFLite library genuinely is not present in a unit-test process, which is
-  // the same failure a device hits when the model cannot load: the real case
-  // this posture exists for.
+  // Without a binding, `refuseIfExplicit` throws on the platform channel
+  // before it reaches the model at all — and the two fail-open tests below
+  // then pass for a reason that has nothing to do with fail-open. With it
+  // initialized there genuinely is no Core ML on a Linux test host, which is
+  // the same shape of failure a device hits when the model cannot load: the
+  // real case that posture exists for.
   setUpAll(TestWidgetsFlutterBinding.ensureInitialized);
+
+  ScanResult resultWith(List<NsfwLabel> labels) => ScanResult(
+        item: MediaItem.empty(),
+        status: ScanStatus.completed,
+        labels: labels,
+        scannedAt: DateTime(2026),
+        confidenceThreshold: ImageSafety.threshold,
+      );
 
   test('refuses only what the model is confident about', () {
     expect(ImageSafety.isExplicit(1.0), isTrue);
@@ -34,10 +38,11 @@ void main() {
     expect(ImageSafety.isExplicit(ImageSafety.threshold - 0.001), isFalse);
   });
 
-  test('a progress photo scoring in open_nsfw middle band is allowed', () {
+  test('a progress photo in the open_nsfw middle band is allowed', () {
     // The band a shirtless physique shot lands in. The package would call
-    // anything from 0.4 "questionable" and anything from 0.7 NSFW; both would
-    // refuse posts this app exists to collect.
+    // anything from 0.7 NSFW, which would refuse posts this app exists to
+    // collect.
+    //
     // 0.85 used to be in this list, when the threshold was 0.92. It is not any
     // more, and that is the trade made deliberately rather than discovered
     // later: an actual nude went through at 0.92, so the ceiling came down and
@@ -69,6 +74,61 @@ void main() {
     );
   });
 
+  test('the score is the unsafe label, not whichever label came first', () {
+    // The reason `scoreOf` exists. `ScanResult.isNsfw` only answers true when
+    // an unsafe category is also the *top* label, so this image — which the
+    // model called 0.8 nudity — reads as safe there purely because `safe`
+    // scored a hair higher.
+    final ScanResult borderline = resultWith(const <NsfwLabel>[
+      NsfwLabel(category: NsfwCategory.safe, confidence: 0.81),
+      NsfwLabel(category: NsfwCategory.nudity, confidence: 0.8),
+    ]);
+
+    expect(
+      borderline.isNsfw,
+      isFalse,
+      reason: 'the gap this exists to close — if this ever becomes true, '
+          'scoreOf can be replaced by isNsfw',
+    );
+    expect(ImageSafety.scoreOf(borderline), 0.8);
+    expect(ImageSafety.isExplicit(ImageSafety.scoreOf(borderline)), isTrue);
+  });
+
+  test('the score takes the highest of the two unsafe categories', () {
+    expect(
+      ImageSafety.scoreOf(resultWith(const <NsfwLabel>[
+        NsfwLabel(category: NsfwCategory.nudity, confidence: 0.4),
+        NsfwLabel(category: NsfwCategory.explicitNudity, confidence: 0.97),
+      ])),
+      0.97,
+    );
+    expect(
+      ImageSafety.scoreOf(resultWith(const <NsfwLabel>[
+        NsfwLabel(category: NsfwCategory.explicitNudity, confidence: 0.2),
+        NsfwLabel(category: NsfwCategory.nudity, confidence: 0.9),
+      ])),
+      0.9,
+    );
+  });
+
+  test('suggestive on its own does not count as explicit', () {
+    // Curses are allowed in this app and so is a gym selfie. "Suggestive" is
+    // the category a swimsuit lands in, and refusing it would refuse the
+    // content the feed is for.
+    final ScanResult suggestive = resultWith(const <NsfwLabel>[
+      NsfwLabel(category: NsfwCategory.suggestive, confidence: 0.99),
+      NsfwLabel(category: NsfwCategory.safe, confidence: 0.4),
+    ]);
+
+    expect(ImageSafety.scoreOf(suggestive), 0.0);
+    expect(ImageSafety.isExplicit(ImageSafety.scoreOf(suggestive)), isFalse);
+  });
+
+  test('a scan with no labels scores zero rather than throwing', () {
+    // What a `skipped` result or a cache hit with nothing in it looks like.
+    expect(ImageSafety.scoreOf(resultWith(const <NsfwLabel>[])), 0.0);
+  });
+
   test('empty bytes are not an image and are not refused', () async {
     // Reached when a picker hands back nothing. It must not throw: the upload
     // that follows will fail on its own terms with a message that fits.
@@ -76,13 +136,13 @@ void main() {
   });
 
   test('an unavailable model allows the upload instead of blocking it', () async {
-    // The whole posture of this check, and the case that actually happens on a
-    // device: the native library fails to load, or the asset is missing from
-    // the bundle. A moderation step that can take "post a photo" down with it
-    // is worse than the content it was added to catch.
+    // The whole posture of this check, and the case that actually happened on
+    // a device: the model fails to load, so the check cannot answer. A
+    // moderation step that can take "post a photo" down with it is worse than
+    // the content it was added to catch.
     //
-    // There is no TFLite native library in a unit-test process, so this is that
-    // failure for real rather than a stand-in for it.
+    // There is no Core ML on the test host, so this is that failure for real
+    // rather than a stand-in for it.
     await expectLater(
       ImageSafety.refuseIfExplicit(Uint8List.fromList(<int>[1, 2, 3, 4])),
       completes,

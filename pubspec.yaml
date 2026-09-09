@@ -85,7 +85,28 @@ dependencies:
   image: ^4.9.2
   firebase_core: ^4.14.0
   firebase_messaging: ^16.6.0
-  nsfw_detector_flutter: ^2.0.2
+  # On-device nudity detection for post and avatar images. Core ML + Vision on
+  # iOS against an OpenNSFW2 model compiled into the plugin's own bundle — so
+  # nothing is uploaded, nothing is billed, and there is no account or API key
+  # anywhere in it.
+  #
+  # This replaced `nsfw_detector_flutter`, which wraps `tflite_flutter`, which
+  # resolves TensorFlow Lite's C API at runtime with `dlsym`. On a real device
+  # that build did nothing whatsoever:
+  #
+  #     dlsym(RTLD_DEFAULT, TfLiteModelCreate): symbol not found
+  #
+  # so every check threw and every check was then allowed by the fail-open
+  # branch in `ImageSafety`. This package needs no third-party native library
+  # at all — only frameworks that ship with the OS — so there is no symbol to
+  # look up and nothing to fail to find.
+  #
+  # Its podspec requires iOS 16.0, which is why `IPHONEOS_DEPLOYMENT_TARGET`
+  # moved up from 15.0. It is also the app's only remaining CocoaPods plugin;
+  # everything else is a Swift Package, and Flutter generates the Podfile for
+  # the mixed case on its own.
+  nsfw_detect: ^2.7.1
+
   # NOTE: `intl` (DateFormat/NumberFormat) is not listed here on purpose —
   # easy_localization re-exports it, which is how NumberFormat is already used
   # in the reveal screen. Adding it explicitly risks a resolution conflict with

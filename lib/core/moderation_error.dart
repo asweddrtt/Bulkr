@@ -45,13 +45,16 @@ String? blockedTermRefusal(Object error) {
 String? explicitImageRefusal(Object error) {
   if (error is! ExplicitImageException) return null;
 
-  // While calibrating, the number is the whole message. It is the only thing
-  // that separates "scored below the threshold" from "the check never ran",
-  // and the person testing has no other way to see it.
-  if (ImageSafety.reportEveryScore) {
-    return 'Image check ran: scored ${error.score.toStringAsFixed(3)} '
-        '(threshold ${ImageSafety.threshold}).';
+  final String refusal = 'image_explicit_refused'.tr();
+
+  // While calibrating, the score rides along. A refusal is the only moment the
+  // number is worth anything: it is what says whether the model was sure or
+  // whether the threshold is sitting on top of ordinary progress photos, and
+  // the person holding the phone has no other way to see it.
+  if (ImageSafety.showScoreInRefusal) {
+    return '$refusal (scored ${error.score.toStringAsFixed(3)}, '
+        'threshold ${ImageSafety.threshold})';
   }
 
-  return 'image_explicit_refused'.tr();
+  return refusal;
 }
