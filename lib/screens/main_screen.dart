@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../cubit/conversations/conversations_cubit.dart';
@@ -50,6 +51,12 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   int _currentIndex = 2;
 
   StreamSubscription<PushTap>? _taps;
+
+  /// Whether the nav bar is showing.
+  ///
+  /// Driven by scroll direction rather than position: what matters is that the
+  /// user is reading downwards, not how far down they have got.
+  bool _navVisible = true;
 
   @override
   void initState() {
@@ -184,8 +191,57 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   /// Index of the Tracker tab, which needs a nudge the others do not.
   static const int _trackerIndex = 3;
 
+  /// Hides the bar while scrolling down, brings it back on the way up.
+  ///
+  /// One listener on the shell rather than a controller per screen. Every tab
+  /// scrolls its own list and two of them scroll horizontally as well, and a
+  /// [UserScrollNotification] carries both the axis and the direction — so the
+  /// shell can read the gesture without any screen having to report it.
+  ///
+  /// `UserScrollNotification` and not `ScrollUpdateNotification`: only the
+  /// first is a person's finger. The second also fires for a
+  /// `RefreshIndicator` settling, a programmatic `animateTo`, and the bounce at
+  /// the end of a list — none of which are someone asking for more room.
+  bool _onUserScroll(UserScrollNotification notification) {
+    // The feed swipes between For You and Discover and Meals between its two
+    // tabs. A sideways gesture is not a reading gesture.
+    if (notification.metrics.axis != Axis.vertical) return false;
+
+    // A list shorter than its viewport still reports scroll direction as the
+    // overscroll bounces. Hiding the bar because somebody tugged at a list
+    // with four items in it would make it flicker for no reason.
+    if (!notification.metrics.hasContentDimensions ||
+        notification.metrics.maxScrollExtent <= BulkrNavBar.barHeight) {
+      return false;
+    }
+
+    switch (notification.direction) {
+      // Content moving up the screen: reading onwards.
+      case ScrollDirection.reverse:
+        _setNavVisible(false);
+      case ScrollDirection.forward:
+        _setNavVisible(true);
+      // Idle arrives at the end of every gesture. Leaving the bar where it is
+      // means it stays hidden through a pause mid-article, and comes back the
+      // moment the user heads back up.
+      case ScrollDirection.idle:
+        break;
+    }
+
+    return false;
+  }
+
+  void _setNavVisible(bool visible) {
+    if (_navVisible == visible) return;
+    setState(() => _navVisible = visible);
+  }
+
   void _select(int index) {
     setState(() => _currentIndex = index);
+
+    // A tab arrived at from a hidden bar should not start with the bar hidden:
+    // the new screen is at the top of its own list and nobody has scrolled it.
+    _setNavVisible(true);
 
     // Everything here lives in an IndexedStack, so each screen is built once
     // and kept alive — which is what makes switching tabs instant, and what
@@ -207,21 +263,25 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       extendBody: true,
       body: SafeArea(
         bottom: false,
-        child: IndexedStack(
-          index: _currentIndex,
-          children: const [
-            DashboardScreen(),
-            MealsScreen(),
-            FeedScreen(),
-            TrackerScreen(),
-            ProfileScreen(),
-          ],
+        child: NotificationListener<UserScrollNotification>(
+          onNotification: _onUserScroll,
+          child: IndexedStack(
+            index: _currentIndex,
+            children: const [
+              DashboardScreen(),
+              MealsScreen(),
+              FeedScreen(),
+              TrackerScreen(),
+              ProfileScreen(),
+            ],
+          ),
         ),
       ),
       bottomNavigationBar: BulkrNavBar(
         destinations: MainScreen.destinations,
         currentIndex: _currentIndex,
         onSelected: _select,
+        visible: _navVisible,
       ),
     );
   }

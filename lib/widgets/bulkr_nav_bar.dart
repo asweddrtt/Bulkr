@@ -43,11 +43,24 @@ class BulkrNavBar extends StatefulWidget {
     required this.destinations,
     required this.currentIndex,
     required this.onSelected,
+    this.visible = true,
   });
 
   final List<NavDestination> destinations;
   final int currentIndex;
   final ValueChanged<int> onSelected;
+
+  /// False while the user is reading downwards.
+  ///
+  /// The bar slides out rather than shrinking or fading in place: a
+  /// half-transparent bar is still something to look past, and a shorter one
+  /// moves its own tap targets while a finger is on the way to them.
+  ///
+  /// It keeps its slot in the layout either way, so the space every screen
+  /// reserves at the bottom does not change as it comes and goes — content
+  /// that reflowed on every scroll direction change would be far worse than a
+  /// bar that is briefly not there.
+  final bool visible;
 
   /// The bar's own height, above whatever safe-area inset sits below it.
   static double get barHeight => 62.h;
@@ -64,10 +77,27 @@ class BulkrNavBar extends StatefulWidget {
 
   /// What a floating action button inside the shell must be lifted by.
   ///
-  /// A tab's [Scaffold] is nested inside this one and knows nothing about the
-  /// bar, so it puts its button at the bottom of itself — which, now that the
-  /// shell sets `extendBody: true`, is underneath the glass.
-  static double get fabInset => barHeight + barMargin;
+  /// A tab's [Scaffold] is nested inside the shell's and places its button at
+  /// the bottom of itself, which with `extendBody: true` is underneath the
+  /// glass. Lifting it by [barHeight] + [barMargin] was not enough and the
+  /// shortfall was exactly the home indicator: on a 390x844 screen with a
+  /// 34px bottom inset the button's lower 18px sat under the bar.
+  ///
+  /// The shell already knows the right number. A [Scaffold] with
+  /// `extendBody: true` and a bottom bar reports what its body must clear as
+  /// `MediaQuery.padding.bottom` — here 62 + 12 + 34 = 108 — and the [Scaffold]
+  /// below only lifts its button for the keyboard, so the padding is there to
+  /// be read and nothing reads it. Note it is `padding`, not `viewPadding`:
+  /// inside the shell's body that one is zero, which is why guessing at this
+  /// rather than measuring it produces a fix that changes nothing.
+  ///
+  /// Falls back for a screen that is not inside the shell — a pushed route has
+  /// no bar to clear, and its own safe-area inset is not a lift.
+  static double fabInsetFor(BuildContext context) {
+    final double reserved = MediaQuery.paddingOf(context).bottom;
+    final double own = barHeight + barMargin;
+    return reserved >= own ? reserved : own;
+  }
 
   /// Where the highlight sits after a drag of [dx], in tab units.
   ///
@@ -199,81 +229,99 @@ class _BulkrNavBarState extends State<BulkrNavBar>
   Widget build(BuildContext context) {
     final int count = widget.destinations.length;
 
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(16.w, 0, 16.w, BulkrNavBar.barMargin),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(26.r),
-          child: BackdropFilter(
-            // The blur is the whole effect, and it is not free: it forces a
-            // saveLayer over the bar's bounds every frame. Bounded to the pill
-            // by the ClipRRect above, which keeps it to a strip rather than the
-            // whole screen.
-            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-            child: Container(
-              height: BulkrNavBar.barHeight,
-              decoration: BoxDecoration(
-                // Translucent rather than opaque — an opaque bar over a blur is
-                // just an opaque bar.
-                color: Colors.white.withValues(alpha: 0.06),
-                borderRadius: BorderRadius.circular(26.r),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
-              ),
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final double slotWidth = constraints.maxWidth / count;
+    return AnimatedSlide(
+      // 1.35 rather than 1: its own height clears the bar but not the margin
+      // below it, which leaves a sliver of glass along the bottom edge.
+      offset: Offset(0, widget.visible ? 0 : 1.35),
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+      child: IgnorePointer(
+        // Mid-slide the bar is still on screen and still hit-testable, and a
+        // tab that answers a tap aimed at the content underneath it is worse
+        // than one that is slow to leave.
+        ignoring: !widget.visible,
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(16.w, 0, 16.w, BulkrNavBar.barMargin),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(26.r),
+              child: BackdropFilter(
+                // The blur is the whole effect, and it is not free: it forces a
+                // saveLayer over the bar's bounds every frame. Bounded to the pill
+                // by the ClipRRect above, which keeps it to a strip rather than the
+                // whole screen.
+                filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                child: Container(
+                  height: BulkrNavBar.barHeight,
+                  decoration: BoxDecoration(
+                    // Translucent rather than opaque — an opaque bar over a blur is
+                    // just an opaque bar.
+                    color: Colors.white.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(26.r),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.10),
+                    ),
+                  ),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final double slotWidth = constraints.maxWidth / count;
 
-                  return GestureDetector(
-                    // Opaque so the whole bar drags, including the gaps between
-                    // icons.
-                    behavior: HitTestBehavior.opaque,
-                    onHorizontalDragStart: (_) => _onDragStart(),
-                    onHorizontalDragUpdate: (d) => _onDragUpdate(d, slotWidth),
-                    onHorizontalDragEnd: (_) => _onDragEnd(),
-                    onHorizontalDragCancel: _onDragEnd,
-                    child: Stack(
-                      children: [
-                        // Under the icons, so it reads as a highlight moving
-                        // beneath them rather than a card sliding over them.
-                        Positioned(
-                          left: _position * slotWidth,
-                          top: 6.h,
-                          bottom: 6.h,
-                          width: slotWidth,
-                          child: Center(
-                            child: Container(
-                              width: slotWidth - 8.w,
-                              height: double.infinity,
-                              decoration: BoxDecoration(
-                                color: AppColors.primaryNeon,
-                                borderRadius: BorderRadius.circular(18.r),
-                              ),
-                            ),
-                          ),
-                        ),
-                        Row(
+                      return GestureDetector(
+                        // Opaque so the whole bar drags, including the gaps between
+                        // icons.
+                        behavior: HitTestBehavior.opaque,
+                        onHorizontalDragStart: (_) => _onDragStart(),
+                        onHorizontalDragUpdate: (d) =>
+                            _onDragUpdate(d, slotWidth),
+                        onHorizontalDragEnd: (_) => _onDragEnd(),
+                        onHorizontalDragCancel: _onDragEnd,
+                        child: Stack(
                           children: [
-                            for (int i = 0; i < count; i++)
-                              SizedBox(
-                                width: slotWidth,
-                                child: _NavItem(
-                                  destination: widget.destinations[i],
-                                  emphasis:
-                                      BulkrNavBar.emphasisFor(_position, i),
-                                  // Taps still work while the bar drags: a
-                                  // horizontal drag recogniser and a tap
-                                  // recogniser do not compete, because a tap
-                                  // has no horizontal travel to claim.
-                                  onTap: () => widget.onSelected(i),
+                            // Under the icons, so it reads as a highlight moving
+                            // beneath them rather than a card sliding over them.
+                            Positioned(
+                              left: _position * slotWidth,
+                              top: 6.h,
+                              bottom: 6.h,
+                              width: slotWidth,
+                              child: Center(
+                                child: Container(
+                                  width: slotWidth - 8.w,
+                                  height: double.infinity,
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primaryNeon,
+                                    borderRadius: BorderRadius.circular(18.r),
+                                  ),
                                 ),
                               ),
+                            ),
+                            Row(
+                              children: [
+                                for (int i = 0; i < count; i++)
+                                  SizedBox(
+                                    width: slotWidth,
+                                    child: _NavItem(
+                                      destination: widget.destinations[i],
+                                      emphasis: BulkrNavBar.emphasisFor(
+                                        _position,
+                                        i,
+                                      ),
+                                      // Taps still work while the bar drags: a
+                                      // horizontal drag recogniser and a tap
+                                      // recogniser do not compete, because a tap
+                                      // has no horizontal travel to claim.
+                                      onTap: () => widget.onSelected(i),
+                                    ),
+                                  ),
+                              ],
+                            ),
                           ],
                         ),
-                      ],
-                    ),
-                  );
-                },
+                      );
+                    },
+                  ),
+                ),
               ),
             ),
           ),

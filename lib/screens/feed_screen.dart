@@ -70,7 +70,7 @@ class FeedScreen extends StatelessWidget {
         // nested inside MainScreen's and knows nothing about that bar, so
         // left alone it puts the button underneath the glass.
         floatingActionButton: Padding(
-          padding: EdgeInsets.only(bottom: BulkrNavBar.fabInset),
+          padding: EdgeInsets.only(bottom: BulkrNavBar.fabInsetFor(context)),
           child: const _ComposeButton(),
         ),
         body: Column(

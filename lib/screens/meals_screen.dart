@@ -38,7 +38,7 @@ class MealsScreen extends StatelessWidget {
         backgroundColor: Colors.transparent,
         // Same lift as the feed's compose button — see BulkrNavBar.fabInset.
         floatingActionButton: Padding(
-          padding: EdgeInsets.only(bottom: BulkrNavBar.fabInset),
+          padding: EdgeInsets.only(bottom: BulkrNavBar.fabInsetFor(context)),
           child: const _CreateMealButton(),
         ),
         body: Column(
