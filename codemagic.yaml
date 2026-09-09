@@ -21,7 +21,15 @@ workflows:
       app_store_connect: bulkr_asc
 
     environment:
-      flutter: stable
+      # Pinned, not `stable`. Two reasons, and the second one is new: a floating
+      # channel means the next Flutter release changes this build machine's SDK
+      # without anybody touching the repo, and Shorebird patches only apply to a
+      # release built on the same Flutter. A drifting SDK would quietly make
+      # every patch unappliable to the build already on people's phones.
+      #
+      # Must match `shorebird flutter versions list`'s selected version and the
+      # SDK the project is developed on. All three are 3.47.2.
+      flutter: 3.47.2
       xcode: latest
 
       groups:
