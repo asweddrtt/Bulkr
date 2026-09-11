@@ -8,7 +8,7 @@ A cross-platform mobile application tailored specifically to track nutrition and
 * **Friends & Groups:** Connect with workout partners, join dedicated fitness groups, and build a supportive accountability network.
 
 ## Tech Stack
-* Built with **Flutter** and **Dart** **Supabase**
+* Built with **Flutter**, **Dart** and **Supabase**
 
 ## Acknowledgments
 * **Development:** Initial architecture and core feature development by The developer.
