@@ -81,6 +81,14 @@ Run them in the SQL editor (Dashboard → SQL Editor → New query):
 | 25 | `tracker_water.sql` | `water_logs` |
 | 26 | `tracker_insights.sql` | The insight queries behind the dashboard |
 | 27 | `weight_logs_policies.sql` | RLS on `weight_logs` — without it, 42501 |
+| 28 | `premium.sql` | `subscriptions`, `is_premium()`, the free tier's numbers |
+| 29 | `streak_restore.sql` | one earned day of grace; **replaces `logging_streak()`** |
+| 30 | `premium_limits.sql` | where the free tier's caps are enforced |
+
+`streak_restore.sql` must come after `tracker_insights.sql`, because it
+replaces `logging_streak()` with a version that also counts restored days.
+Applying them the other way round leaves the old definition in place and the
+restore silently does nothing.
 
 `image_thumbnails.sql` says "run after every other migration" in its own
 header, but `feed_engagement_rpc.sql` reads the columns it adds, so it is
@@ -97,6 +105,10 @@ Deployed separately, with `supabase functions deploy <name>`:
   Server-side so the FDC key is not shipped in the app binary. Writes what it
   finds into `cached_off_foods`, so tier 1 gets better as the app is used.
 - **`send-push/`** — turns a `notifications` row into an FCM message.
+- **`moderate-image/`** — AWS Rekognition, called before a photo is uploaded.
+- **`verify-purchase/`** — turns a store receipt into a `subscriptions` row.
+  Needed because the app has no write access to that table at all, which is the
+  whole point: a client that can grant itself premium is a client that will.
 
 Each has its own README with the environment variables it needs. Those
 variables hold real credentials and are correctly kept out of this repository
@@ -114,3 +126,12 @@ Referenced from the Dart side, so changing these breaks the client:
   `lib/data/user_repository.dart`.
 - `feed_follows.sql` explains the follow-graph shape that
   `lib/models/person.dart` is built around.
+- `premium_limits.sql` raises SQLSTATE `BLKR2` when a free account hits a cap,
+  with the limit's name in the hint. `lib/core/plan_limit_error.dart` matches
+  on that code, and `plan_limit_error_test.dart` fails if it is confused with
+  the 42501 a plain policy would raise — the two need opposite responses.
+- `premium.sql` holds the free tier's numbers as `free_*()` functions, and
+  `test/plan_limits_test.dart` reads this file and fails when they disagree
+  with `lib/core/plan_limits.dart`. It also fails if a write policy is ever
+  added to `subscriptions` — a client that can grant itself premium is a
+  client that will.

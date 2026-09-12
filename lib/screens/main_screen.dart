@@ -6,11 +6,14 @@ import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../core/analytics_events.dart';
+import '../core/ad_moment.dart';
 import '../core/deep_link.dart';
 import '../core/telemetry.dart';
 import '../cubit/conversations/conversations_cubit.dart';
+import '../cubit/entitlement/entitlement_cubit.dart';
 import '../cubit/feed/feed_cubit.dart';
 import '../cubit/notifications/notifications_cubit.dart';
+import '../data/ads_service.dart';
 import '../data/deep_link_listener.dart';
 import '../data/chat_repository.dart';
 import '../data/push_service.dart';
@@ -64,6 +67,13 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   /// tab.
   final DeepLinkListener _deepLinks = DeepLinkListener();
 
+  /// When the app last went into the background.
+  ///
+  /// Null until it has, so the first resume of a launch — which on iOS
+  /// sometimes fires without a preceding pause — cannot be read as a return
+  /// from four hours away.
+  DateTime? _leftAt;
+
   /// False until the shell has drawn once. See [_openFromPush].
   bool _shellIsWarm = false;
 
@@ -111,6 +121,19 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     // moving between tabs doesn't re-hit the network.
     context.read<ProfileCubit>().load();
     context.read<MealsCubit>().load();
+    // Cache first, then the server — so a subscriber is not shown the ads they
+    // paid to remove for the second it takes to ask. Called here as well as
+    // where the cubit is created, because this is the point at which an
+    // account is actually signed in: the provider runs once per process, and a
+    // second account signing in on the same launch would otherwise inherit the
+    // first one's answer.
+    context.read<EntitlementCubit>().load();
+
+    // Consent, the tracking prompt, then the SDK — started here rather than at
+    // launch so that a new account goes through onboarding before it is shown
+    // either prompt. Nothing waits on it; the first banner appearing a second
+    // late is invisible.
+    unawaited(context.read<AdsService>().start());
     context.read<FeedCubit>().load();
     context.read<TrackerCubit>().load();
   }
@@ -238,11 +261,29 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   /// has actually turned over.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      _leftAt = DateTime.now();
+      return;
+    }
+
     if (state != AppLifecycleState.resumed) return;
+
+    // Coming back after a real absence is a seam: nothing was interrupted,
+    // because nothing was in progress. Four hours is the threshold, and it is
+    // AdPolicy that enforces it — this only measures.
+    final DateTime? left = _leftAt;
+    if (left != null) {
+      _leftAt = null;
+      unawaited(AdMoment.of(context).returnedAfter(DateTime.now().difference(left)));
+    }
 
     context.read<ConversationsCubit>().refresh();
     context.read<NotificationsCubit>().refreshBadge();
     context.read<TrackerCubit>().refreshIfDayChanged();
+    // A subscription can start, renew or lapse while the app is closed, and
+    // none of those reaches the phone — a renewal is between the store and the
+    // backend. Coming back is when it is worth re-asking, and it is one row.
+    context.read<EntitlementCubit>().refresh();
   }
 
   /// Index of the Tracker tab, which needs a nudge the others do not.

@@ -27,6 +27,7 @@ class TrackerState extends Equatable {
     this.actionErrorDetail,
     this.waterErrorDetail,
     this.streak = 0,
+    this.restorableStreak = 0,
   });
 
   /// The local day being shown, truncated to midnight. Every read and write is
@@ -71,8 +72,20 @@ class TrackerState extends Equatable {
   /// right outcome for an encouragement.
   final int streak;
 
+  /// What the streak would come back as, if the user restored it. Zero when
+  /// there is nothing to restore, which is nearly always.
+  final int restorableStreak;
+
   /// Worth drawing. One day is not a streak; it is a Tuesday.
   bool get hasStreak => streak > 1;
+
+  /// Whether to offer the restore.
+  ///
+  /// Only when the streak is actually gone. A running streak and an offer to
+  /// bring one back on the same screen would be a contradiction, and the
+  /// server's answer is already zero in that case — this is belt and braces
+  /// for the moment between restoring and the reload.
+  bool get canRestoreStreak => !hasStreak && restorableStreak > 1;
 
   bool get isLoading => status == TrackerStatus.loading;
 
@@ -230,6 +243,7 @@ class TrackerState extends Equatable {
     String? waterErrorDetail,
     bool clearWaterError = false,
     int? streak,
+    int? restorableStreak,
   }) {
     return TrackerState(
       day: day ?? this.day,
@@ -248,6 +262,7 @@ class TrackerState extends Equatable {
           ? null
           : (waterErrorDetail ?? this.waterErrorDetail),
       streak: streak ?? this.streak,
+      restorableStreak: restorableStreak ?? this.restorableStreak,
     );
   }
 
@@ -264,5 +279,6 @@ class TrackerState extends Equatable {
         actionErrorDetail,
         waterErrorDetail,
         streak,
+        restorableStreak,
       ];
 }

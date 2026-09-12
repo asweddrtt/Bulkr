@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../core/error_text.dart';
+import '../../core/plan_limit_error.dart';
 import '../../data/food_repository.dart';
 import '../../data/meal_repository.dart';
 import '../../models/visibility.dart';
@@ -254,6 +255,9 @@ class MealEditorCubit extends Cubit<MealEditorState> {
         status: MealEditorStatus.failure,
         errorKey: _saveFailedKey,
         errorDetail: detail,
+        // Recognised here rather than on the screen so the screen can offer
+        // the upgrade without reading the sentence back.
+        planLimit: planLimitReached(error),
       ));
     }
   }

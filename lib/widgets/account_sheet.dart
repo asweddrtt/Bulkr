@@ -19,6 +19,10 @@ class AccountSheet extends StatelessWidget {
     required this.onSavedPosts,
     required this.onCreateGroup,
     required this.onChallenges,
+    this.onRemoveAds,
+    this.adFreeRemaining,
+    required this.onPremium,
+    required this.isPremium,
     this.onEditProfile,
   });
 
@@ -43,6 +47,30 @@ class AccountSheet extends StatelessWidget {
   /// joined is gone.
   final VoidCallback onChallenges;
 
+  /// Opens the upgrade screen, or — for somebody who already pays — says so.
+  ///
+  /// Present either way. A subscriber tapping "Bulkr Premium" and finding
+  /// nothing there is a subscriber wondering whether the payment worked.
+  final VoidCallback onPremium;
+
+  final bool isPremium;
+
+  /// Watch a rewarded video, get a day without ads.
+  ///
+  /// Null when there is nothing to offer — a premium account, a build with no
+  /// rewarded ad unit configured, a platform with no AdMob app — and the row
+  /// is then absent rather than present and disabled. An offer you cannot
+  /// accept is worse than no offer: it reads as the app being broken, and it
+  /// advertises a benefit of paying to somebody who already paid.
+  final VoidCallback? onRemoveAds;
+
+  /// How much of an earned ad-free window is left, when one is running.
+  ///
+  /// The row stays visible while it runs, saying so. Hiding it the moment the
+  /// reward is granted would make the thing the user just did disappear, and
+  /// "did that work?" is a question worth never making anybody ask.
+  final Duration? adFreeRemaining;
+
   /// Name and about. Null until the profile row has loaded, which is what
   /// keeps this row out rather than opening a sheet with empty fields in it.
   final VoidCallback? onEditProfile;
@@ -62,6 +90,10 @@ class AccountSheet extends StatelessWidget {
     required VoidCallback onCreateGroup,
     required VoidCallback onChallenges,
     VoidCallback? onEditProfile,
+    VoidCallback? onRemoveAds,
+    Duration? adFreeRemaining,
+    required VoidCallback onPremium,
+    required bool isPremium,
   }) {
     return showModalBottomSheet<void>(
       context: context,
@@ -82,8 +114,29 @@ class AccountSheet extends StatelessWidget {
         onCreateGroup: onCreateGroup,
         onChallenges: onChallenges,
         onEditProfile: onEditProfile,
+        onRemoveAds: onRemoveAds,
+        adFreeRemaining: adFreeRemaining,
+        onPremium: onPremium,
+        isPremium: isPremium,
       ),
     );
+  }
+
+  /// Either the offer, or how long is left of the one already running.
+  ///
+  /// Rounded up to the next hour, and never to "0h": a window with eleven
+  /// minutes left is still a window, and saying zero would read as it having
+  /// already gone.
+  String _removeAdsHelper() {
+    final Duration? left = adFreeRemaining;
+    if (left == null || left.inSeconds <= 0) {
+      return 'account_remove_ads_helper'.tr();
+    }
+
+    final int hours = (left.inMinutes / 60).ceil();
+    return 'account_remove_ads_active'.tr(namedArgs: <String, String>{
+      'hours': hours == 1 ? '1 hour' : '$hours hours',
+    });
   }
 
   @override
@@ -151,9 +204,26 @@ class AccountSheet extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Ordered by how often they are wanted: your own details,
-                    // then what you kept, then making something, then the
-                    // moderation list nobody opens unless they mean to.
+                    // First, and the only row that is about something the
+                    // user does not already have. Everything below it is a
+                    // thing they own; this is the one thing for sale, and
+                    // burying it under four rows they never tap would be
+                    // coy rather than tasteful.
+                    SheetActionRow(
+                      icon: Icons.workspace_premium_outlined,
+                      label: 'account_premium'.tr(),
+                      helper: isPremium
+                          ? 'account_premium_active'.tr()
+                          : 'account_premium_helper'.tr(),
+                      onTap: () {
+                        Navigator.of(context).pop();
+                        onPremium();
+                      },
+                    ),
+                    SizedBox(height: 10.h),
+                    // Then, ordered by how often they are wanted: your own
+                    // details, then what you kept, then making something, then
+                    // the moderation list nobody opens unless they mean to.
                     if (onEditProfile != null) ...[
                       SheetActionRow(
                         icon: Icons.edit_outlined,
@@ -196,6 +266,19 @@ class AccountSheet extends StatelessWidget {
                       },
                     ),
                     SizedBox(height: 10.h),
+                    if (onRemoveAds != null) ...[
+                      SheetActionRow(
+                        icon: Icons.block_flipped,
+                        label: 'account_remove_ads'.tr(),
+                        helper: _removeAdsHelper(),
+                        // Deliberately does not close the sheet. The video
+                        // takes half a minute and comes back to wherever it
+                        // was opened from; popping first would drop the user
+                        // on the profile with no sign that anything happened.
+                        onTap: onRemoveAds!,
+                      ),
+                      SizedBox(height: 10.h),
+                    ],
                   ],
                 ),
               ),

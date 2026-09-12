@@ -13,6 +13,7 @@ import 'core/config/supabase_config.dart';
 import 'core/telemetry.dart';
 import 'cubit/auth/auth_cubit.dart';
 import 'cubit/conversations/conversations_cubit.dart';
+import 'cubit/entitlement/entitlement_cubit.dart';
 import 'cubit/feed/feed_cubit.dart';
 import 'cubit/notifications/notifications_cubit.dart';
 import 'cubit/meals/meals_cubit.dart';
@@ -21,7 +22,10 @@ import 'cubit/tracker/tracker_cubit.dart';
 import 'cubit/profile/profile_cubit.dart';
 import 'data/app_preferences.dart';
 import 'data/auth_repository.dart';
+import 'data/ads_service.dart';
+import 'data/purchase_service.dart';
 import 'data/challenge_repository.dart';
+import 'data/entitlement_repository.dart';
 import 'data/follow_repository.dart';
 import 'data/chat_repository.dart';
 import 'data/notification_repository.dart';
@@ -157,6 +161,9 @@ class _BulkrAppState extends State<BulkrApp> {
   late final FollowRepository _followRepository;
   late final GroupRepository _groupRepository;
   late final ChallengeRepository _challengeRepository;
+  late final EntitlementRepository _entitlementRepository;
+  late final AdsService _adsService;
+  late final PurchaseService _purchaseService;
   late final ModerationRepository _moderationRepository;
   late final ChatRepository _chatRepository;
   late final NotificationRepository _notificationRepository;
@@ -178,6 +185,24 @@ class _BulkrAppState extends State<BulkrApp> {
     _followRepository = FollowRepository();
     _groupRepository = GroupRepository();
     _challengeRepository = ChallengeRepository();
+    // Shares the one [AppPreferences] rather than making a second: the
+    // cached entitlement is cleared by `AppPreferences.clear()` on sign-out,
+    // and a second instance would mean one of them still holding the last
+    // account's answer.
+    _entitlementRepository = EntitlementRepository(
+      preferences: _preferences,
+    );
+    // Built here, started from the shell. Starting it at launch would put a
+    // consent form and iOS's tracking prompt in front of somebody who has not
+    // seen the app yet — and the tracking prompt is shown once per install,
+    // ever, so the moment it is asked is the only moment there is.
+    _adsService = AdsService(preferences: _preferences);
+    // Listening from launch, not from the upgrade screen. The purchase that
+    // arrives while no screen is open — the one interrupted by a lost
+    // connection an hour ago — is exactly the one that would otherwise be
+    // lost, and it is still owed to whoever paid for it.
+    _purchaseService = PurchaseService();
+    unawaited(_purchaseService.start());
     _moderationRepository = ModerationRepository();
     _chatRepository = ChatRepository();
     _notificationRepository = NotificationRepository();
@@ -205,6 +230,8 @@ class _BulkrAppState extends State<BulkrApp> {
   @override
   void dispose() {
     _foodRepository.dispose();
+    _adsService.dispose();
+    unawaited(_purchaseService.dispose());
     super.dispose();
   }
 
@@ -223,6 +250,14 @@ class _BulkrAppState extends State<BulkrApp> {
         RepositoryProvider.value(value: _followRepository),
         RepositoryProvider.value(value: _groupRepository),
         RepositoryProvider.value(value: _challengeRepository),
+        // Read directly by the upgrade screen, which re-asks the server the
+        // moment a purchase completes.
+        RepositoryProvider.value(value: _entitlementRepository),
+        // Read by every banner and by every screen that finishes something.
+        // See lib/core/ad_moment.dart for why the call sites are one line.
+        RepositoryProvider.value(value: _adsService),
+        // Read by the upgrade screen, which builds its own cubit over it.
+        RepositoryProvider.value(value: _purchaseService),
         // The blocked-people screen reads this directly — one query and one
         // write, opened rarely, and a cubit for it would say nothing more.
         RepositoryProvider.value(value: _moderationRepository),
@@ -284,6 +319,19 @@ class _BulkrAppState extends State<BulkrApp> {
         BlocProvider(
           create: (_) =>
               NotificationsCubit(repository: _notificationRepository),
+        ),
+        // App-wide because almost every surface asks whether this account is
+        // premium — the feed before drawing a banner, the meal library before
+        // saving another meal, the tracker before scrolling past last week.
+        // One answer for all of them, or they disagree.
+        BlocProvider(
+          create: (_) => EntitlementCubit(
+            repository: _entitlementRepository,
+            // So a purchase that completes with no screen open still turns
+            // this account premium, on whichever launch it arrives on.
+            purchases: _purchaseService.outcomes
+                .where((PurchaseOutcome outcome) => outcome.succeeded),
+          )..load(),
         ),
         BlocProvider(
           create: (_) => FeedCubit(

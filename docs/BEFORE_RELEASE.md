@@ -42,6 +42,9 @@ chooser instead of the policy.
 - **Images sent to AWS Rekognition for moderation**, and which region processes
   them — this is new as of the moderation change and is a third-party
   processor handling user photos
+- **Google AdMob**, that ads may be personalised, that the advertising
+  identifier is used when the user allows it, and how to opt out. This is new
+  as of the ads change and it is the part most likely to be checked
 - Everything in the `ios/Runner/PrivacyInfo.xcprivacy` categories
 - That the identifier tying analytics to an account is the Supabase user id
 
@@ -49,18 +52,35 @@ chooser instead of the policy.
 
 `PrivacyInfo.xcprivacy` and the nutrition labels in App Store Connect are
 entered separately and **nothing checks that they agree**. The manifest now
-declares ten collected data types, two of which are new this release:
+declares twelve collected data types, and this release changes the answer to
+the question review cares about most:
 
-- Product Interaction — analytics
-- Crash Data — Crashlytics
+- **"Used for tracking" is now yes.** `NSPrivacyTracking` is true, Google's ad
+  domains are listed, and Device ID is marked as used for third-party
+  advertising. The labels have to say the same.
+- Coarse Location and Advertising Data are new, and both are tracking.
+- Product Interaction — analytics, from the previous release.
+- Crash Data — Crashlytics, from the previous release.
 
 `test/privacy_manifest_test.dart` guards the manifest. Only a person can guard
 App Store Connect.
 
+## 2b. Set a frequency cap on the interstitial unit
+
+All six ad units now exist and are in `AdsConfig`. One thing is still worth
+doing in the AdMob console: a frequency cap on each interstitial unit. The
+app's own limits in `AdPolicy` are stricter, but the console cap is the one
+that still applies if a future call site forgets to go through `AdMoment`.
+
+Note that the rewarded units are **rewarded interstitial**, a different format
+from plain rewarded. The code matches them. If either is ever recreated as the
+other format, the ad stops filling and the error says only "no fill" — see
+`docs/ADMOB.md`.
+
 ## 3. This release cannot be a Shorebird patch
 
-`firebase_crashlytics`, `firebase_analytics`, `url_launcher` and `app_links`
-are native dependencies. Native code cannot travel in a patch — see the note in
+`google_mobile_ads`, `app_tracking_transparency`, `firebase_crashlytics`,
+`firebase_analytics`, `url_launcher` and `app_links` are native dependencies. Native code cannot travel in a patch — see the note in
 `codemagic.yaml`, which is right about this and worth re-reading. Run
 `ios-testflight`, not `ios-patch`. The release it produces becomes the one
 later patches attach to.
@@ -94,6 +114,54 @@ AWS key is safe and the model is good, but the decision is not yet enforced.
 Closing that is the next slice: move the upload into the function and lock the
 buckets to service-role writes, so a client that skips moderation cannot write
 anything at all.
+
+## 4b. Apply `premium.sql` and `streak_restore.sql`
+
+Two new files in `supabase/`, and the apply order in `supabase/README.md` now
+has them at 28 and 29.
+
+`streak_restore.sql` **replaces `logging_streak()`** from
+`tracker_insights.sql` with a version that also counts restored days. Applying
+it before that file leaves the old definition in place, and the restore then
+appears to work and changes nothing.
+
+A third, `premium_limits.sql`, is where the free tier's caps are enforced. It
+needs `premium.sql` first, and without it free and premium differ only in ads.
+
+Once they are applied, prove the cap actually bites — the verify block at the
+bottom of `premium_limits.sql` is two statements — and then prove that
+granting premium lifts it. A limit that does not bite and a limit that cannot
+be lifted are both silent, and they look identical from the app.
+
+Without `premium.sql` nobody is premium — which the app treats as an answer
+rather than an error, so it will not complain. The symptom is that no
+subscription ever takes effect.
+
+## 4c. Watch the ads on a real device before trusting any of it
+
+None of the ad code has run on a phone. It cannot be run from where this was
+written: there is no Android SDK on that machine and both `codemagic.yaml`
+workflows are iOS releases.
+
+What to check on the first TestFlight build, in this order:
+
+1. **The app launches at all.** A wrong or missing `GADApplicationIdentifier`
+   crashes before Dart runs, and the symptom is the white screen that shipped
+   build 4. `privacy_manifest_test.dart` checks the value is the iOS one, but
+   only a device proves the SDK accepts it.
+2. **The consent form and the tracking prompt appear**, in that order, after
+   onboarding rather than at launch. iOS shows the tracking prompt once per
+   install, ever — so if it arrives at the wrong moment, the only way to see it
+   again is to delete the app.
+3. **A banner appears in the feed** after five posts, and it is a Google test
+   ad. A release build serves real ads; anything before that must not.
+4. **An interstitial does not appear on the first day.** That is the grace
+   period doing its job, and it means the interstitial cannot be tested
+   properly on a fresh install — reinstall or wait a day rather than assuming
+   it is broken.
+
+Then watch `ad_failed` in analytics. Code 3 is "no fill" and is normal for a
+new unit; anything else in volume is a misconfigured unit.
 
 ## 5. Calibrate against your own photos
 
@@ -157,6 +225,14 @@ No action needed; listed so nobody re-checks them by hand.
 | `accessibility_test.dart` | a new icon-only control with no label |
 | `moderation_error_test.dart` | a model score or label reappearing in a user-facing refusal |
 | `policy.test.ts` | the moderation policy starting to reject shirtless or lean physique photos |
-| `analytics_events_test.dart` | an event name Firebase would silently drop, or a parameter carrying user content |
+| `analytics_events_test.dart` | an event name Firebase would silently drop, a parameter carrying user content, or a new event nobody added to the list those rules are checked against |
+| `ad_policy_test.dart` | an interstitial becoming reachable on day one, twice in four minutes, five times a day, or inside an earned ad-free window — and a non-release build ever requesting a real ad unit |
+| `privacy_manifest_test.dart` | the manifest claiming not to track while the ad SDK is a dependency, or either platform carrying the other's AdMob app ID |
+| `streak_state_test.dart` | the restore offer appearing next to a running streak, or for a one-day run |
+| `plan_limit_error_test.dart` | a full free tier being reported as a permission error, or a limit with no sentence and no way out of it |
+| `trial_offer_test.dart` | a store period the parser does not understand being shown as "0 days free" |
 | `meal_repository_test.dart` | a meal logged against the wrong day in a non-UTC timezone |
 | `post_repository_test.dart` | keyset paging turning back into an offset |
+| `plan_limits_test.dart` | the free tier's numbers in the app and in `premium.sql` drifting apart, or a write policy appearing on `subscriptions` |
+| `entitlement_test.dart` | an unknown tier, a corrupt cache or a failed refresh resolving to premium instead of free |
+| `analytics_events_test.dart` | a new event that nobody added to the list the name rules are checked against |

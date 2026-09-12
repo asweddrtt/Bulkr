@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'moderation_error.dart';
+import 'plan_limit_error.dart';
 
 /// What kind of failure this was, coarsely enough to act on.
 ///
@@ -30,6 +31,15 @@ enum FailureKind {
   /// The moderation trigger refused a blocked term, or the on-device model
   /// refused an image. Not a fault: an answer.
   refused,
+
+  /// A free account has filled up one of its ceilings.
+  ///
+  /// Separate from [permission] on purpose. Both arrive from Postgres saying
+  /// no, and they need opposite responses: a permission failure is a bug
+  /// nobody holding the phone can act on, and this is a sentence with an
+  /// obvious next step. Telling somebody they lack permission to save their
+  /// twenty-first meal would be both wrong and insulting.
+  planLimit,
 
   /// The row is gone, or was never there.
   notFound,
@@ -85,6 +95,10 @@ class DescribedFailure {
         FailureKind.notFound => 'error_not_found',
         FailureKind.server => 'error_server',
         FailureKind.refused => 'error_generic',
+        // Never reached in practice — a plan limit always carries its own
+        // sentence — but a fallback that said "something went wrong" would be
+        // the wrong shape if one ever arrived without a hint.
+        FailureKind.planLimit => 'error_generic',
         FailureKind.unknown => 'error_generic',
       };
 
@@ -125,6 +139,16 @@ DescribedFailure describeFailure(Object error) {
       technical: '$error',
       code: blockedTermSqlState,
       refusal: blocked,
+    );
+  }
+
+  final PlanLimit? limit = planLimitReached(error);
+  if (limit != null) {
+    return DescribedFailure(
+      kind: FailureKind.planLimit,
+      technical: '$error',
+      code: planLimitSqlState,
+      refusal: planLimitMessage(limit),
     );
   }
 

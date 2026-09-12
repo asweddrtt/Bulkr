@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -5,6 +7,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
+
+import '../core/ad_moment.dart';
+import '../core/plan_limit_error.dart';
 
 import '../cubit/meal_editor/meal_editor_cubit.dart';
 import '../data/food_repository.dart';
@@ -24,6 +29,7 @@ import '../widgets/food_search_sheet.dart';
 import '../widgets/image_source_sheet.dart';
 import '../widgets/ingredient_amount_sheet.dart';
 import '../widgets/macro_bar.dart';
+import '../widgets/plan_limit_notice.dart';
 
 /// Writes a meal: a photo, a name, what is in it, and how it is made.
 ///
@@ -136,11 +142,25 @@ class _MealEditorView extends StatelessWidget {
               );
           }
 
+          // A saved meal is a seam: the thing they came to do is done. What
+          // follows, if anything, is decided by AdPolicy — see AdMoment.
+          final AdMoment moment = AdMoment.of(context);
           Navigator.of(context).pop<Meal>(saved);
+          unawaited(moment.completed('meal_saved'));
           return;
         }
 
         if (state.status == MealEditorStatus.failure) {
+          // A full library is not a failed save in the sense the sentence
+          // below means. It has its own message and its own way out, so it
+          // gets both rather than "couldn't save that".
+          final PlanLimit? limit = state.planLimit;
+          if (limit != null) {
+            PlanLimitNotice.show(context, limit, source: 'meal_save');
+            context.read<MealEditorCubit>().dismissError();
+            return;
+          }
+
           ScaffoldMessenger.of(context)
             ..hideCurrentSnackBar()
             ..showSnackBar(

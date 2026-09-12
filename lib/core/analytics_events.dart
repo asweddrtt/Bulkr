@@ -505,4 +505,99 @@ class AnalyticsEvent {
         'size_kb': kilobytes,
         'duration_ms': milliseconds,
       });
+
+  // --- Money -------------------------------------------------------------
+
+  /// An account crossed the line between free and premium, in either
+  /// direction. [source] is the store or grant that did it — `app_store`,
+  /// `play`, `promo`, `manual` — never anything the user typed.
+  ///
+  /// Fired on the transition only, not on every launch, so the count is a
+  /// count of conversions and lapses rather than a count of cold starts.
+  factory AnalyticsEvent.entitlementChanged({
+    required bool premium,
+    String? source,
+  }) =>
+      AnalyticsEvent('entitlement_changed', {
+        'premium': premium,
+        'source': source,
+      });
+
+  /// Somebody on the free tier hit a ceiling. [limit] is which one:
+  /// `saved_meals`, `history_days`, `active_challenges`.
+  ///
+  /// The number that says whether the free tier is priced on anything real. A
+  /// limit nobody reaches converts nobody; a limit everybody reaches in week
+  /// one is not a free tier, it is a trial, and it loses the users who would
+  /// have paid in month three.
+  factory AnalyticsEvent.planLimitReached({required String limit}) =>
+      AnalyticsEvent('plan_limit_reached', {'limit': limit});
+
+  /// The upgrade screen was shown, and what led there — `limit`, `settings`,
+  /// `ad`, `onboarding`. Paired with [upgradeCompleted], this is the funnel.
+  factory AnalyticsEvent.paywallShown({required String source}) =>
+      AnalyticsEvent('paywall_shown', {'source': source});
+
+  /// A purchase was started. [product] is the store product id, which is ours
+  /// rather than the user's.
+  factory AnalyticsEvent.upgradeStarted({required String product}) =>
+      AnalyticsEvent('upgrade_started', {'product': product});
+
+  factory AnalyticsEvent.upgradeCompleted({required String product}) =>
+      AnalyticsEvent('upgrade_completed', {'product': product});
+
+  /// A purchase did not finish. [reason] is a category — `cancelled`,
+  /// `payment_failed`, `unavailable`, `verification_failed` — because a store
+  /// error message is neither stable nor short.
+  factory AnalyticsEvent.upgradeFailed({required String reason}) =>
+      AnalyticsEvent('upgrade_failed', {'reason': reason});
+
+  /// Restore-purchases finished, and whether it found anything. Worth its own
+  /// event: "restore does nothing" is a common and infuriating bug, and it is
+  /// invisible unless the failures are counted.
+  factory AnalyticsEvent.purchasesRestored({required bool found}) =>
+      AnalyticsEvent('purchases_restored', {'found': found});
+
+  // --- Ads ---------------------------------------------------------------
+
+  /// An ad was actually shown. [format] is `banner`, `interstitial` or
+  /// `rewarded`; [placement] is where — `feed`, `meal_saved`, `return`,
+  /// `streak_restore`.
+  ///
+  /// Recorded on shown rather than on requested, which is the same rule the
+  /// frequency cap follows: a request that never filled is not an
+  /// interruption, and counting it would make the ad load look like ad
+  /// fatigue.
+  factory AnalyticsEvent.adShown({
+    required String format,
+    required String placement,
+  }) =>
+      AnalyticsEvent('ad_shown', {'format': format, 'placement': placement});
+
+  /// An ad did not load. [code] is Google's numeric error code — 3 is "no
+  /// fill", which is normal and not a bug; anything else, in volume, is a
+  /// misconfigured unit.
+  factory AnalyticsEvent.adFailed({required String format, int? code}) =>
+      AnalyticsEvent('ad_failed', {'format': format, 'code': code});
+
+  /// The user finished a rewarded ad and earned something. The denominator for
+  /// "is the rewarded offer worth having at all".
+  factory AnalyticsEvent.rewardEarned({required String placement}) =>
+      AnalyticsEvent('reward_earned', {'placement': placement});
+
+  /// Where the UMP consent flow ended up — `obtained`, `notRequired`,
+  /// `required`, `unknown`. Worth watching: a region where this stays
+  /// `required` is a region serving no personalised ads and earning a fraction
+  /// of what it should.
+  factory AnalyticsEvent.adConsent({required String status}) =>
+      AnalyticsEvent('ad_consent', {'status': status});
+
+  /// The iOS App Tracking Transparency answer — `authorized`, `denied`,
+  /// `restricted`, `notDetermined`, `notSupported`.
+  ///
+  /// Asked once per install and never again, so this is a one-way number: if
+  /// it skews denied, the prompt is being shown at the wrong moment and there
+  /// is no second attempt to fix it with.
+  factory AnalyticsEvent.trackingPermission({required String status}) =>
+      AnalyticsEvent('tracking_permission', {'status': status});
 }

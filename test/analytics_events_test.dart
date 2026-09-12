@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:bulkr/core/analytics_events.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -213,6 +215,41 @@ void main() {
       expect(event.firebaseParameters['reason'], 'android_no_model');
     });
   });
+
+  test('every event is in the list at the bottom of this file', () {
+    // That list claims to be "one of every event". It is hand-written, which
+    // means the next event added to `analytics_events.dart` is one nobody
+    // remembers to add to it — and it would then be the one event whose name
+    // Firebase drops in silence, which looks exactly like nobody using the
+    // feature.
+    //
+    // So the claim is checked rather than trusted.
+    final String source =
+        File('lib/core/analytics_events.dart').readAsStringSync();
+    final String here =
+        File('test/analytics_events_test.dart').readAsStringSync();
+
+    // Only the list, so a factory named in a comment or in an assertion above
+    // does not count as covered.
+    final String list = here.substring(here.indexOf('_everyEvent ='));
+
+    final List<String> declared = RegExp(r'factory AnalyticsEvent\.(\w+)')
+        .allMatches(source)
+        .map((RegExpMatch match) => match.group(1)!)
+        .toList();
+
+    expect(declared, isNotEmpty, reason: 'the scan found no factories at all');
+
+    for (final String name in declared) {
+      expect(
+        list,
+        contains('AnalyticsEvent.$name('),
+        reason: '$name is missing from _everyEvent, so its name and parameter '
+            'keys are never checked against the rules Firebase enforces by '
+            'silently dropping the event',
+      );
+    }
+  });
 }
 
 /// One of every event, so the name and key rules are checked against all of
@@ -294,4 +331,16 @@ final List<AnalyticsEvent> _everyEvent = <AnalyticsEvent>[
   AnalyticsEvent.requestFailed(
       operation: 'feed.discover', kind: 'offline', code: '42501'),
   AnalyticsEvent.imageUploaded(kilobytes: 420, milliseconds: 900),
+  AnalyticsEvent.entitlementChanged(premium: true, source: 'app_store'),
+  AnalyticsEvent.planLimitReached(limit: 'saved_meals'),
+  AnalyticsEvent.paywallShown(source: 'limit'),
+  AnalyticsEvent.upgradeStarted(product: 'bulkr_premium_monthly'),
+  AnalyticsEvent.upgradeCompleted(product: 'bulkr_premium_monthly'),
+  AnalyticsEvent.upgradeFailed(reason: 'cancelled'),
+  AnalyticsEvent.purchasesRestored(found: true),
+  AnalyticsEvent.adShown(format: 'interstitial', placement: 'meal_saved'),
+  AnalyticsEvent.adFailed(format: 'rewarded', code: 3),
+  AnalyticsEvent.rewardEarned(placement: 'streak_restore'),
+  AnalyticsEvent.adConsent(status: 'obtained'),
+  AnalyticsEvent.trackingPermission(status: 'denied'),
 ];
