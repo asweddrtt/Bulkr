@@ -47,13 +47,53 @@ access key.
 
 ### 2. Secrets
 
+Put them in a file rather than typing them as arguments. A secret on a command
+line goes into the shell's history file on disk — PowerShell's PSReadLine keeps
+one, and so does bash — where it outlives any care taken over it.
+
 ```sh
 supabase link --project-ref hqdfaeiyflbbzkduskaz
-supabase secrets set \
-  REKOGNITION_ACCESS_KEY_ID=AKIA... \
-  REKOGNITION_SECRET_ACCESS_KEY=... \
-  REKOGNITION_REGION=us-east-1
+
+# .env is already gitignored, so it cannot be committed by accident.
+cat > .env <<'ENV'
+REKOGNITION_ACCESS_KEY_ID=AKIA...
+REKOGNITION_SECRET_ACCESS_KEY=...
+REKOGNITION_REGION=us-east-1
+ENV
+
+supabase secrets set --env-file .env
+rm .env
 ```
+
+**On Windows / PowerShell**, same idea — and note that `\` is *not* a line
+continuation there, which is the thing that bites first. PowerShell uses a
+backtick, so a pasted bash command runs each line as a separate program and
+answers `... is not recognized as the name of a cmdlet`:
+
+```powershell
+supabase link --project-ref hqdfaeiyflbbzkduskaz
+
+@"
+REKOGNITION_ACCESS_KEY_ID=AKIA...
+REKOGNITION_SECRET_ACCESS_KEY=...
+REKOGNITION_REGION=us-east-1
+"@ | Out-File -FilePath .env -Encoding ascii
+
+supabase secrets set --env-file .env
+Remove-Item .env
+```
+
+### If a key is ever exposed
+
+Rotate it rather than reasoning about how bad it was: IAM → the user →
+Security credentials → deactivate, delete, create a new one. It takes a minute.
+Then clear the shell history that recorded it —
+`(Get-PSReadLineOption).HistorySavePath` on Windows, `~/.bash_history` or
+`~/.zsh_history` elsewhere.
+
+The one-action policy above is what keeps that a small event: a leaked key can
+classify images and nothing else. No S3, no billing, no IAM, no other service.
+That is the entire reason not to reuse a broader key here.
 
 Named `REKOGNITION_*` rather than `AWS_*` deliberately — the platform reserves
 some prefixes, and these are read explicitly rather than picked up by the SDK's
