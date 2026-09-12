@@ -36,9 +36,24 @@
 class LegalConfig {
   const LegalConfig._();
 
-  /// The privacy policy. Required before release — see above.
+  /// The privacy policy.
+  ///
+  /// A default rather than a required `--dart-define`, deliberately. Shorebird
+  /// compares dart-defines between a release and its patches, so a define
+  /// present on one build and missing on another reads as a diff and the patch
+  /// is refused. Baking it in removes a way to break patching by forgetting a
+  /// flag in one of the two `codemagic.yaml` workflows. The override still
+  /// works for a staging build.
+  ///
+  /// Note what is *not* in this URL: `?authuser=2`. Google Sites adds that to
+  /// the address bar to say which of the signed-in accounts in *that browser*
+  /// is being used. It is session state, not part of the address — shipping it
+  /// sends every user a parameter that means nothing to them and can bounce
+  /// them to an account chooser instead of the policy. See
+  /// `legal_config_test.dart`, which fails if it comes back.
   static const String privacyPolicyUrl = String.fromEnvironment(
     'PRIVACY_POLICY_URL',
+    defaultValue: 'https://sites.google.com/view/bulkr-privacy-policy/home',
   );
 
   /// Terms of service. Optional: Apple requires a privacy policy and accepts

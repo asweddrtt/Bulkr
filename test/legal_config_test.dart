@@ -13,11 +13,34 @@ import 'package:flutter_test/flutter_test.dart';
 /// extra steps. It is that the link exists exactly when there is something to
 /// link to, which is what these check.
 void main() {
-  test('a URL is only usable when it is really a URL', () {
-    // The value arrives from `--dart-define` on a build machine, where a typo
-    // is not a compile error. Unchecked, the failure is a link that silently
-    // does nothing — the exact bug being removed.
-    expect(LegalConfig.hasPrivacyPolicy, isA<bool>());
+  test('the policy link is live', () {
+    // The welcome screen renders "Policy" as plain text until this is set, so
+    // this assertion is the difference between the sentence being a link and
+    // being decoration.
+    expect(LegalConfig.hasPrivacyPolicy, isTrue,
+        reason: 'App Store guideline 5.1.1 wants a reachable privacy policy, '
+            'and the sign-up screen is where review looks for it');
+  });
+
+  test('the policy URL carries no session state', () {
+    // Google Sites puts `?authuser=2` in the address bar to say which of the
+    // accounts signed into *that browser* is being used. It is session state,
+    // and it was in the URL this was first given.
+    //
+    // Shipping it sends every user a parameter that means nothing to them and
+    // can land them on an account chooser instead of the policy — which, on
+    // the one screen App Store review always opens, is a bad place to find
+    // out.
+    final Uri url = Uri.parse(LegalConfig.privacyPolicyUrl);
+
+    for (final String parameter in const <String>['authuser', 'usp', 'pli']) {
+      expect(
+        url.queryParameters.containsKey(parameter),
+        isFalse,
+        reason: '"$parameter" is browser session state, not part of the '
+            'address. Copy the URL from a private window instead.',
+      );
+    }
   });
 
   group('URL validation', () {

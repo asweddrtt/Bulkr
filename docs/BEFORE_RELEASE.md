@@ -8,35 +8,42 @@ Ordered by what blocks a store submission first.
 
 ---
 
-## 1. Set the privacy policy URL — blocks App Store review
+## 1. Confirm the privacy policy is public — blocks App Store review
 
-`LegalConfig.privacyPolicyUrl` is empty. While it is, the welcome screen
-renders "BY CONTINUING YOU AGREE TO THE Policy" as **plain text**, with no
-underline and no tap — honest, and better than the underlined non-link it
-replaced, but not sufficient for review.
+`LegalConfig.privacyPolicyUrl` is set to
 
-Guideline 5.1.1 requires a reachable privacy policy, and the sign-up screen is
-where review looks. An app collecting an email address, body measurements,
-photos, messages and — as of this release — analytics will not pass without
-one.
+    https://sites.google.com/view/bulkr-privacy-policy/home
 
-Two ways to set it:
+so the welcome screen now renders "Policy" as a real link that opens in the
+browser. Two things still need a human.
 
-```sh
-flutter build ipa --dart-define=PRIVACY_POLICY_URL=https://…
-```
+### It must be published and visible to anyone
 
-or edit the default in `lib/core/config/legal_config.dart`. If you use the
-`--dart-define`, add it to **both** workflows in `codemagic.yaml`: Shorebird
-compares dart-defines between a release and its patches, so a define present on
-one and missing on the other reads as a diff and the patch is refused.
+Google Sites keeps a site restricted until it is both **published** and set to
+**Anyone** under Share. A policy that asks for a Google sign-in is a failed
+review under guideline 5.1.1, and it fails in a way that is invisible to you —
+your browser is already signed in.
 
-The URL is validated at runtime — https, with a host — so a typo on the build
-machine turns the link off rather than shipping a dead one.
+**Check it in a private window.** That is the whole test.
 
-**What the policy has to mention now that it did not before:** Firebase
-Analytics and Crashlytics, the categories in `ios/Runner/PrivacyInfo.xcprivacy`,
-and that the identifier tying them to an account is the Supabase user id.
+### `?authuser=2` was removed, deliberately
+
+The URL first supplied carried `?authuser=2`. Google Sites adds that to the
+address bar to record which of the accounts signed into *that browser* is being
+used. It is session state, not part of the address: shipped, it sends every
+user a parameter that means nothing to them and can land them on an account
+chooser instead of the policy.
+
+`legal_config_test.dart` fails if it — or `usp`, or `pli` — comes back.
+
+### What the policy has to mention now that it did not before
+
+- Firebase Analytics and Crashlytics
+- **Images sent to AWS Rekognition for moderation**, and which region processes
+  them — this is new as of the moderation change and is a third-party
+  processor handling user photos
+- Everything in the `ios/Runner/PrivacyInfo.xcprivacy` categories
+- That the identifier tying analytics to an account is the Supabase user id
 
 ## 2. Enter the App Store privacy labels to match the manifest
 
