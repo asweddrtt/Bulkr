@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:equatable/equatable.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/analytics_events.dart';
+import '../../core/error_text.dart';
+import '../../core/telemetry.dart';
 import '../../core/hydration.dart';
 import '../../data/meal_repository.dart';
 import '../../data/user_repository.dart';
@@ -83,7 +87,7 @@ class TrackerCubit extends Cubit<TrackerState> {
         water = await _users.fetchWaterDay(state.day);
       } catch (error) {
         water = const [];
-        waterError = _describe(error);
+        waterError = describeError(error);
         debugPrint('Bulkr: water unavailable — $waterError');
       }
 
@@ -100,7 +104,7 @@ class TrackerCubit extends Cubit<TrackerState> {
       ));
     } catch (error) {
       if (isClosed) return;
-      final String detail = _describe(error);
+      final String detail = describeError(error);
       debugPrint('Bulkr: tracker failed to load — $detail');
       emit(state.copyWith(
         status: TrackerStatus.failure,
@@ -208,6 +212,9 @@ class TrackerCubit extends Cubit<TrackerState> {
 
   /// Records a drink against the day being shown.
   Future<void> addWater(int millilitres) {
+    unawaited(
+      Telemetry.send(AnalyticsEvent.waterLogged(millilitres: millilitres)),
+    );
     if (millilitres <= 0) return Future<void>.value();
     return _write(
       () => _users.logWater(millilitres: millilitres, day: state.day),
@@ -229,6 +236,11 @@ class TrackerCubit extends Cubit<TrackerState> {
   /// Null means derive. Clearing is a real choice a user can make, not the
   /// absence of one — see [TrackerState.waterTargetMl].
   Future<void> setWaterTarget(int? millilitres) {
+    // Null means "go back to deriving it from bodyweight", which is a
+    // different choice from setting one.
+    unawaited(Telemetry.send(
+      AnalyticsEvent.waterGoalChanged(custom: millilitres != null),
+    ));
     if (millilitres != null &&
         (millilitres <= 0 || millilitres > Hydration.maxTargetMl)) {
       return Future<void>.value();
@@ -248,6 +260,9 @@ class TrackerCubit extends Cubit<TrackerState> {
   /// Reloading afterwards is what moves the water goal: the target is derived
   /// from `current_weight_kg`, which this write moves.
   Future<void> logWeight(double weightKg) {
+    // The weight itself is health data and stays on the row it belongs to.
+    // What travels is only that a weigh-in happened, and from where.
+    unawaited(Telemetry.send(AnalyticsEvent.weightLogged(method: 'tracker')));
     if (weightKg <= 0 || !state.isToday) return Future<void>.value();
     return _write(() => _users.logWeight(weightKg: weightKg));
   }
@@ -273,7 +288,7 @@ class TrackerCubit extends Cubit<TrackerState> {
       emit(state.copyWith(isSaving: false));
     } catch (error) {
       if (isClosed) return;
-      final String detail = _describe(error);
+      final String detail = describeError(error);
       debugPrint('Bulkr: tracker write failed — $detail');
       emit(state.copyWith(
         isSaving: false,
@@ -305,13 +320,4 @@ class TrackerCubit extends Cubit<TrackerState> {
     return copied;
   }
 
-  /// Postgres errors carry the useful part in [PostgrestException.code] —
-  /// 42501 is a row-level security refusal, which reads nothing like a network
-  /// problem and should never be reported as one.
-  static String _describe(Object error) {
-    if (error is PostgrestException) {
-      return [error.code, error.message].whereType<String>().join(' · ');
-    }
-    return error.toString();
-  }
 }

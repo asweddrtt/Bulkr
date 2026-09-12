@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:equatable/equatable.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/analytics_events.dart';
+import '../../core/error_text.dart';
+import '../../core/telemetry.dart';
 import '../../data/meal_repository.dart';
 import '../../data/post_repository.dart';
 import '../../models/visibility.dart';
@@ -12,7 +16,6 @@ import '../../models/challenge.dart';
 import '../../models/post_draft.dart';
 import '../../models/post_label.dart';
 
-import '../../core/moderation_error.dart';
 
 part 'post_composer_state.dart';
 
@@ -197,15 +200,40 @@ class PostComposerCubit extends Cubit<PostComposerState> {
         images: images,
       );
 
+      unawaited(Telemetry.send(AnalyticsEvent.postCreated(
+        label: state.draft.label.column,
+        imageCount: images.length,
+        hasMeal: state.draft.attachedMeal != null,
+        visibility: state.draft.visibility.dbValue,
+        // The body's length, bucketed. Never the body itself — see the rule
+        // at the top of analytics_events.dart.
+        bodyLength: state.draft.content.trim().length,
+        inGroup: state.draft.groupId != null,
+      )));
+
       if (isClosed) return;
       emit(state.copyWith(isSubmitting: false, created: post));
-    } catch (error) {
+    } catch (error, stackTrace) {
       if (isClosed) return;
 
-      final String detail = _describe(error);
-      debugPrint('Bulkr: post failed to save — $detail');
+      final DescribedFailure failure = describeFailure(error);
+      debugPrint('Bulkr: post failed to save — ${failure.technical}');
 
-      emit(state.copyWith(isSubmitting: false, errorDetail: detail));
+      if (failure.kind == FailureKind.refused) {
+        // The moderation trigger refused a term. Not a fault to report — the
+        // rate is worth knowing, the word emphatically is not.
+        unawaited(Telemetry.send(AnalyticsEvent.termBlocked(surface: 'post')));
+      } else {
+        unawaited(Telemetry.send(AnalyticsEvent.requestFailed(
+          operation: 'post.create',
+          kind: failure.kind.name,
+          code: failure.code,
+        )));
+        unawaited(Telemetry.recordError(error, stackTrace,
+            reason: 'creating a post'));
+      }
+
+      emit(state.copyWith(isSubmitting: false, errorDetail: failure.message));
     }
   }
 
@@ -214,23 +242,4 @@ class PostComposerCubit extends Cubit<PostComposerState> {
     emit(state.copyWith(clearError: true));
   }
 
-  static String _describe(Object error) {
-    // Before the generic Postgres formatting: a blocked term is not a fault
-    // to report, it is an answer to give, and "(BLKR1)" appended to it is not
-    // an improvement.
-    final String? refused = blockedTermRefusal(error);
-    if (refused != null) return refused;
-
-    final String? explicit = explicitImageRefusal(error);
-    if (explicit != null) return explicit;
-
-    if (error is PostgrestException) {
-      return [
-        error.message,
-        if (error.code != null) '(${error.code})',
-      ].join(' ');
-    }
-    if (error is StorageException) return error.message;
-    return '$error';
-  }
 }

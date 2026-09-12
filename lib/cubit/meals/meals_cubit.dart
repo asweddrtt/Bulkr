@@ -1,8 +1,8 @@
 import 'package:equatable/equatable.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/error_text.dart';
 import '../../data/meal_repository.dart';
 import '../../models/meal.dart';
 import '../../models/meal_slot.dart';
@@ -42,7 +42,7 @@ class MealsCubit extends Cubit<MealsState> {
     } catch (error) {
       if (isClosed) return;
 
-      final String detail = _describe(error);
+      final String detail = describeError(error);
       debugPrint('Bulkr: meal library failed to load — $detail');
 
       // A silent refresh that fails leaves the list alone: the user asked for
@@ -93,7 +93,7 @@ class MealsCubit extends Cubit<MealsState> {
     } catch (error) {
       if (isClosed) return;
 
-      final String detail = _describe(error);
+      final String detail = describeError(error);
       debugPrint('Bulkr: favourite write failed — $detail');
 
       emit(state.copyWith(
@@ -144,7 +144,7 @@ class MealsCubit extends Cubit<MealsState> {
     } catch (error) {
       if (isClosed) return;
 
-      final String detail = _describe(error);
+      final String detail = describeError(error);
       debugPrint('Bulkr: meal log toggle failed — $detail');
 
       emit(state.copyWith(
@@ -182,7 +182,7 @@ class MealsCubit extends Cubit<MealsState> {
     } catch (error) {
       if (isClosed) return;
 
-      final String detail = _describe(error);
+      final String detail = describeError(error);
       debugPrint('Bulkr: meal removal failed — $detail');
 
       emit(state.copyWith(
@@ -215,16 +215,4 @@ class MealsCubit extends Cubit<MealsState> {
         .toList();
   }
 
-  /// Postgres carries the useful part in the code — 42501 is a row-level
-  /// security refusal, which reads nothing like a network problem and should
-  /// never be reported as one.
-  static String _describe(Object error) {
-    if (error is PostgrestException) {
-      return [error.code, error.message].whereType<String>().join(' · ');
-    }
-    if (error is StorageException) {
-      return [error.statusCode, error.message].whereType<String>().join(' · ');
-    }
-    return error.toString();
-  }
 }

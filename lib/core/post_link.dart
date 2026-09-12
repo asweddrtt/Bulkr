@@ -37,8 +37,17 @@ class PostLink {
   /// stops another app on the device claiming it.
   static const String scheme = 'com.alimahmoud.bulkr';
 
+  /// The host that means "this is a post".
+  ///
+  /// Shared with [DeepLink.parse] rather than written out at both ends: these
+  /// two are the writer and the reader of the same format, and a link that is
+  /// generated with one spelling and matched with another is a feature that
+  /// looks finished and does nothing — which is what this was until the
+  /// receiving half existed.
+  static const String postHost = 'post';
+
   /// A deep link to one post.
-  static String forPost(String postId) => '$scheme://post/$postId';
+  static String forPost(String postId) => '$scheme://$postHost/$postId';
 
   /// What goes on the clipboard: the post, then the link.
   ///

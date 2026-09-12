@@ -1,5 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../core/analytics_events.dart';
+import '../core/telemetry.dart';
 
 import '../models/person.dart';
 
@@ -45,6 +50,9 @@ class ModerationRepository {
   /// would leave the blocked person listed as a follower on a profile they can
   /// no longer read, which reads as the block not having worked.
   Future<void> block(String personId) async {
+    // Who blocked whom is not recorded and must not be. That a block happened
+    // is a health signal for the app; who it was about is between two people.
+    unawaited(Telemetry.send(AnalyticsEvent.userBlocked(blocked: true)));
     final String? userId = _userId;
     if (userId == null || personId == userId) return;
 
@@ -67,6 +75,7 @@ class ModerationRepository {
   }
 
   Future<void> unblock(String personId) async {
+    unawaited(Telemetry.send(AnalyticsEvent.userBlocked(blocked: false)));
     final String? userId = _userId;
     if (userId == null) return;
 
@@ -143,6 +152,7 @@ class ModerationRepository {
   /// Nothing like `posts.is_hidden`, which is the author or the report
   /// threshold pulling a post for everybody.
   Future<void> hidePost(String postId) async {
+    unawaited(Telemetry.send(AnalyticsEvent.postHidden()));
     final String? userId = _userId;
     if (userId == null) return;
 

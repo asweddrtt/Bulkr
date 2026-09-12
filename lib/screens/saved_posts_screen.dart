@@ -298,18 +298,22 @@ class _SavedTile extends StatelessWidget {
                     Positioned(
                       top: 0,
                       right: 0,
-                      child: GestureDetector(
-                        onTap: onUnsave,
-                        behavior: HitTestBehavior.opaque,
-                        child: Container(
-                          padding: EdgeInsets.all(8.w),
-                          child: Icon(
-                            Icons.bookmark,
-                            size: 18.sp,
-                            color: AppColors.primaryNeon,
-                            shadows: const [
-                              Shadow(color: Colors.black54, blurRadius: 6),
-                            ],
+                      child: Semantics(
+                        button: true,
+                        label: 'a11y_unsave'.tr(),
+                        child: GestureDetector(
+                          onTap: onUnsave,
+                          behavior: HitTestBehavior.opaque,
+                          child: Container(
+                            padding: EdgeInsets.all(8.w),
+                            child: Icon(
+                              Icons.bookmark,
+                              size: 18.sp,
+                              color: AppColors.primaryNeon,
+                              shadows: const [
+                                Shadow(color: Colors.black54, blurRadius: 6),
+                              ],
+                            ),
                           ),
                         ),
                       ),

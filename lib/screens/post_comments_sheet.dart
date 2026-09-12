@@ -118,13 +118,17 @@ class _Header extends StatelessWidget {
               ),
             ),
             PressScale(
-              child: GestureDetector(
-                // Hands the count back so the card can update its number.
-                onTap: () => Navigator.of(context).pop(state.totalCount),
-                behavior: HitTestBehavior.opaque,
-                child: Padding(
-                  padding: EdgeInsets.all(8.w),
-                  child: Icon(Icons.close, color: Colors.white, size: 19.sp),
+              child: Semantics(
+                button: true,
+                label: 'a11y_close'.tr(),
+                child: GestureDetector(
+                  // Hands the count back so the card can update its number.
+                  onTap: () => Navigator.of(context).pop(state.totalCount),
+                  behavior: HitTestBehavior.opaque,
+                  child: Padding(
+                    padding: EdgeInsets.all(8.w),
+                    child: Icon(Icons.close, color: Colors.white, size: 19.sp),
+                  ),
                 ),
               ),
             ),
@@ -501,16 +505,20 @@ class _ComposerState extends State<_Composer> {
                           ),
                         ),
                       ),
-                      GestureDetector(
-                        onTap: () =>
-                            context.read<CommentsCubit>().cancelReply(),
-                        behavior: HitTestBehavior.opaque,
-                        child: Padding(
-                          padding: EdgeInsets.all(6.w),
-                          child: Icon(
-                            Icons.close,
-                            color: AppColors.textGray,
-                            size: 13.sp,
+                      Semantics(
+                        button: true,
+                        label: 'a11y_close'.tr(),
+                        child: GestureDetector(
+                          onTap: () =>
+                              context.read<CommentsCubit>().cancelReply(),
+                          behavior: HitTestBehavior.opaque,
+                          child: Padding(
+                            padding: EdgeInsets.all(6.w),
+                            child: Icon(
+                              Icons.close,
+                              color: AppColors.textGray,
+                              size: 13.sp,
+                            ),
                           ),
                         ),
                       ),
@@ -551,35 +559,40 @@ class _ComposerState extends State<_Composer> {
                     ),
                     SizedBox(width: 8.w),
                     PressScale(
-                      child: GestureDetector(
-                        onTap: state.canSubmit
-                            ? () => context.read<CommentsCubit>().submit()
-                            : null,
-                        behavior: HitTestBehavior.opaque,
-                        child: Container(
-                          padding: EdgeInsets.all(9.w),
-                          decoration: BoxDecoration(
-                            color: state.canSubmit
-                                ? AppColors.buttonNeon
-                                : const Color(0xFF2A2A2A),
-                            shape: BoxShape.circle,
-                          ),
-                          child: state.isSubmitting
-                              ? SizedBox(
-                                  width: 14.sp,
-                                  height: 14.sp,
-                                  child: const CircularProgressIndicator(
-                                    color: Colors.black,
-                                    strokeWidth: 2,
+                      child: Semantics(
+                        button: true,
+                        label: 'a11y_send_comment'.tr(),
+                        enabled: state.canSubmit,
+                        child: GestureDetector(
+                          onTap: state.canSubmit
+                              ? () => context.read<CommentsCubit>().submit()
+                              : null,
+                          behavior: HitTestBehavior.opaque,
+                          child: Container(
+                            padding: EdgeInsets.all(9.w),
+                            decoration: BoxDecoration(
+                              color: state.canSubmit
+                                  ? AppColors.buttonNeon
+                                  : const Color(0xFF2A2A2A),
+                              shape: BoxShape.circle,
+                            ),
+                            child: state.isSubmitting
+                                ? SizedBox(
+                                    width: 14.sp,
+                                    height: 14.sp,
+                                    child: const CircularProgressIndicator(
+                                      color: Colors.black,
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : Icon(
+                                    Icons.arrow_upward,
+                                    color: state.canSubmit
+                                        ? Colors.black
+                                        : AppColors.textGray,
+                                    size: 15.sp,
                                   ),
-                                )
-                              : Icon(
-                                  Icons.arrow_upward,
-                                  color: state.canSubmit
-                                      ? Colors.black
-                                      : AppColors.textGray,
-                                  size: 15.sp,
-                                ),
+                          ),
                         ),
                       ),
                     ),

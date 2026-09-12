@@ -504,27 +504,31 @@ class _FoodResultRowState extends State<_FoodResultRow> {
   Widget _buildAddButton() {
     return PressScale(
       enabled: !_busy,
-      child: GestureDetector(
-        onTap: _add,
-        behavior: HitTestBehavior.opaque,
-        child: Container(
-          width: 38.w,
-          height: 38.w,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: AppColors.primaryNeon,
-            borderRadius: BorderRadius.circular(4.r),
+      child: Semantics(
+        button: true,
+        label: 'meal_add_ingredient'.tr(),
+        child: GestureDetector(
+          onTap: _add,
+          behavior: HitTestBehavior.opaque,
+          child: Container(
+            width: 38.w,
+            height: 38.w,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: AppColors.primaryNeon,
+              borderRadius: BorderRadius.circular(4.r),
+            ),
+            child: _busy
+                ? SizedBox(
+                    width: 16.sp,
+                    height: 16.sp,
+                    child: const CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation(Colors.black),
+                    ),
+                  )
+                : Icon(Icons.add_rounded, color: Colors.black, size: 20.sp),
           ),
-          child: _busy
-              ? SizedBox(
-                  width: 16.sp,
-                  height: 16.sp,
-                  child: const CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation(Colors.black),
-                  ),
-                )
-              : Icon(Icons.add_rounded, color: Colors.black, size: 20.sp),
         ),
       ),
     );

@@ -5,7 +5,9 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../core/analytics_events.dart';
 import '../core/food_search_ranking.dart';
+import '../core/telemetry.dart';
 import '../core/rate_limiter.dart';
 import '../models/food_item.dart';
 import '../models/macros.dart';
@@ -127,6 +129,11 @@ class FoodRepository {
     final String trimmed = query.trim();
     if (trimmed.length < minQueryLength) return const [];
 
+    // Which tier ends up answering is the number that says whether tiers 2 and
+    // 3 are still worth their complexity — and whether tier 1 is filling up
+    // the way the design assumes. It was only ever visible by reading the
+    // code and guessing.
+    final Stopwatch elapsed = Stopwatch()..start();
     final Map<String, ScoredFood> found = <String, ScoredFood>{};
 
     // Tier 1 — our own tables. Run together: they are the same database, and
@@ -140,18 +147,60 @@ class FoodRepository {
     }
 
     List<ScoredFood> ranked = _rank(found, trimmed);
-    if (_isEnough(ranked)) return _asFoods(ranked);
+    if (_isEnough(ranked)) {
+      return _answer(ranked, tier: 'cache', query: trimmed, elapsed: elapsed);
+    }
 
     // Tier 2 — the hosted database, which caches into tier 1 as a side effect.
     _collect(found, await _searchHosted(trimmed));
 
     ranked = _rank(found, trimmed);
-    if (_isEnough(ranked)) return _asFoods(ranked);
+    if (_isEnough(ranked)) {
+      return _answer(ranked, tier: 'hosted', query: trimmed, elapsed: elapsed);
+    }
 
     // Tier 3 — Open Food Facts, for the long tail.
     _collect(found, await _searchOpenFoodFacts(trimmed));
 
-    return _asFoods(_rank(found, trimmed));
+    return _answer(
+      _rank(found, trimmed),
+      tier: 'off',
+      query: trimmed,
+      elapsed: elapsed,
+    );
+  }
+
+  /// Records which tier answered, then hands the results back untouched.
+  ///
+  /// The query itself never travels — only how long it was, bucketed. See the
+  /// rule at the top of `analytics_events.dart`.
+  List<FoodItem> _answer(
+    List<ScoredFood> ranked, {
+    required String tier,
+    required String query,
+    required Stopwatch elapsed,
+  }) {
+    final List<FoodItem> foods = _asFoods(ranked);
+
+    unawaited(Telemetry.send(AnalyticsEvent.foodSearched(
+      // `none` rather than the tier that happened to run last: a search that
+      // found nothing was not answered by anything, and counting it as an
+      // Open Food Facts answer would hide the failure inside the success.
+      tier: foods.isEmpty ? 'none' : tier,
+      resultCount: foods.length,
+      queryLength: query.length,
+      milliseconds: elapsed.elapsedMilliseconds,
+    )));
+
+    // The failure worth counting on its own: it is the one that sends somebody
+    // to a different app.
+    if (foods.isEmpty) {
+      unawaited(Telemetry.send(
+        AnalyticsEvent.foodSearchEmpty(queryLength: query.length),
+      ));
+    }
+
+    return foods;
   }
 
   /// Adds candidates the query has not already found.

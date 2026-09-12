@@ -1,8 +1,8 @@
 import 'package:equatable/equatable.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/error_text.dart';
 import '../../data/meal_repository.dart';
 import '../../data/moderation_repository.dart';
 import '../../data/feed_cursor.dart';
@@ -93,7 +93,7 @@ class AuthorCubit extends Cubit<AuthorState> {
     } catch (error) {
       if (isClosed) return;
 
-      final String detail = _describe(error);
+      final String detail = describeError(error);
       debugPrint('Bulkr: profile failed to load — $detail');
 
       if (silent && state.status == AuthorStatus.ready) {
@@ -136,7 +136,7 @@ class AuthorCubit extends Cubit<AuthorState> {
     } catch (error) {
       if (isClosed) return;
 
-      final String detail = _describe(error);
+      final String detail = describeError(error);
       debugPrint('Bulkr: profile page failed to load — $detail');
 
       emit(state.copyWith(
@@ -166,7 +166,7 @@ class AuthorCubit extends Cubit<AuthorState> {
     } catch (error) {
       if (isClosed) return;
 
-      final String detail = _describe(error);
+      final String detail = describeError(error);
       debugPrint('Bulkr: like failed — $detail');
 
       _replacePost(post);
@@ -191,7 +191,7 @@ class AuthorCubit extends Cubit<AuthorState> {
     } catch (error) {
       if (isClosed) return;
 
-      final String detail = _describe(error);
+      final String detail = describeError(error);
       debugPrint('Bulkr: save failed — $detail');
 
       _replacePost(post);
@@ -237,7 +237,7 @@ class AuthorCubit extends Cubit<AuthorState> {
     } catch (error) {
       if (isClosed) return;
 
-      final String detail = _describe(error);
+      final String detail = describeError(error);
       debugPrint('Bulkr: post delete failed — $detail');
 
       emit(before.copyWith(
@@ -258,7 +258,7 @@ class AuthorCubit extends Cubit<AuthorState> {
     } catch (error) {
       if (isClosed) return;
 
-      final String detail = _describe(error);
+      final String detail = describeError(error);
       debugPrint('Bulkr: hide failed — $detail');
 
       _replacePost(post);
@@ -311,7 +311,7 @@ class AuthorCubit extends Cubit<AuthorState> {
     } catch (error) {
       if (isClosed) return;
 
-      final String detail = _describe(error);
+      final String detail = describeError(error);
       debugPrint('Bulkr: follow failed — $detail');
 
       emit(state.copyWith(
@@ -368,7 +368,7 @@ class AuthorCubit extends Cubit<AuthorState> {
     } catch (error) {
       if (isClosed) return;
 
-      final String detail = _describe(error);
+      final String detail = describeError(error);
       debugPrint('Bulkr: profile meals failed — $detail');
 
       emit(state.copyWith(
@@ -408,7 +408,7 @@ class AuthorCubit extends Cubit<AuthorState> {
     } catch (error) {
       if (isClosed) return;
 
-      final String detail = _describe(error);
+      final String detail = describeError(error);
       debugPrint('Bulkr: block failed — $detail');
 
       emit(state.copyWith(
@@ -419,11 +419,4 @@ class AuthorCubit extends Cubit<AuthorState> {
     }
   }
 
-  static String _describe(Object error) {
-    if (error is PostgrestException) {
-      return [error.message, if (error.code != null) '(${error.code})']
-          .join(' ');
-    }
-    return '$error';
-  }
 }

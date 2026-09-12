@@ -1,4 +1,5 @@
 import 'package:bulkr/core/moderation_error.dart';
+import 'package:bulkr/core/image_safety.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -61,5 +62,46 @@ void main() {
       )),
       'something else entirely',
     );
+  });
+
+  group('the explicit-image refusal', _refusalTests);
+}
+
+/// The refusal a user actually reads.
+///
+/// `ImageSafety.showScoreInRefusal` was true while the threshold was being
+/// calibrated, which meant a false positive on somebody's progress photo said:
+///
+///     We can't post that image (scored 0.812, threshold 0.75)
+///
+/// A number the person holding the phone cannot act on, attached to a refusal
+/// they will read as the app malfunctioning. The scores now go to analytics
+/// instead, where the distribution is the thing that is actually wanted.
+void _refusalTests() {
+  test('a refused image is told why, not told a score', () {
+    final String? refusal =
+        explicitImageRefusal(const ExplicitImageException(0.812));
+
+    expect(refusal, isNotNull);
+    expect(
+      refusal,
+      isNot(contains('0.81')),
+      reason: 'the model score must not be shown to the user',
+    );
+    expect(
+      refusal,
+      isNot(contains('threshold')),
+      reason: 'nor the threshold it was measured against',
+    );
+  });
+
+  test('the flag that put the score there is off', () {
+    // Asserted directly as well as through the text above, so that turning it
+    // back on for a calibration run fails here rather than silently shipping.
+    expect(ImageSafety.showScoreInRefusal, isFalse);
+  });
+
+  test('other failures are still not image refusals', () {
+    expect(explicitImageRefusal(Exception('something else')), isNull);
   });
 }

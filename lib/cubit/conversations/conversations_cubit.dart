@@ -1,8 +1,8 @@
 import 'package:equatable/equatable.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/error_text.dart';
 import '../../data/chat_repository.dart';
 import '../../models/conversation.dart';
 
@@ -36,7 +36,7 @@ class ConversationsCubit extends Cubit<ConversationsState> {
     } catch (error) {
       if (isClosed) return;
 
-      final String detail = _describe(error);
+      final String detail = describeError(error);
       debugPrint('Bulkr: conversations failed to load — $detail');
 
       // A silent refresh that fails leaves the list alone: somebody asked for
@@ -66,10 +66,4 @@ class ConversationsCubit extends Cubit<ConversationsState> {
     ));
   }
 
-  static String _describe(Object error) {
-    if (error is PostgrestException) {
-      return [error.code, error.message].whereType<String>().join(' · ');
-    }
-    return error.toString();
-  }
 }

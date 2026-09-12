@@ -146,15 +146,19 @@ class _FeedHeader extends StatelessWidget {
               // than of what anyone wants to do — and "find the thing I am
               // thinking of" does not know which kind it is.
               PressScale(
-                child: GestureDetector(
-                  onTap: () => SearchScreen.open(context),
-                  behavior: HitTestBehavior.opaque,
-                  child: Padding(
-                    padding: EdgeInsets.only(left: 6.w),
-                    child: Icon(
-                      Icons.search,
-                      color: AppColors.textGray,
-                      size: 21.sp,
+                child: Semantics(
+                  button: true,
+                  label: 'a11y_search'.tr(),
+                  child: GestureDetector(
+                    onTap: () => SearchScreen.open(context),
+                    behavior: HitTestBehavior.opaque,
+                    child: Padding(
+                      padding: EdgeInsets.only(left: 6.w),
+                      child: Icon(
+                        Icons.search,
+                        color: AppColors.textGray,
+                        size: 21.sp,
+                      ),
                     ),
                   ),
                 ),
@@ -203,33 +207,37 @@ class _BellButtonState extends State<_BellButton> {
           previous.hasUnread != current.hasUnread,
       builder: (context, state) {
         return PressScale(
-          child: GestureDetector(
-            onTap: () => NotificationsScreen.open(context),
-            behavior: HitTestBehavior.opaque,
-            child: Padding(
-              padding: EdgeInsets.only(left: 10.w),
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  Icon(
-                    Icons.notifications_none_rounded,
-                    color: AppColors.textGray,
-                    size: 21.sp,
-                  ),
-                  if (state.hasUnread)
-                    Positioned(
-                      top: -1.h,
-                      right: 0,
-                      child: Container(
-                        width: 8.w,
-                        height: 8.w,
-                        decoration: const BoxDecoration(
-                          color: AppColors.primaryNeon,
-                          shape: BoxShape.circle,
+          child: Semantics(
+            button: true,
+            label: 'a11y_notifications'.tr(),
+            child: GestureDetector(
+              onTap: () => NotificationsScreen.open(context),
+              behavior: HitTestBehavior.opaque,
+              child: Padding(
+                padding: EdgeInsets.only(left: 10.w),
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Icon(
+                      Icons.notifications_none_rounded,
+                      color: AppColors.textGray,
+                      size: 21.sp,
+                    ),
+                    if (state.hasUnread)
+                      Positioned(
+                        top: -1.h,
+                        right: 0,
+                        child: Container(
+                          width: 8.w,
+                          height: 8.w,
+                          decoration: const BoxDecoration(
+                            color: AppColors.primaryNeon,
+                            shape: BoxShape.circle,
+                          ),
                         ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -269,36 +277,40 @@ class _InboxButtonState extends State<_InboxButton> {
         final int unread = state.unreadTotal;
 
         return PressScale(
-          child: GestureDetector(
-            onTap: () => ConversationsScreen.open(context),
-            behavior: HitTestBehavior.opaque,
-            child: Padding(
-              padding: EdgeInsets.only(left: 10.w),
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  Icon(
-                    Icons.message,
-                    color: AppColors.textGray,
-                    size: 21.sp,
-                  ),
-                  // A dot rather than a number: at this size a two-digit count
-                  // is unreadable, and the inbox itself is one tap away with
-                  // the real numbers on it.
-                  if (unread > 0)
-                    Positioned(
-                      top: -1.h,
-                      right: -1.w,
-                      child: Container(
-                        width: 8.w,
-                        height: 8.w,
-                        decoration: const BoxDecoration(
-                          color: AppColors.primaryNeon,
-                          shape: BoxShape.circle,
+          child: Semantics(
+            button: true,
+            label: 'a11y_messages'.tr(),
+            child: GestureDetector(
+              onTap: () => ConversationsScreen.open(context),
+              behavior: HitTestBehavior.opaque,
+              child: Padding(
+                padding: EdgeInsets.only(left: 10.w),
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Icon(
+                      Icons.message,
+                      color: AppColors.textGray,
+                      size: 21.sp,
+                    ),
+                    // A dot rather than a number: at this size a two-digit count
+                    // is unreadable, and the inbox itself is one tap away with
+                    // the real numbers on it.
+                    if (unread > 0)
+                      Positioned(
+                        top: -1.h,
+                        right: -1.w,
+                        child: Container(
+                          width: 8.w,
+                          height: 8.w,
+                          decoration: const BoxDecoration(
+                            color: AppColors.primaryNeon,
+                            shape: BoxShape.circle,
+                          ),
                         ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

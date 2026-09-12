@@ -1,8 +1,8 @@
 import 'package:equatable/equatable.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/error_text.dart';
 import '../../data/notification_repository.dart';
 import '../../models/app_notification.dart';
 
@@ -55,7 +55,7 @@ class NotificationsCubit extends Cubit<NotificationsState> {
     } catch (error) {
       if (isClosed) return;
 
-      final String detail = _describe(error);
+      final String detail = describeError(error);
       debugPrint('Bulkr: notifications failed to load — $detail');
 
       if (silent && state.status == NotificationsStatus.ready) return;
@@ -120,10 +120,4 @@ class NotificationsCubit extends Cubit<NotificationsState> {
     emit(state.copyWith(clearActionError: true));
   }
 
-  static String _describe(Object error) {
-    if (error is PostgrestException) {
-      return [error.code, error.message].whereType<String>().join(' · ');
-    }
-    return error.toString();
-  }
 }

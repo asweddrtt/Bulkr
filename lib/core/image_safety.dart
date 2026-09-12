@@ -1,6 +1,12 @@
+import 'dart:async';
+import 'dart:io' show Platform;
+
 import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 import 'package:nsfw_detect/nsfw_detect.dart';
+
+import 'analytics_events.dart';
+import 'telemetry.dart';
 
 /// Thrown when a picked image looks explicit and was not uploaded.
 ///
@@ -55,6 +61,38 @@ class _Variant {
 /// third-party native library: its iOS side is Swift calling Vision and Core
 /// ML, frameworks that ship with the OS and link at build time, so there is no
 /// symbol to look up and nothing to fail to find.
+///
+/// ## This does not currently run on Android
+///
+/// Worth saying plainly, because everything above is about iOS and reads as
+/// though it were about both platforms.
+///
+/// The default model is `opennsfw2_coreml`, and it *is* bundled — as
+/// `ios/Assets/OpenNSFW2.mlmodelc`, inside the plugin's own pod. That is an
+/// iOS-only artefact. The plugin's Android side is a TensorFlow Lite engine
+/// which loads `<model>.tflite` from either the *host app's* asset bundle or a
+/// runtime download it manages itself, and `nsfw_detect` ships neither: its
+/// `android/src/main/assets/` is empty, Bulkr declares no `.tflite` in
+/// `pubspec.yaml`, and nothing here calls `NsfwDetector.instance.models` to
+/// fetch one.
+///
+/// So on Android the load throws `ModelNotFound`, [_score] returns null for
+/// every rendering, `scored` is zero, and [refuseIfExplicit] allows the upload.
+/// That is the fail-open branch behaving exactly as designed — and it is also
+/// precisely the shape of the TensorFlow Lite bug above, where every check
+/// threw, every check was then allowed, and from the outside it was
+/// indistinguishable from a model that was working.
+///
+/// Two honest ways out, neither free:
+///
+///   1. Call `NsfwDetector.instance.models` to download OpenNSFW2 (~11 MB) on
+///      first run on Android, and decide what posting does while it is absent.
+///   2. Ship the `.tflite` as an app asset, which adds ~11 MB to the Android
+///      download for a file iOS will never read.
+///
+/// Until one of them is done, `AnalyticsEvent.imageCheckDidNotRun` fires on
+/// every Android upload and says so out loud. That is the whole point of it:
+/// the previous version of this failure was invisible for a full release.
 abstract final class ImageSafety {
   /// The score above which an image is refused.
   ///
@@ -73,10 +111,16 @@ abstract final class ImageSafety {
 
   /// Whether a refusal shows the score that caused it.
   ///
-  /// On while [threshold] is being calibrated. A refused image is the only
-  /// moment the number reaches somebody who can report it, and there is no
-  /// other way to read one off a phone.
-  static const bool showScoreInRefusal = true;
+  /// **Off.** It was on while the threshold was being calibrated, because a
+  /// refused image was the only moment the number reached somebody who could
+  /// report it and there was no other way to read one off a phone.
+  ///
+  /// There is now. Every score goes to analytics — refusals *and* allowances,
+  /// see [refuseIfExplicit] — so the distribution can be read off a dashboard
+  /// instead of off a stranger's screenshot. The number no longer has to
+  /// be shown to the person it was refused to, who cannot act on it and reads
+  /// `(scored 0.812, threshold 0.75)` as the app malfunctioning.
+  static const bool showScoreInRefusal = false;
 
   /// The edge length the model actually sees.
   ///
@@ -107,6 +151,14 @@ abstract final class ImageSafety {
   ///
   /// Once the log shows one order consistently doing the work, this drops to a
   /// single scan in a patch.
+  ///
+  /// Left on. Unlike [showScoreInRefusal] this is not a calibration aid the
+  /// user can see — it is a correctness hedge, and turning it off means
+  /// *choosing* a channel order, which is the thing that cannot yet be done
+  /// honestly. What has changed is how it gets resolved: the winning variant
+  /// now rides on every `image_refused` and `image_allowed` event, so the
+  /// answer arrives as a distribution over real photos rather than by reading
+  /// the weights.
   static const bool channelOrderIsUnverified = true;
 
   /// Refuses an explicit image, and lets everything else through.
@@ -150,11 +202,19 @@ abstract final class ImageSafety {
     if (scored == 0) {
       // Every rendering failed to score. Nothing was measured, so nothing is
       // concluded — but this is the silent-failure case that cost a release,
-      // so it is loud.
+      // so it is loud in both directions: the console for whoever is holding
+      // the phone, and analytics for the far more common case of nobody being
+      // there at all.
       debugPrint(
         'Bulkr: nudity check produced no score at all, so the upload was '
         'allowed. The model did not run.',
       );
+      unawaited(Telemetry.send(AnalyticsEvent.imageCheckDidNotRun(
+        // A category, not the exception text: on Android this is the known
+        // missing-model case described on the class, and everywhere else it
+        // is worth telling apart from it.
+        reason: _platformLabel,
+      )));
       return;
     }
 
@@ -163,7 +223,36 @@ abstract final class ImageSafety {
       '(threshold $threshold).',
     );
 
-    if (isExplicit(worst)) throw ExplicitImageException(worst);
+    // Sent for allowed images too, and that is deliberate. A threshold cannot
+    // be judged from refusals alone: refusals are the complaints, and the
+    // false *negatives* — the explicit image that scored 0.7 and went up — are
+    // the half that never complains. Only both halves make a distribution.
+    if (isExplicit(worst)) {
+      unawaited(Telemetry.send(AnalyticsEvent.imageRefused(
+        score: worst,
+        threshold: threshold,
+        variant: worstName,
+      )));
+      throw ExplicitImageException(worst);
+    }
+
+    unawaited(Telemetry.send(AnalyticsEvent.imageAllowed(
+      score: worst,
+      variant: worstName,
+    )));
+  }
+
+  /// Which platform a missing score came from.
+  ///
+  /// Android is expected to be missing today — see the note on this class — so
+  /// separating it is what stops the expected case from hiding an unexpected
+  /// one on iOS, where the model is bundled and a failure means something has
+  /// actually broken.
+  static String get _platformLabel {
+    if (kIsWeb) return 'web';
+    if (Platform.isAndroid) return 'android_no_model';
+    if (Platform.isIOS) return 'ios_unexpected';
+    return 'other';
   }
 
   /// Scores one rendering, or null when it could not be scored.

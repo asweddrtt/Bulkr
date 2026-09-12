@@ -122,12 +122,16 @@ class _HeaderState extends State<_Header> {
       child: Row(
         children: [
           PressScale(
-            child: GestureDetector(
-              onTap: () => Navigator.of(context).pop(),
-              behavior: HitTestBehavior.opaque,
-              child: Padding(
-                padding: EdgeInsets.all(8.w),
-                child: Icon(Icons.arrow_back, color: Colors.white, size: 20.sp),
+            child: Semantics(
+              button: true,
+              label: 'a11y_back'.tr(),
+              child: GestureDetector(
+                onTap: () => Navigator.of(context).pop(),
+                behavior: HitTestBehavior.opaque,
+                child: Padding(
+                  padding: EdgeInsets.all(8.w),
+                  child: Icon(Icons.arrow_back, color: Colors.white, size: 20.sp),
+                ),
               ),
             ),
           ),
@@ -173,21 +177,25 @@ class _HeaderState extends State<_Header> {
                     buildWhen: (previous, current) =>
                         previous.hasQuery != current.hasQuery,
                     builder: (context, state) => state.hasQuery
-                        ? GestureDetector(
-                            onTap: () {
-                              _controller.clear();
-                              context.read<SearchCubit>().clearSearch();
-                            },
-                            behavior: HitTestBehavior.opaque,
-                            child: Padding(
-                              padding: EdgeInsets.all(6.w),
-                              child: Icon(
-                                Icons.close,
-                                color: AppColors.textGray,
-                                size: 15.sp,
+                        ? Semantics(
+                          button: true,
+                          label: 'a11y_clear_search'.tr(),
+                          child: GestureDetector(
+                              onTap: () {
+                                _controller.clear();
+                                context.read<SearchCubit>().clearSearch();
+                              },
+                              behavior: HitTestBehavior.opaque,
+                              child: Padding(
+                                padding: EdgeInsets.all(6.w),
+                                child: Icon(
+                                  Icons.close,
+                                  color: AppColors.textGray,
+                                  size: 15.sp,
+                                ),
                               ),
                             ),
-                          )
+                        )
                         : const SizedBox.shrink(),
                   ),
                 ],
@@ -407,46 +415,54 @@ class _HistorySection extends StatelessWidget {
         for (final String term in terms)
           PressScale(
             key: ValueKey('history-$term'),
-            child: GestureDetector(
-              onTap: () => cubit.repeatSearch(term),
-              behavior: HitTestBehavior.opaque,
-              child: Padding(
-                padding: EdgeInsets.symmetric(vertical: 9.h),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.history,
-                      size: 16.sp,
-                      color: AppColors.textGray,
-                    ),
-                    SizedBox(width: 12.w),
-                    Expanded(
-                      child: Text(
-                        term,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.inter(
-                          color: Colors.white,
-                          fontSize: 12.sp,
+            child: Semantics(
+              button: true,
+              label: 'a11y_search_again'.tr(),
+              child: GestureDetector(
+                onTap: () => cubit.repeatSearch(term),
+                behavior: HitTestBehavior.opaque,
+                child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 9.h),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.history,
+                        size: 16.sp,
+                        color: AppColors.textGray,
+                      ),
+                      SizedBox(width: 12.w),
+                      Expanded(
+                        child: Text(
+                          term,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.inter(
+                            color: Colors.white,
+                            fontSize: 12.sp,
+                          ),
                         ),
                       ),
-                    ),
-                    // Its own hit target rather than a swipe: the row itself
-                    // is already a tap that means "search this again", and a
-                    // gesture that removes it would be competing with that.
-                    GestureDetector(
-                      onTap: () => cubit.forgetSearch(term),
-                      behavior: HitTestBehavior.opaque,
-                      child: Padding(
-                        padding: EdgeInsets.all(4.w),
-                        child: Icon(
-                          Icons.close,
-                          size: 14.sp,
-                          color: AppColors.textGray,
+                      // Its own hit target rather than a swipe: the row itself
+                      // is already a tap that means "search this again", and a
+                      // gesture that removes it would be competing with that.
+                      Semantics(
+                        button: true,
+                        label: 'a11y_forget_search'.tr(),
+                        child: GestureDetector(
+                          onTap: () => cubit.forgetSearch(term),
+                          behavior: HitTestBehavior.opaque,
+                          child: Padding(
+                            padding: EdgeInsets.all(4.w),
+                            child: Icon(
+                              Icons.close,
+                              size: 14.sp,
+                              color: AppColors.textGray,
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -543,49 +559,53 @@ class _AllGroupsRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return PressScale(
-      child: GestureDetector(
-        onTap: onTap,
-        behavior: HitTestBehavior.opaque,
-        child: Container(
-          padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 14.h),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1A1A1A),
-            borderRadius: BorderRadius.circular(8.r),
-            border: Border.all(color: AppColors.darkBorder),
-          ),
-          child: Row(
-            children: [
-              Icon(Icons.groups, color: AppColors.primaryNeon, size: 18.sp),
-              SizedBox(width: 12.w),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'search_all_groups'.tr(),
-                      style: GoogleFonts.inter(
-                        color: Colors.white,
-                        fontSize: 12.sp,
-                        fontWeight: FontWeight.w600,
+      child: Semantics(
+        button: true,
+        label: 'a11y_open_group'.tr(),
+        child: GestureDetector(
+          onTap: onTap,
+          behavior: HitTestBehavior.opaque,
+          child: Container(
+            padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 14.h),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1A1A1A),
+              borderRadius: BorderRadius.circular(8.r),
+              border: Border.all(color: AppColors.darkBorder),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.groups, color: AppColors.primaryNeon, size: 18.sp),
+                SizedBox(width: 12.w),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'search_all_groups'.tr(),
+                        style: GoogleFonts.inter(
+                          color: Colors.white,
+                          fontSize: 12.sp,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                    ),
-                    SizedBox(height: 2.h),
-                    Text(
-                      'search_all_groups_helper'.tr(),
-                      style: GoogleFonts.inter(
-                        color: AppColors.textGray,
-                        fontSize: 10.sp,
+                      SizedBox(height: 2.h),
+                      Text(
+                        'search_all_groups_helper'.tr(),
+                        style: GoogleFonts.inter(
+                          color: AppColors.textGray,
+                          fontSize: 10.sp,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              Icon(
-                Icons.chevron_right,
-                color: AppColors.textGray,
-                size: 18.sp,
-              ),
-            ],
+                Icon(
+                  Icons.chevron_right,
+                  color: AppColors.textGray,
+                  size: 18.sp,
+                ),
+              ],
+            ),
           ),
         ),
       ),

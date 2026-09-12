@@ -240,12 +240,16 @@ class _ComposerHeader extends StatelessWidget {
       child: Row(
         children: [
           PressScale(
-            child: GestureDetector(
-              onTap: () => PostComposerScreen.confirmClose(context),
-              behavior: HitTestBehavior.opaque,
-              child: Padding(
-                padding: EdgeInsets.all(8.w),
-                child: Icon(Icons.close, color: Colors.white, size: 20.sp),
+            child: Semantics(
+              button: true,
+              label: 'a11y_close'.tr(),
+              child: GestureDetector(
+                onTap: () => PostComposerScreen.confirmClose(context),
+                behavior: HitTestBehavior.opaque,
+                child: Padding(
+                  padding: EdgeInsets.all(8.w),
+                  child: Icon(Icons.close, color: Colors.white, size: 20.sp),
+                ),
               ),
             ),
           ),
@@ -1000,16 +1004,20 @@ class _Thumbnail extends StatelessWidget {
             top: 4.w,
             right: 4.w,
             child: PressScale(
-              child: GestureDetector(
-                onTap: onRemove,
-                behavior: HitTestBehavior.opaque,
-                child: Container(
-                  padding: EdgeInsets.all(4.w),
-                  decoration: const BoxDecoration(
-                    color: Colors.black54,
-                    shape: BoxShape.circle,
+              child: Semantics(
+                button: true,
+                label: 'a11y_remove_photo'.tr(),
+                child: GestureDetector(
+                  onTap: onRemove,
+                  behavior: HitTestBehavior.opaque,
+                  child: Container(
+                    padding: EdgeInsets.all(4.w),
+                    decoration: const BoxDecoration(
+                      color: Colors.black54,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.close, color: Colors.white, size: 12.sp),
                   ),
-                  child: Icon(Icons.close, color: Colors.white, size: 12.sp),
                 ),
               ),
             ),
@@ -1028,21 +1036,25 @@ class _AddPhotoButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return PressScale(
-      child: GestureDetector(
-        onTap: onTap,
-        behavior: HitTestBehavior.opaque,
-        child: Container(
-          width: 88.w,
-          height: 88.w,
-          decoration: BoxDecoration(
-            color: const Color(0xFF1A1A1A),
-            borderRadius: BorderRadius.circular(6.r),
-            border: Border.all(color: AppColors.darkBorder),
-          ),
-          child: Icon(
-            Icons.add_a_photo_outlined,
-            color: AppColors.textGray,
-            size: 22.sp,
+      child: Semantics(
+        button: true,
+        label: 'a11y_add_photo'.tr(),
+        child: GestureDetector(
+          onTap: onTap,
+          behavior: HitTestBehavior.opaque,
+          child: Container(
+            width: 88.w,
+            height: 88.w,
+            decoration: BoxDecoration(
+              color: const Color(0xFF1A1A1A),
+              borderRadius: BorderRadius.circular(6.r),
+              border: Border.all(color: AppColors.darkBorder),
+            ),
+            child: Icon(
+              Icons.add_a_photo_outlined,
+              color: AppColors.textGray,
+              size: 22.sp,
+            ),
           ),
         ),
       ),
@@ -1302,15 +1314,19 @@ class _AttachedMealRow extends StatelessWidget {
             ),
           ),
           PressScale(
-            child: GestureDetector(
-              onTap: onRemove,
-              behavior: HitTestBehavior.opaque,
-              child: Padding(
-                padding: EdgeInsets.all(4.w),
-                child: Icon(
-                  Icons.close,
-                  color: AppColors.textGray,
-                  size: 16.sp,
+            child: Semantics(
+              button: true,
+              label: 'a11y_remove_attachment'.tr(),
+              child: GestureDetector(
+                onTap: onRemove,
+                behavior: HitTestBehavior.opaque,
+                child: Padding(
+                  padding: EdgeInsets.all(4.w),
+                  child: Icon(
+                    Icons.close,
+                    color: AppColors.textGray,
+                    size: 16.sp,
+                  ),
                 ),
               ),
             ),

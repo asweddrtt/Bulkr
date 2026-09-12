@@ -81,10 +81,50 @@ dependencies:
   # easy_localization and supabase_flutter use it — and declared here because
   # AppPreferences calls it directly.
   shared_preferences: ^2.3.2
+  # Incoming deep links — `com.alimahmoud.bulkr://post/<id>`.
+  #
+  # Already in the tree: supabase_flutter uses it for the OAuth callback, and
+  # `dependency_overrides` below pins it to 6.x for the AGP reason explained
+  # there. Declared here because `DeepLinkListener` now subscribes to it
+  # directly, and an app that imports a package it does not depend on breaks
+  # the first time the transitive one moves.
+  #
+  # Both listeners see every URI. Supabase answers `login-callback`; the app
+  # answers `post`. See `DeepLink.parse` for why that matching is strict.
+  app_links: ^6.4.1
+
+  # Opening the privacy policy in the browser. Already present transitively —
+  # supabase_flutter uses it for the OAuth hop — and declared here for the same
+  # reason `http` and `shared_preferences` are: this app calls it directly.
+  url_launcher: ^6.3.0
+
   cached_network_image: ^4.0.0
   image: ^4.9.2
   firebase_core: ^4.14.0
   firebase_messaging: ^16.6.0
+
+  # What happened, on a phone nobody can attach a debugger to.
+  #
+  # The app already has a `StartupFailureScreen` because "it shows white" was
+  # the entire bug report for build 4. Everything *after* launch had the same
+  # problem and no equivalent: an exception in a build method is a grey
+  # rectangle in release, reported to nobody, and the first anyone hears of it
+  # is a one-star review.
+  #
+  # Dart errors arrive with Dart stack traces, which are already symbolicated —
+  # so this is useful without uploading a single dSYM. dSYMs only matter for
+  # crashes in native code, of which this app has very little. See
+  # ios/TESTFLIGHT.md for the upload step if that changes.
+  firebase_crashlytics: ^5.3.0
+
+  # Which features are actually used, and where people stop.
+  #
+  # Chosen over a third-party product for one reason: Firebase is already here
+  # for push, so this adds an SDK rather than a vendor — no new account, no new
+  # key, and nothing new in the privacy policy that push did not already put
+  # there. See lib/core/analytics_events.dart for what is recorded and, more
+  # importantly, what deliberately is not.
+  firebase_analytics: ^12.5.0
   # On-device nudity detection for post and avatar images. Core ML + Vision on
   # iOS against an OpenNSFW2 model compiled into the plugin's own bundle — so
   # nothing is uploaded, nothing is billed, and there is no account or API key

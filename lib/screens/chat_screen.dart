@@ -496,23 +496,28 @@ class _ComposerState extends State<_Composer> {
             SizedBox(width: 8.w),
             PressScale(
               enabled: _canSend,
-              child: GestureDetector(
-                onTap: _send,
-                behavior: HitTestBehavior.opaque,
-                child: Container(
-                  width: 40.w,
-                  height: 40.w,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: _canSend
-                        ? AppColors.primaryNeon
-                        : const Color(0xFF1F1F1F),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.arrow_upward_rounded,
-                    size: 20.sp,
-                    color: _canSend ? Colors.black : AppColors.textGray,
+              child: Semantics(
+                button: true,
+                label: 'a11y_send_message'.tr(),
+                enabled: _canSend,
+                child: GestureDetector(
+                  onTap: _send,
+                  behavior: HitTestBehavior.opaque,
+                  child: Container(
+                    width: 40.w,
+                    height: 40.w,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: _canSend
+                          ? AppColors.primaryNeon
+                          : const Color(0xFF1F1F1F),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.arrow_upward_rounded,
+                      size: 20.sp,
+                      color: _canSend ? Colors.black : AppColors.textGray,
+                    ),
                   ),
                 ),
               ),

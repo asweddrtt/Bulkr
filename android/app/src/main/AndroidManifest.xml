@@ -42,6 +42,30 @@
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data android:scheme="com.alimahmoud.bulkr" android:host="login-callback"/>
             </intent-filter>
+
+            <!-- Shared post links: com.alimahmoud.bulkr://post/<id>
+
+                 A separate filter rather than widening the one above, because
+                 `host` is what tells the two apart — Supabase's listener
+                 answers `login-callback` and the app answers `post`, and a
+                 filter matching the bare scheme would make that distinction
+                 impossible to see from here.
+
+                 Without this the link is inert on Android. iOS registers the
+                 whole scheme in Info.plist under CFBundleURLSchemes, so it has
+                 been reaching the app all along and simply had nothing
+                 listening; Android matches per host, so
+                 `PostLink.forPost` produced links that did not even open the
+                 app for the entire time the share buttons have existed.
+
+                 Must match `PostLink.scheme` / `PostLink.postHost` and
+                 `DeepLink.parse`. -->
+            <intent-filter android:autoVerify="false">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="com.alimahmoud.bulkr" android:host="post"/>
+            </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

@@ -356,29 +356,45 @@ class _NavItem extends StatelessWidget {
     // black and back. The colours have to cross while the pill does.
     final Color tint = Color.lerp(Colors.white70, Colors.black, emphasis)!;
 
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(destination.icon, color: tint, size: 20.sp),
-          SizedBox(height: 3.h),
-          Text(
-            destination.labelKey.tr(),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: GoogleFonts.inter(
-              color: tint,
-              fontSize: 9.sp,
-              // Weight follows the highlight too. Subtle, and it is what stops
-              // a label looking like it belongs to the tab next door halfway
-              // through a drag.
-              fontWeight: emphasis > 0.5 ? FontWeight.bold : FontWeight.w500,
-              letterSpacing: 0.4,
-            ),
+    return Semantics(
+      button: true,
+      // The label is on screen, so the only thing a screen reader is missing
+      // is which tab is the current one — sighted users read that off the
+      // pill, and there is no audible equivalent without this.
+      //
+      // `emphasis` is a lerp, 0 to 1, driven by how close the pill is: it is
+      // fractional mid-drag. Half-selected is not a state VoiceOver can say,
+      // so the midpoint is where it flips.
+      selected: emphasis > 0.5,
+      // One node for the tab rather than one for the icon and one for the
+      // label, which would otherwise be read as two separate things.
+      child: MergeSemantics(
+        child: GestureDetector(
+          onTap: onTap,
+          behavior: HitTestBehavior.opaque,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(destination.icon, color: tint, size: 20.sp),
+              SizedBox(height: 3.h),
+              Text(
+                destination.labelKey.tr(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.inter(
+                  color: tint,
+                  fontSize: 9.sp,
+                  // Weight follows the highlight too. Subtle, and it is what
+                  // stops a label looking like it belongs to the tab next
+                  // door halfway through a drag.
+                  fontWeight:
+                      emphasis > 0.5 ? FontWeight.bold : FontWeight.w500,
+                  letterSpacing: 0.4,
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

@@ -1,8 +1,8 @@
 import 'package:equatable/equatable.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/error_text.dart';
 import '../../core/calorie_engine.dart';
 import '../../core/insight_engine.dart';
 import '../../core/progress_stats.dart';
@@ -71,7 +71,7 @@ class ProfileCubit extends Cubit<ProfileState> {
         history = await _userRepository.fetchWeightHistory();
       } catch (error) {
         history = state.weightHistory;
-        historyError = _describe(error);
+        historyError = describeError(error);
         debugPrint('Bulkr: weight history unavailable — $historyError');
       }
 
@@ -117,7 +117,7 @@ class ProfileCubit extends Cubit<ProfileState> {
 
       return completed;
     } catch (error) {
-      debugPrint('Bulkr: could not read onboarding state — ${_describe(error)}');
+      debugPrint('Bulkr: could not read onboarding state — ${describeError(error)}');
       return false;
     }
   }
@@ -251,7 +251,7 @@ class ProfileCubit extends Cubit<ProfileState> {
       // in the app to UPDATE `users` and to INSERT into `weight_logs` outside
       // onboarding, so a missing RLS policy shows up as a real Postgres error
       // that is worth reading rather than hiding behind "try again".
-      final String detail = _describe(error);
+      final String detail = describeError(error);
       debugPrint('Bulkr: profile write failed — $detail');
 
       emit(state.copyWith(
@@ -262,15 +262,6 @@ class ProfileCubit extends Cubit<ProfileState> {
     }
   }
 
-  /// Postgres errors carry the useful part in [PostgrestException.code] —
-  /// 42501 is a row-level security refusal, which reads nothing like a network
-  /// problem and should never be reported as one.
-  static String _describe(Object error) {
-    if (error is PostgrestException) {
-      return [error.code, error.message].whereType<String>().join(' · ');
-    }
-    return error.toString();
-  }
 
   /// Called once the failure has been shown, so it isn't repeated on rebuild.
   void clearActionError() {

@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../core/analytics_events.dart';
+import '../core/telemetry.dart';
 import 'image_uploader.dart';
 import '../models/meal.dart';
 import '../models/post.dart';
@@ -398,6 +402,10 @@ class PostRepository {
     required PostReportReason reason,
     String? note,
   }) async {
+    unawaited(Telemetry.send(AnalyticsEvent.contentReported(
+      reason: reason.column,
+      surface: 'post',
+    )));
     final String? userId = _userId;
     if (userId == null) {
       throw StateError('Cannot report a post without a signed-in user');

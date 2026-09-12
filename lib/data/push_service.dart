@@ -1,9 +1,12 @@
+import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 
+import '../core/analytics_events.dart';
+import '../core/telemetry.dart';
 import 'push_repository.dart';
 
 /// A notification the user tapped.
@@ -98,6 +101,15 @@ class PushService {
   /// come back null once notifications are no longer authorised.
   String? _token;
 
+  /// The live subscription to FCM's token rotation, if there is one.
+  ///
+  /// Held so there is never more than one. [signIn] runs whenever the shell
+  /// mounts, and the shell remounts on every sign-in — so a sign-out followed
+  /// by a sign-in used to leave the first subscription running and add a
+  /// second beside it. Every rotation then wrote the same row once per
+  /// listener, and the count grew for as long as the process lived.
+  StreamSubscription<String>? _tokenRefresh;
+
   /// Whether this platform can receive a push at all.
   ///
   /// Desktop and web builds of this app exist for development; FCM is set up
@@ -144,6 +156,13 @@ class PushService {
       // get a prompt" has at least five causes and they are indistinguishable
       // without this.
       debugPrint('Bulkr push: permission ${settings.authorizationStatus}.');
+      // Counted, because the denial rate is the number that decides whether
+      // this prompt is being asked at the right moment — and on iOS a denial
+      // is close to permanent, so getting it wrong is not recoverable per
+      // user.
+      unawaited(Telemetry.send(AnalyticsEvent.pushPermission(
+        status: settings.authorizationStatus.name,
+      )));
 
       // `provisional` is iOS's quiet authorisation — delivered silently to the
       // notification centre without a prompt. It counts: the point is being
@@ -176,12 +195,19 @@ class PushService {
       _token = token;
       await _repository.register(token: token, platform: _platform);
       debugPrint('Bulkr push: registered for $_platform.');
+      unawaited(
+        Telemetry.send(AnalyticsEvent.pushRegistered(platform: _platform)),
+      );
 
       // FCM rotates tokens — on reinstall, on restore to a new device, and
       // occasionally on its own. Registering only at sign-in would leave a
       // stale row behind, and a stale row is a phone that silently stops being
       // notified with nothing to show for it.
-      _messaging.onTokenRefresh.listen((String refreshed) {
+      //
+      // Cancelled before resubscribing rather than simply added to: see
+      // [_tokenRefresh].
+      await _tokenRefresh?.cancel();
+      _tokenRefresh = _messaging.onTokenRefresh.listen((String refreshed) {
         _token = refreshed;
         _repository.register(token: refreshed, platform: _platform);
       });
@@ -243,6 +269,12 @@ class PushService {
   Future<void> signOut() async {
     final String? token = _token;
     _token = null;
+
+    // Stopped here as well as re-established in [signIn]. A rotation arriving
+    // after sign-out has nobody to belong to, and re-registering the phone is
+    // the exact thing this method exists to undo.
+    await _tokenRefresh?.cancel();
+    _tokenRefresh = null;
 
     if (token == null) return;
 

@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:equatable/equatable.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/analytics_events.dart';
+import '../../core/error_text.dart';
+import '../../core/telemetry.dart';
 import '../../data/challenge_repository.dart';
 import '../../data/feed_cursor.dart';
 import '../../data/meal_repository.dart';
@@ -64,6 +68,14 @@ class FeedCubit extends Cubit<FeedState> {
   void selectTab(FeedTab tab) {
     if (state.tab == tab) return;
 
+    // Here rather than in `_loadTab`, because switching to an already-loaded
+    // tab is still somebody choosing to read it — and "does anybody use
+    // Discover" is the question this answers.
+    unawaited(Telemetry.send(AnalyticsEvent.feedViewed(
+      tab: tab.name,
+      label: state.label?.column,
+    )));
+
     emit(state.copyWith(tab: tab));
 
     if (state.sliceFor(tab).status == FeedStatus.initial) {
@@ -113,6 +125,13 @@ class FeedCubit extends Cubit<FeedState> {
 
     emit(_withSlice(tab, slice.copyWith(isLoadingMore: true)));
 
+    // How deep people actually scroll, which is what says whether keyset
+    // paging is earning its complexity.
+    unawaited(Telemetry.send(AnalyticsEvent.feedPaged(
+      tab: tab.name,
+      pageIndex: slice.posts.length ~/ PostRepository.pageSize,
+    )));
+
     try {
       final FeedPage page = await _fetch(tab, cursor: slice.cursor);
       if (isClosed) return;
@@ -135,7 +154,7 @@ class FeedCubit extends Cubit<FeedState> {
     } catch (error) {
       if (isClosed) return;
 
-      final String detail = _describe(error);
+      final String detail = describeError(error);
       debugPrint('Bulkr: feed page failed to load — $detail');
 
       // The rows already on screen stay. A failed *next* page is not a reason
@@ -203,13 +222,21 @@ class FeedCubit extends Cubit<FeedState> {
       likeCount: (post.likeCount + (next ? 1 : -1)).clamp(0, 1 << 30),
     ));
 
+    unawaited(Telemetry.send(AnalyticsEvent.postLiked(liked: next)));
+
     try {
       await _posts.setLiked(postId: post.id, isLiked: next);
     } catch (error) {
       if (isClosed) return;
 
-      final String detail = _describe(error);
-      debugPrint('Bulkr: like failed — $detail');
+      final DescribedFailure failure = describeFailure(error);
+      final String detail = failure.message;
+      debugPrint('Bulkr: like failed — ${failure.technical}');
+      unawaited(Telemetry.send(AnalyticsEvent.requestFailed(
+        operation: 'post.like',
+        kind: failure.kind.name,
+        code: failure.code,
+      )));
 
       // Put the card back exactly as it was, rather than un-toggling what is
       // on screen now: the user may have tapped twice while this was in
@@ -232,12 +259,14 @@ class FeedCubit extends Cubit<FeedState> {
       saveCount: (post.saveCount + (next ? 1 : -1)).clamp(0, 1 << 30),
     ));
 
+    unawaited(Telemetry.send(AnalyticsEvent.postSaved(saved: next)));
+
     try {
       await _posts.setSaved(postId: post.id, isSaved: next);
     } catch (error) {
       if (isClosed) return;
 
-      final String detail = _describe(error);
+      final String detail = describeError(error);
       debugPrint('Bulkr: save failed — $detail');
 
       _replaceEverywhere(post, actionErrorDetail: detail);
@@ -275,7 +304,7 @@ class FeedCubit extends Cubit<FeedState> {
     } catch (error) {
       if (isClosed) return;
 
-      final String detail = _describe(error);
+      final String detail = describeError(error);
       debugPrint('Bulkr: meal copy failed — $detail');
 
       emit(state.copyWith(
@@ -325,7 +354,7 @@ class FeedCubit extends Cubit<FeedState> {
     } catch (error) {
       if (isClosed) return;
 
-      final String detail = _describe(error);
+      final String detail = describeError(error);
       debugPrint('Bulkr: challenge join failed — $detail');
 
       emit(state.copyWith(
@@ -369,7 +398,7 @@ class FeedCubit extends Cubit<FeedState> {
     } catch (error) {
       if (isClosed) return;
 
-      final String detail = _describe(error);
+      final String detail = describeError(error);
       debugPrint('Bulkr: hide failed — $detail');
 
       _replaceEverywhere(post, actionErrorDetail: detail);
@@ -400,7 +429,7 @@ class FeedCubit extends Cubit<FeedState> {
     } catch (error) {
       if (isClosed) return;
 
-      final String detail = _describe(error);
+      final String detail = describeError(error);
       debugPrint('Bulkr: post delete failed — $detail');
 
       emit(before.copyWith(
@@ -432,7 +461,7 @@ class FeedCubit extends Cubit<FeedState> {
     } catch (error) {
       if (isClosed) return;
 
-      final String detail = _describe(error);
+      final String detail = describeError(error);
       debugPrint('Bulkr: hiding a post failed — $detail');
 
       emit(before.copyWith(
@@ -455,7 +484,7 @@ class FeedCubit extends Cubit<FeedState> {
     } catch (error) {
       if (isClosed) return;
 
-      final String detail = _describe(error);
+      final String detail = describeError(error);
       debugPrint('Bulkr: unhiding a post failed — $detail');
 
       emit(state.copyWith(
@@ -489,7 +518,7 @@ class FeedCubit extends Cubit<FeedState> {
     } catch (error) {
       if (isClosed) return;
 
-      final String detail = _describe(error);
+      final String detail = describeError(error);
       debugPrint('Bulkr: blocking failed — $detail');
 
       emit(state.copyWith(
@@ -540,7 +569,7 @@ class FeedCubit extends Cubit<FeedState> {
     } catch (error) {
       if (isClosed) return;
 
-      final String detail = _describe(error);
+      final String detail = describeError(error);
       debugPrint('Bulkr: feed failed to load — $detail');
 
       // A silent refresh that fails leaves the list alone: the user asked for
@@ -621,17 +650,4 @@ class FeedCubit extends Cubit<FeedState> {
     ];
   }
 
-  /// What went wrong, in words worth showing.
-  ///
-  /// Postgrest and Storage failures carry a usable message; anything else is
-  /// printed as-is, which is more use to a bug report than "something went
-  /// wrong".
-  static String _describe(Object error) {
-    if (error is PostgrestException) {
-      return [error.message, if (error.code != null) '(${error.code})']
-          .join(' ');
-    }
-    if (error is StorageException) return error.message;
-    return '$error';
-  }
 }

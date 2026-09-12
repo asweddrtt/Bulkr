@@ -162,12 +162,16 @@ class _ChallengeLeaderboardSheetState extends State<ChallengeLeaderboardSheet> {
               ],
             ),
           ),
-          GestureDetector(
-            onTap: () => Navigator.of(context).pop(),
-            behavior: HitTestBehavior.opaque,
-            child: Padding(
-              padding: EdgeInsets.all(8.w),
-              child: Icon(Icons.close, color: Colors.white, size: 19.sp),
+          Semantics(
+            button: true,
+            label: 'a11y_close'.tr(),
+            child: GestureDetector(
+              onTap: () => Navigator.of(context).pop(),
+              behavior: HitTestBehavior.opaque,
+              child: Padding(
+                padding: EdgeInsets.all(8.w),
+                child: Icon(Icons.close, color: Colors.white, size: 19.sp),
+              ),
             ),
           ),
         ],

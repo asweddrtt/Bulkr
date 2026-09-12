@@ -1,0 +1,316 @@
+// Sending a push.
+//
+// Invoked by a Supabase Database Webhook on `public.notifications` INSERT. It
+// looks up where that notification should go, sends it through Firebase Cloud
+// Messaging, and deletes any token FCM says is dead.
+//
+// Either route into this is a trigger on that table calling `net.http_post`,
+// which is asynchronous: pg_net puts the request on a queue and a background
+// worker drains it. So the insert never waits on the network, and "somebody
+// liked your post" is recorded whether or not FCM is reachable.
+//
+// Why the app never calls this: it has no business being able to. The only
+// input is a notification id, and `push_payload` is granted to `service_role`
+// alone — an app that could call this could ask what any notification says.
+//
+// Deploy:
+//   supabase functions deploy send-push --no-verify-jwt
+//   supabase secrets set FCM_PROJECT_ID=... FCM_CLIENT_EMAIL=... FCM_PRIVATE_KEY=...
+//   supabase secrets set PUSH_WEBHOOK_SECRET=...
+//
+// `--no-verify-jwt` because the caller is Postgres, not a signed-in user.
+// PUSH_WEBHOOK_SECRET is what replaces that check: the webhook is configured
+// to send it as a header, and a request without it is refused. Without that
+// this endpoint would be "push anything to anyone who can guess a uuid".
+//
+// See README.md for the whole setup.
+
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+interface PushTarget {
+  token: string;
+  platform: string | null;
+  title: string;
+  body: string;
+  /// Only on message pushes: what to open when the notification is tapped.
+  conversation_id?: string;
+}
+
+function json(body: unknown, status: number): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+/// A Google access token for FCM, minted from the service account.
+///
+/// Signed here rather than pulled from a library so this function has one
+/// dependency instead of five. The JWT is a bearer assertion Google exchanges
+/// for an access token; it lives for an hour and is cached for slightly less.
+let cachedToken: { value: string; expiresAt: number } | null = null;
+
+async function accessToken(): Promise<string> {
+  const now = Math.floor(Date.now() / 1000);
+
+  // Ten seconds of margin, so a token cannot expire between this check and the
+  // request that uses it.
+  if (cachedToken && cachedToken.expiresAt > now + 10) return cachedToken.value;
+
+  const clientEmail = Deno.env.get("FCM_CLIENT_EMAIL");
+  const rawKey = Deno.env.get("FCM_PRIVATE_KEY");
+
+  if (!clientEmail || !rawKey) {
+    throw new Error("FCM_CLIENT_EMAIL and FCM_PRIVATE_KEY must be set");
+  }
+
+  // Secrets are set on one line, so the PEM's newlines arrive escaped.
+  const pem = rawKey.replace(/\\n/g, "\n");
+
+  const key = await crypto.subtle.importKey(
+    "pkcs8",
+    pemToArrayBuffer(pem),
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+
+  const header = base64Url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
+  const claim = base64Url(JSON.stringify({
+    iss: clientEmail,
+    scope: "https://www.googleapis.com/auth/firebase.messaging",
+    aud: "https://oauth2.googleapis.com/token",
+    exp: now + 3600,
+    iat: now,
+  }));
+
+  const signature = await crypto.subtle.sign(
+    "RSASSA-PKCS1-v1_5",
+    key,
+    new TextEncoder().encode(`${header}.${claim}`),
+  );
+
+  const assertion = `${header}.${claim}.${base64UrlBytes(new Uint8Array(signature))}`;
+
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      assertion,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`token exchange failed: ${await response.text()}`);
+  }
+
+  const body = await response.json();
+  cachedToken = { value: body.access_token, expiresAt: now + 3500 };
+  return cachedToken.value;
+}
+
+function pemToArrayBuffer(pem: string): ArrayBuffer {
+  const body = pem
+    .replace(/-----BEGIN PRIVATE KEY-----/, "")
+    .replace(/-----END PRIVATE KEY-----/, "")
+    .replace(/\s+/g, "");
+
+  const binary = atob(body);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes.buffer;
+}
+
+function base64Url(text: string): string {
+  return base64UrlBytes(new TextEncoder().encode(text));
+}
+
+function base64UrlBytes(bytes: Uint8Array): string {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+Deno.serve(async (request: Request) => {
+  if (request.method !== "POST") return json({ error: "method_not_allowed" }, 405);
+
+  const expected = Deno.env.get("PUSH_WEBHOOK_SECRET");
+  if (!expected) return json({ error: "not_configured" }, 500);
+
+  if (request.headers.get("x-push-secret") !== expected) {
+    return json({ error: "forbidden" }, 403);
+  }
+
+  const url = Deno.env.get("SUPABASE_URL");
+  const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const projectId = Deno.env.get("FCM_PROJECT_ID");
+
+  if (!url || !serviceRole || !projectId) {
+    return json({ error: "not_configured" }, 500);
+  }
+
+  let rowId: string | undefined;
+  // Two webhooks land here: one on `notifications`, one on `messages`. They
+  // are the same POST with a different `table`, so the table decides which
+  // query knows how to turn the row into something worth waking a phone for.
+  // Anything else is treated as a notification, which is what the original
+  // single-purpose webhook sent before this function had two callers.
+  let kind: "notification" | "message" = "notification";
+  try {
+    const payload = await request.json();
+    // The webhook sends the whole row under `record`.
+    rowId = payload?.record?.id ?? payload?.id;
+    if (payload?.table === "messages") kind = "message";
+  } catch {
+    return json({ error: "bad_request" }, 400);
+  }
+
+  if (!rowId) return json({ error: "bad_request" }, 400);
+
+  const admin = createClient(url, serviceRole);
+
+  const rpc = kind === "message" ? "message_push_payload" : "push_payload";
+  const { data, error } = kind === "message"
+    ? await admin.rpc(rpc, { p_message: rowId })
+    : await admin.rpc(rpc, { p_notification: rowId });
+
+  // Named, and with the code. `PGRST202` is "no such function" — the SQL for
+  // this route was never run — and that is worth reading off a log line rather
+  // than deducing.
+  if (error) {
+    return json({ error: error.message, code: error.code, rpc, kind }, 500);
+  }
+
+  // A query that returned nothing at all is not a query that returned no rows,
+  // and the two must not print the same thing. `data ?? []` collapsed them, so
+  // one 200 {"sent":0} covered both "nobody to wake" and "that call did not do
+  // what I think it did" — which cost a debugging round working out which.
+  if (!Array.isArray(data)) {
+    return json(
+      { error: "unexpected_payload", rpc, kind, got: data === null ? "null" : typeof data },
+      500,
+    );
+  }
+
+  const targets = data as PushTarget[];
+
+  // Nothing to do is a success. A user with no devices registered, or one who
+  // read the notification before this fired, is not a failure — and returning
+  // an error would make the webhook retry something that will never work.
+  if (targets.length === 0) return json({ sent: 0, kind, rpc }, 200);
+
+  const bearer = await accessToken();
+  const endpoint =
+    `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`;
+
+  const dead: string[] = [];
+  // What FCM refused, and why it said so. Without this a rejection is
+  // invisible: `sent` simply fails to increment, and the response is the same
+  // 200 {"sent":0} as having nobody to send to. The two are nothing alike —
+  // the commonest cause of the first is no APNs key uploaded to Firebase, and
+  // FCM says exactly that if anyone reads the reply.
+  const failures: Array<{ status: number; detail: string }> = [];
+  let sent = 0;
+
+  // One request per device. FCM v1 has no batch endpoint any more, and the
+  // count here is the number of devices one person owns.
+  await Promise.all(targets.map(async (target) => {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${bearer}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        message: {
+          token: target.token,
+          notification: { title: target.title, body: target.body },
+          // Read by the app when a notification is tapped. A message carries
+          // the thread rather than a notification id, because there is no
+          // notifications row behind it — direct messages stay out of that
+          // table on purpose, so the inbox does not announce what the thread
+          // badge already has.
+          data: kind === "message"
+            ? { kind, conversation_id: target.conversation_id ?? "" }
+            : { kind, notification_id: rowId },
+          // Sound has to be asked for. FCM v1 does not add one: a message with
+          // a `notification` and nothing else arrives, displays, and makes no
+          // noise — on a phone that is not on silent, with sound permission
+          // granted, which is why it reads as a phone setting rather than as a
+          // missing field. The legacy API had `notification.sound`; v1 moved it
+          // into the per-platform blocks, and there was no `apns` block here at
+          // all.
+          android: {
+            priority: "high",
+            notification: { sound: "default" },
+          },
+          apns: {
+            headers: {
+              // 10 is "deliver immediately". The default of 5 lets iOS hold an
+              // alert back to save power, which for a direct message is the
+              // wrong trade — it is the one notification the user is waiting
+              // on.
+              "apns-priority": "10",
+              // Required by APNs for anything that shows an alert. FCM fills it
+              // in, but only by inferring from the payload, and it is cheaper
+              // to say so than to depend on the inference.
+              "apns-push-type": "alert",
+            },
+            payload: {
+              // The alert itself still comes from `notification` above; this
+              // adds to that rather than replacing it.
+              aps: { sound: "default" },
+            },
+          },
+        },
+      }),
+    });
+
+    if (response.ok) {
+      sent++;
+      return;
+    }
+
+    const detail = await response.text().catch(() => "");
+    // 400 was too short by about thirty characters. FCM nests Apple's own
+    // reason inside its reply — an `ApnsError` with the 403 and a `reason`
+    // like `InvalidProviderToken` — and that nested reason is the only part
+    // that says which of the three credential fields Apple objected to. It
+    // arrived cut off mid-word. These bodies are under a kilobyte; there was
+    // never anything to save by trimming them this hard.
+    failures.push({ status: response.status, detail: detail.slice(0, 1500) });
+
+    // 404 is UNREGISTERED: the app was uninstalled or the token was rotated,
+    // and that row will never deliver again, so it goes.
+    //
+    // 400 used to be treated the same way, which was a mistake worth naming.
+    // FCM returns 400 INVALID_ARGUMENT for a bad *token* and for a bad
+    // *payload*, and a payload this function got wrong would come back 400 for
+    // every device at once — deleting every registration in the table because
+    // of one malformed field. Only the reply distinguishes them, so a 400 now
+    // has to say it is about the token.
+    if (response.status === 404) {
+      dead.push(target.token);
+    } else if (
+      response.status === 400 && /registration token/i.test(detail)
+    ) {
+      dead.push(target.token);
+    }
+  }));
+
+  if (dead.length > 0) {
+    await admin.from("device_tokens").delete().in("token", dead);
+  }
+
+  // Only the first few: this is a log line, and one person's devices number in
+  // the single digits but the same rejection repeats for every one of them.
+  return json({
+    sent,
+    removed: dead.length,
+    kind,
+    ...(failures.length > 0
+      ? { failed: failures.length, failures: failures.slice(0, 3) }
+      : {}),
+  }, 200);
+});

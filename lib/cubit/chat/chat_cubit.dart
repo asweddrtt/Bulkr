@@ -1,8 +1,13 @@
+import 'dart:async';
+
 import 'package:equatable/equatable.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/analytics_events.dart';
+import '../../core/error_text.dart';
+import '../../core/telemetry.dart';
 import '../../data/chat_repository.dart';
 import '../../models/chat_message.dart';
 
@@ -58,7 +63,7 @@ class ChatCubit extends Cubit<ChatState> {
     } catch (error) {
       if (isClosed) return;
 
-      final String detail = _describe(error);
+      final String detail = describeError(error);
       debugPrint('Bulkr: conversation failed to load — $detail');
       emit(state.copyWith(status: ChatStatus.failure, errorMessage: detail));
     }
@@ -87,7 +92,7 @@ class ChatCubit extends Cubit<ChatState> {
       ));
     } catch (error) {
       if (isClosed) return;
-      debugPrint('Bulkr: older messages failed — ${_describe(error)}');
+      debugPrint('Bulkr: older messages failed — ${describeError(error)}');
       emit(state.copyWith(isLoadingOlder: false));
     }
   }
@@ -163,6 +168,10 @@ class ChatCubit extends Cubit<ChatState> {
   /// bubble away again and says so, because the one outcome a chat must never
   /// produce is a message that looks sent and is not.
   Future<void> send(String body) async {
+    // The length, bucketed. Never the message.
+    unawaited(Telemetry.send(
+      AnalyticsEvent.messageSent(bodyLength: body.trim().length),
+    ));
     final String trimmed = body.trim();
     if (trimmed.isEmpty || state.isSending) return;
 
@@ -202,7 +211,7 @@ class ChatCubit extends Cubit<ChatState> {
     } catch (error) {
       if (isClosed) return;
 
-      final String detail = _describe(error);
+      final String detail = describeError(error);
       debugPrint('Bulkr: send failed — $detail');
 
       // The bubble goes. Leaving a failed message looking sent is the one
@@ -232,7 +241,7 @@ class ChatCubit extends Cubit<ChatState> {
       // optimistically and the message is still there.
       emit(before.copyWith(
         actionErrorKey: _unsendFailedKey,
-        actionErrorDetail: _describe(error),
+        actionErrorDetail: describeError(error),
       ));
     }
   }
@@ -257,10 +266,4 @@ class ChatCubit extends Cubit<ChatState> {
     return super.close();
   }
 
-  static String _describe(Object error) {
-    if (error is PostgrestException) {
-      return [error.code, error.message].whereType<String>().join(' · ');
-    }
-    return error.toString();
-  }
 }

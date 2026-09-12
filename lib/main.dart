@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -6,7 +8,9 @@ import 'package:go_router/go_router.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'core/analytics_events.dart';
 import 'core/config/supabase_config.dart';
+import 'core/telemetry.dart';
 import 'cubit/auth/auth_cubit.dart';
 import 'cubit/conversations/conversations_cubit.dart';
 import 'cubit/feed/feed_cubit.dart';
@@ -46,6 +50,10 @@ const Duration _startupBudget = Duration(seconds: 15);
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Started here so the whole of launch is measured, including the parts that
+  // are slow on a cold start and a bad connection.
+  final Stopwatch launch = Stopwatch()..start();
 
   // Painted before anything is awaited, so the app is never white.
   //
@@ -88,9 +96,27 @@ void main() async {
         debugPrint('Bulkr: Firebase unavailable, push is off — $error');
       }
     }
+
+    // After Firebase and inside the same try, but its own failure is not
+    // allowed to stop the app — `start` swallows, and installs Flutter's
+    // global error handlers whether or not Firebase came up. From this line
+    // on, an exception anywhere in the app is reported rather than lost.
+    step = 'starting telemetry';
+    await Telemetry.start();
   } catch (error, stackTrace) {
     debugPrint('Bulkr: startup failed while $step — $error');
     debugPrintStack(stackTrace: stackTrace);
+
+    // Best-effort: if the failure was Firebase itself there is nothing to
+    // report to, and `recordError` returns quietly. When it was anything else
+    // — translations, Supabase — this is the only record that launch died,
+    // because the user sees a screen and closes it.
+    await Telemetry.recordError(error, stackTrace,
+        reason: 'startup failed while $step', fatal: true);
+    await Telemetry.send(AnalyticsEvent.startupFailed(
+      step: step,
+      errorType: error.runtimeType.toString(),
+    ));
 
     // A screen that says what happened, rather than a white one that does not.
     runApp(StartupFailureScreen.app(
@@ -100,6 +126,10 @@ void main() async {
     ));
     return;
   }
+
+  unawaited(Telemetry.send(
+    AnalyticsEvent.startupCompleted(milliseconds: launch.elapsedMilliseconds),
+  ));
 
   runApp(
     EasyLocalization(
@@ -205,8 +235,9 @@ class _BulkrAppState extends State<BulkrApp> {
         // cubit, not by the repository.
         RepositoryProvider.value(value: _chatRepository),
         RepositoryProvider.value(value: _notificationRepository),
-        // Registered here so it is reachable the moment Firebase is wired up —
-        // see supabase/functions/send-push/README.md. Nothing calls it yet.
+        // Registered so a screen can reach it directly. Today only
+        // [PushService] does — see supabase/functions/send-push/README.md for
+        // what is on the other end of it.
         RepositoryProvider.value(value: _pushRepository),
         // The plugin side, for the shell to register a token and sign-out to
         // remove it.

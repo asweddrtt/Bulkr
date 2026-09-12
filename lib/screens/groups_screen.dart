@@ -90,12 +90,16 @@ class _Header extends StatelessWidget {
       child: Row(
         children: [
           PressScale(
-            child: GestureDetector(
-              onTap: () => Navigator.of(context).pop(),
-              behavior: HitTestBehavior.opaque,
-              child: Padding(
-                padding: EdgeInsets.all(8.w),
-                child: Icon(Icons.arrow_back, color: Colors.white, size: 20.sp),
+            child: Semantics(
+              button: true,
+              label: 'a11y_back'.tr(),
+              child: GestureDetector(
+                onTap: () => Navigator.of(context).pop(),
+                behavior: HitTestBehavior.opaque,
+                child: Padding(
+                  padding: EdgeInsets.all(8.w),
+                  child: Icon(Icons.arrow_back, color: Colors.white, size: 20.sp),
+                ),
               ),
             ),
           ),
@@ -251,21 +255,25 @@ class _SearchFieldState extends State<_SearchField> {
               buildWhen: (previous, current) =>
                   previous.hasQuery != current.hasQuery,
               builder: (context, state) => state.hasQuery
-                  ? GestureDetector(
-                      onTap: () {
-                        _controller.clear();
-                        context.read<GroupsCubit>().clearSearch();
-                      },
-                      behavior: HitTestBehavior.opaque,
-                      child: Padding(
-                        padding: EdgeInsets.all(6.w),
-                        child: Icon(
-                          Icons.close,
-                          color: AppColors.textGray,
-                          size: 15.sp,
+                  ? Semantics(
+                    button: true,
+                    label: 'a11y_clear_search'.tr(),
+                    child: GestureDetector(
+                        onTap: () {
+                          _controller.clear();
+                          context.read<GroupsCubit>().clearSearch();
+                        },
+                        behavior: HitTestBehavior.opaque,
+                        child: Padding(
+                          padding: EdgeInsets.all(6.w),
+                          child: Icon(
+                            Icons.close,
+                            color: AppColors.textGray,
+                            size: 15.sp,
+                          ),
                         ),
                       ),
-                    )
+                  )
                   : const SizedBox.shrink(),
             ),
           ],

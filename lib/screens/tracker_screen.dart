@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../core/dispose_after.dart';
 import '../cubit/meals/meals_cubit.dart';
 import '../cubit/profile/profile_cubit.dart';
 import '../cubit/tracker/tracker_cubit.dart';
@@ -392,44 +393,48 @@ class _WeightRow extends StatelessWidget {
     final double current = state.profile?.currentWeightKg ?? 0;
 
     return PressScale(
-      child: GestureDetector(
-        onTap: () => _logWeight(context, current),
-        behavior: HitTestBehavior.opaque,
-        child: Container(
-          decoration: BoxDecoration(
-            color: _cardColor,
-            borderRadius: BorderRadius.circular(10.r),
-            border: Border.all(color: AppColors.darkBorder),
-          ),
-          padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 14.h),
-          child: Row(
-            children: [
-              Icon(Icons.monitor_weight_outlined,
-                  size: 15.sp, color: AppColors.primaryNeon),
-              SizedBox(width: 8.w),
-              Expanded(
-                child: Text(
-                  'tracker_weigh_in'.tr().toUpperCase(),
-                  style: GoogleFonts.anton(
-                    fontSize: 14.sp,
-                    color: Colors.white,
-                    letterSpacing: 1,
+      child: Semantics(
+        button: true,
+        label: 'a11y_log_weight'.tr(),
+        child: GestureDetector(
+          onTap: () => _logWeight(context, current),
+          behavior: HitTestBehavior.opaque,
+          child: Container(
+            decoration: BoxDecoration(
+              color: _cardColor,
+              borderRadius: BorderRadius.circular(10.r),
+              border: Border.all(color: AppColors.darkBorder),
+            ),
+            padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 14.h),
+            child: Row(
+              children: [
+                Icon(Icons.monitor_weight_outlined,
+                    size: 15.sp, color: AppColors.primaryNeon),
+                SizedBox(width: 8.w),
+                Expanded(
+                  child: Text(
+                    'tracker_weigh_in'.tr().toUpperCase(),
+                    style: GoogleFonts.anton(
+                      fontSize: 14.sp,
+                      color: Colors.white,
+                      letterSpacing: 1,
+                    ),
                   ),
                 ),
-              ),
-              Text(
-                current > 0
-                    ? '${current.toStringAsFixed(1)}${'kg_unit'.tr()}'
-                    : 'tracker_weigh_in_none'.tr(),
-                style: GoogleFonts.inter(
-                  fontSize: 12.sp,
-                  fontWeight: FontWeight.w600,
-                  color: current > 0 ? Colors.white : _textMuted,
+                Text(
+                  current > 0
+                      ? '${current.toStringAsFixed(1)}${'kg_unit'.tr()}'
+                      : 'tracker_weigh_in_none'.tr(),
+                  style: GoogleFonts.inter(
+                    fontSize: 12.sp,
+                    fontWeight: FontWeight.w600,
+                    color: current > 0 ? Colors.white : _textMuted,
+                  ),
                 ),
-              ),
-              SizedBox(width: 4.w),
-              Icon(Icons.chevron_right, size: 18.sp, color: _textMuted),
-            ],
+                SizedBox(width: 4.w),
+                Icon(Icons.chevron_right, size: 18.sp, color: _textMuted),
+              ],
+            ),
           ),
         ),
       ),
@@ -727,57 +732,61 @@ class _EntryRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return PressScale(
-      child: GestureDetector(
-        onTap: () => _openEntryActions(context, entry),
-        behavior: HitTestBehavior.opaque,
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(0, 7.h, 8.w, 7.h),
-          child: Row(
-            children: [
-              Icon(
-                entry.isMeal
-                    ? Icons.restaurant_menu_rounded
-                    : Icons.eco_outlined,
-                size: 14.sp,
-                color: _textMuted,
-              ),
-              SizedBox(width: 10.w),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      entry.displayName ?? 'tracker_entry_unnamed'.tr(),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.inter(
-                        fontSize: 12.sp,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
-                    ),
-                    if (entry.hasQuantity) ...[
-                      SizedBox(height: 2.h),
+      child: Semantics(
+        button: true,
+        label: 'a11y_entry_options'.tr(),
+        child: GestureDetector(
+          onTap: () => _openEntryActions(context, entry),
+          behavior: HitTestBehavior.opaque,
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(0, 7.h, 8.w, 7.h),
+            child: Row(
+              children: [
+                Icon(
+                  entry.isMeal
+                      ? Icons.restaurant_menu_rounded
+                      : Icons.eco_outlined,
+                  size: 14.sp,
+                  color: _textMuted,
+                ),
+                SizedBox(width: 10.w),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
-                        '${entry.quantityG.round()}${'gram_short'.tr()}',
+                        entry.displayName ?? 'tracker_entry_unnamed'.tr(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.inter(
-                          fontSize: 10.sp,
-                          color: _textMuted,
+                          fontSize: 12.sp,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
                         ),
                       ),
+                      if (entry.hasQuantity) ...[
+                        SizedBox(height: 2.h),
+                        Text(
+                          '${entry.quantityG.round()}${'gram_short'.tr()}',
+                          style: GoogleFonts.inter(
+                            fontSize: 10.sp,
+                            color: _textMuted,
+                          ),
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
-              ),
-              SizedBox(width: 8.w),
-              Text(
-                NumberFormat('#,###').format(entry.macros.calories.round()),
-                style: GoogleFonts.anton(
-                  fontSize: 15.sp,
-                  color: Colors.white,
+                SizedBox(width: 8.w),
+                Text(
+                  NumberFormat('#,###').format(entry.macros.calories.round()),
+                  style: GoogleFonts.anton(
+                    fontSize: 15.sp,
+                    color: Colors.white,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -1097,6 +1106,10 @@ Future<double?> _askWeight(BuildContext context, double current) {
     text: current > 0 ? current.toStringAsFixed(1) : '',
   );
 
+  // Disposed when the dialog closes, however it closes — saved, cancelled, or
+  // dismissed by tapping outside. A controller is a ChangeNotifier, so one
+  // left behind holds its listeners alive for the life of the process, and
+  // this dialog is opened again every time somebody weighs in.
   return showDialog<double>(
     context: context,
     builder: (dialogContext) => AlertDialog(
@@ -1156,7 +1169,7 @@ Future<double?> _askWeight(BuildContext context, double current) {
         ),
       ],
     ),
-  );
+  ).disposing(controller);
 }
 
 /// A number field for a new amount.
@@ -1226,5 +1239,5 @@ Future<double?> _askGrams(BuildContext context, DailyLogEntry entry) {
         ),
       ],
     ),
-  );
+  ).disposing(controller);
 }

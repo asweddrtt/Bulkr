@@ -1,13 +1,16 @@
+import 'dart:async';
+
 import 'package:equatable/equatable.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/analytics_events.dart';
+import '../../core/error_text.dart';
+import '../../core/telemetry.dart';
 import '../../data/post_repository.dart';
 import '../../models/post.dart';
 import '../../models/post_comment.dart';
 
-import '../../core/moderation_error.dart';
 
 part 'comments_state.dart';
 
@@ -48,7 +51,7 @@ class CommentsCubit extends Cubit<CommentsState> {
     } catch (error) {
       if (isClosed) return;
 
-      final String detail = _describe(error);
+      final String detail = describeError(error);
       debugPrint('Bulkr: comments failed to load — $detail');
 
       // A silent refresh that fails leaves the thread alone. The user asked for
@@ -116,6 +119,9 @@ class CommentsCubit extends Cubit<CommentsState> {
   /// What it will not do is lose the text. A failed post puts it back in the
   /// field, along with whatever thread it was aimed at.
   Future<void> submit() async {
+    unawaited(Telemetry.send(
+      AnalyticsEvent.commentAdded(bodyLength: state.draft.trim().length),
+    ));
     final String content = state.draft.trim();
     if (content.isEmpty || state.isSubmitting) return;
     if (content.length > CommentsState.maxLength) return;
@@ -149,7 +155,7 @@ class CommentsCubit extends Cubit<CommentsState> {
     } catch (error) {
       if (isClosed) return;
 
-      final String detail = _describe(error);
+      final String detail = describeError(error);
       debugPrint('Bulkr: comment failed to post — $detail');
 
       // The text goes back in the field. Losing what someone wrote because a
@@ -187,7 +193,7 @@ class CommentsCubit extends Cubit<CommentsState> {
     } catch (error) {
       if (isClosed) return;
 
-      final String detail = _describe(error);
+      final String detail = describeError(error);
       debugPrint('Bulkr: comment delete failed — $detail');
 
       emit(
@@ -245,22 +251,4 @@ class CommentsCubit extends Cubit<CommentsState> {
         .toList(growable: false);
   }
 
-  static String _describe(Object error) {
-    // Before the generic Postgres formatting: a blocked term is not a fault
-    // to report, it is an answer to give, and "(BLKR1)" appended to it is not
-    // an improvement.
-    final String? refused = blockedTermRefusal(error);
-    if (refused != null) return refused;
-
-    final String? explicit = explicitImageRefusal(error);
-    if (explicit != null) return explicit;
-
-    if (error is PostgrestException) {
-      return [
-        error.message,
-        if (error.code != null) '(${error.code})',
-      ].join(' ');
-    }
-    return '$error';
-  }
 }

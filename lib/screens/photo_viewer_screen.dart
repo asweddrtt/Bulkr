@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
@@ -86,15 +87,19 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
                 padding: EdgeInsets.all(8.w),
                 child: Row(
                   children: [
-                    GestureDetector(
-                      onTap: () => Navigator.of(context).pop(),
-                      behavior: HitTestBehavior.opaque,
-                      child: Padding(
-                        padding: EdgeInsets.all(8.w),
-                        child: Icon(
-                          Icons.close,
-                          color: Colors.white,
-                          size: 22.sp,
+                    Semantics(
+                      button: true,
+                      label: 'a11y_close'.tr(),
+                      child: GestureDetector(
+                        onTap: () => Navigator.of(context).pop(),
+                        behavior: HitTestBehavior.opaque,
+                        child: Padding(
+                          padding: EdgeInsets.all(8.w),
+                          child: Icon(
+                            Icons.close,
+                            color: Colors.white,
+                            size: 22.sp,
+                          ),
                         ),
                       ),
                     ),

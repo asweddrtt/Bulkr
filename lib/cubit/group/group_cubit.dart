@@ -1,8 +1,8 @@
 import 'package:equatable/equatable.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/error_text.dart';
 import '../../data/feed_cursor.dart';
 import '../../data/group_repository.dart';
 import '../../data/post_repository.dart';
@@ -65,7 +65,7 @@ class GroupCubit extends Cubit<GroupState> {
     } catch (error) {
       if (isClosed) return;
 
-      final String detail = _describe(error);
+      final String detail = describeError(error);
       debugPrint('Bulkr: group failed to load — $detail');
 
       if (silent && state.status == GroupStatus.ready) {
@@ -104,7 +104,7 @@ class GroupCubit extends Cubit<GroupState> {
     } catch (error) {
       if (isClosed) return;
 
-      final String detail = _describe(error);
+      final String detail = describeError(error);
       debugPrint('Bulkr: group page failed to load — $detail');
 
       emit(state.copyWith(
@@ -149,7 +149,7 @@ class GroupCubit extends Cubit<GroupState> {
     } catch (error) {
       if (isClosed) return;
 
-      final String detail = _describe(error);
+      final String detail = describeError(error);
       debugPrint('Bulkr: group membership failed — $detail');
 
       emit(state.copyWith(
@@ -242,7 +242,7 @@ class GroupCubit extends Cubit<GroupState> {
     } catch (error) {
       if (isClosed) return;
 
-      final String detail = _describe(error);
+      final String detail = describeError(error);
       debugPrint('Bulkr: post delete failed — $detail');
 
       emit(before.copyWith(
@@ -271,7 +271,7 @@ class GroupCubit extends Cubit<GroupState> {
   }
 
   void _revert(Post post, Object error) {
-    final String detail = _describe(error);
+    final String detail = describeError(error);
     debugPrint('Bulkr: group post write failed — $detail');
 
     _replacePost(post);
@@ -299,11 +299,4 @@ class GroupCubit extends Cubit<GroupState> {
     ];
   }
 
-  static String _describe(Object error) {
-    if (error is PostgrestException) {
-      return [error.message, if (error.code != null) '(${error.code})']
-          .join(' ');
-    }
-    return '$error';
-  }
 }

@@ -3,8 +3,8 @@ import 'dart:async';
 import 'package:equatable/equatable.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/error_text.dart';
 import '../../data/group_repository.dart';
 import '../../models/group.dart';
 
@@ -60,7 +60,7 @@ class GroupsCubit extends Cubit<GroupsState> {
     } catch (error) {
       if (isClosed) return;
 
-      final String detail = _describe(error);
+      final String detail = describeError(error);
       debugPrint('Bulkr: groups failed to load — $detail');
 
       if (silent && state.status == GroupsStatus.ready) {
@@ -119,7 +119,7 @@ class GroupsCubit extends Cubit<GroupsState> {
       if (isClosed) return;
       if (state.query.trim() != term) return;
 
-      final String detail = _describe(error);
+      final String detail = describeError(error);
       debugPrint('Bulkr: group search failed — $detail');
 
       emit(state.copyWith(
@@ -151,7 +151,7 @@ class GroupsCubit extends Cubit<GroupsState> {
     } catch (error) {
       if (isClosed) return;
 
-      final String detail = _describe(error);
+      final String detail = describeError(error);
       debugPrint('Bulkr: group membership failed — $detail');
 
       _replace(group);
@@ -193,7 +193,7 @@ class GroupsCubit extends Cubit<GroupsState> {
     } catch (error) {
       if (isClosed) return;
 
-      final String detail = _describe(error);
+      final String detail = describeError(error);
       debugPrint('Bulkr: group delete failed — $detail');
 
       emit(before.copyWith(
@@ -229,12 +229,4 @@ class GroupsCubit extends Cubit<GroupsState> {
         .toList(growable: false);
   }
 
-  static String _describe(Object error) {
-    if (error is PostgrestException) {
-      return [error.message, if (error.code != null) '(${error.code})']
-          .join(' ');
-    }
-    if (error is StorageException) return error.message;
-    return '$error';
-  }
 }

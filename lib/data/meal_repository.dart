@@ -22,7 +22,14 @@ import 'food_repository.dart';
 class MealRepository {
   MealRepository({SupabaseClient? client, FoodRepository? foodRepository})
       : _client = client ?? Supabase.instance.client,
-        _foods = foodRepository ?? FoodRepository();
+        // `client` passed through rather than dropped, the same way
+        // `PostRepository` hands its own client to the repositories it builds.
+        // Without it, constructing a `MealRepository` against an injected
+        // client still reached for `Supabase.instance` to build the default
+        // food repository — which throws when the singleton was never
+        // initialised, so the injection seam worked for everything except the
+        // tests it exists for.
+        _foods = foodRepository ?? FoodRepository(client: client);
 
   final SupabaseClient _client;
   final FoodRepository _foods;

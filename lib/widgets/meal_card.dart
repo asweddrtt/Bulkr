@@ -167,18 +167,23 @@ class MealCard extends StatelessWidget {
     if (onToggleFavorite == null) return const SizedBox.shrink();
 
     return PressScale(
-      child: GestureDetector(
-        onTap: onToggleFavorite,
-        behavior: HitTestBehavior.opaque,
-        child: Padding(
-          // Padding rather than a bigger box: keeps the 44pt touch target
-          // without a visible slab sitting over the photo.
-          padding: EdgeInsets.all(8.w),
-          child: Icon(
-            meal.isFavorite ? Icons.star_rounded : Icons.star_border_rounded,
-            size: 24.sp,
-            color: meal.isFavorite ? AppColors.primaryNeon : Colors.white,
-            shadows: const [Shadow(color: Colors.black54, blurRadius: 6)],
+      child: Semantics(
+        button: true,
+        label: (meal.isFavorite ? 'a11y_favorite_remove' : 'a11y_favorite_add').tr(),
+        selected: meal.isFavorite,
+        child: GestureDetector(
+          onTap: onToggleFavorite,
+          behavior: HitTestBehavior.opaque,
+          child: Padding(
+            // Padding rather than a bigger box: keeps the 44pt touch target
+            // without a visible slab sitting over the photo.
+            padding: EdgeInsets.all(8.w),
+            child: Icon(
+              meal.isFavorite ? Icons.star_rounded : Icons.star_border_rounded,
+              size: 24.sp,
+              color: meal.isFavorite ? AppColors.primaryNeon : Colors.white,
+              shadows: const [Shadow(color: Colors.black54, blurRadius: 6)],
+            ),
           ),
         ),
       ),
@@ -189,16 +194,20 @@ class MealCard extends StatelessWidget {
     if (onShowActions == null) return const SizedBox.shrink();
 
     return PressScale(
-      child: GestureDetector(
-        onTap: onShowActions,
-        behavior: HitTestBehavior.opaque,
-        child: Padding(
-          padding: EdgeInsets.all(8.w),
-          child: Icon(
-            Icons.more_vert_rounded,
-            size: 22.sp,
-            color: Colors.white,
-            shadows: const [Shadow(color: Colors.black54, blurRadius: 6)],
+      child: Semantics(
+        button: true,
+        label: 'a11y_meal_options'.tr(),
+        child: GestureDetector(
+          onTap: onShowActions,
+          behavior: HitTestBehavior.opaque,
+          child: Padding(
+            padding: EdgeInsets.all(8.w),
+            child: Icon(
+              Icons.more_vert_rounded,
+              size: 22.sp,
+              color: Colors.white,
+              shadows: const [Shadow(color: Colors.black54, blurRadius: 6)],
+            ),
           ),
         ),
       ),

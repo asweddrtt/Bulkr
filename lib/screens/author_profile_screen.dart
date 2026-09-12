@@ -469,12 +469,16 @@ class _BackBar extends StatelessWidget {
       child: Row(
         children: [
           PressScale(
-            child: GestureDetector(
-              onTap: () => Navigator.of(context).pop(),
-              behavior: HitTestBehavior.opaque,
-              child: Padding(
-                padding: EdgeInsets.all(8.w),
-                child: Icon(Icons.arrow_back, color: Colors.white, size: 20.sp),
+            child: Semantics(
+              button: true,
+              label: 'a11y_back'.tr(),
+              child: GestureDetector(
+                onTap: () => Navigator.of(context).pop(),
+                behavior: HitTestBehavior.opaque,
+                child: Padding(
+                  padding: EdgeInsets.all(8.w),
+                  child: Icon(Icons.arrow_back, color: Colors.white, size: 20.sp),
+                ),
               ),
             ),
           ),
@@ -497,15 +501,19 @@ class _BackBar extends StatelessWidget {
 
               return PressScale(
                 enabled: !state.isBlockWriting,
-                child: GestureDetector(
-                  onTap: () => _openProfileActions(context, state),
-                  behavior: HitTestBehavior.opaque,
-                  child: Padding(
-                    padding: EdgeInsets.all(8.w),
-                    child: Icon(
-                      Icons.more_horiz,
-                      color: Colors.white,
-                      size: 20.sp,
+                child: Semantics(
+                  button: true,
+                  label: 'a11y_profile_options'.tr(),
+                  child: GestureDetector(
+                    onTap: () => _openProfileActions(context, state),
+                    behavior: HitTestBehavior.opaque,
+                    child: Padding(
+                      padding: EdgeInsets.all(8.w),
+                      child: Icon(
+                        Icons.more_horiz,
+                        color: Colors.white,
+                        size: 20.sp,
+                      ),
                     ),
                   ),
                 ),

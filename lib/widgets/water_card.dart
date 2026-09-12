@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../core/dispose_after.dart';
 import '../core/hydration.dart';
 import '../cubit/tracker/tracker_cubit.dart';
 import '../styles/app_color.dart';
@@ -209,7 +210,9 @@ class WaterCard extends StatelessWidget {
           ),
         ],
       ),
-    );
+      // The controller has no `dispose` to live in — this is a function, not a
+      // State — so its lifetime is tied to the dialog's future instead.
+    ).disposing(controller);
 
     if (choice == null) return;
     await cubit.setWaterTarget(choice.millilitres);
@@ -356,21 +359,26 @@ class _UndoButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return PressScale(
       enabled: enabled,
-      child: GestureDetector(
-        onTap: enabled ? onTap : null,
-        behavior: HitTestBehavior.opaque,
-        child: Container(
-          width: 40.w,
-          padding: EdgeInsets.symmetric(vertical: 10.h),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(5.r),
-            border: Border.all(color: AppColors.darkBorder),
-          ),
-          child: Icon(
-            Icons.undo,
-            size: 16.sp,
-            color: enabled ? Colors.white : AppColors.darkBorder,
+      child: Semantics(
+        button: true,
+        label: 'a11y_undo_water'.tr(),
+        enabled: enabled,
+        child: GestureDetector(
+          onTap: enabled ? onTap : null,
+          behavior: HitTestBehavior.opaque,
+          child: Container(
+            width: 40.w,
+            padding: EdgeInsets.symmetric(vertical: 10.h),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(5.r),
+              border: Border.all(color: AppColors.darkBorder),
+            ),
+            child: Icon(
+              Icons.undo,
+              size: 16.sp,
+              color: enabled ? Colors.white : AppColors.darkBorder,
+            ),
           ),
         ),
       ),

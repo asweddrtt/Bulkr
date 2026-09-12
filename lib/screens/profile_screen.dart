@@ -300,15 +300,19 @@ class _Header extends StatelessWidget {
               // you do occasionally and go looking for, not things worth a
               // permanent target beside your name.
               PressScale(
-                child: GestureDetector(
-                  onTap: () => _createGroup(context),
-                  behavior: HitTestBehavior.opaque,
-                  child: Padding(
-                    padding: EdgeInsets.all(6.w),
-                    child: Icon(
-                      Icons.group_add_outlined,
-                      color: AppColors.textGray,
-                      size: 20.sp,
+                child: Semantics(
+                  button: true,
+                  label: 'a11y_create_group'.tr(),
+                  child: GestureDetector(
+                    onTap: () => _createGroup(context),
+                    behavior: HitTestBehavior.opaque,
+                    child: Padding(
+                      padding: EdgeInsets.all(6.w),
+                      child: Icon(
+                        Icons.group_add_outlined,
+                        color: AppColors.textGray,
+                        size: 20.sp,
+                      ),
                     ),
                   ),
                 ),
@@ -318,15 +322,19 @@ class _Header extends StatelessWidget {
               // questions about the person — and this is the screen about the
               // person. The dashboard is about the numbers.
               PressScale(
-                child: GestureDetector(
-                  onTap: () => _openAccount(context),
-                  behavior: HitTestBehavior.opaque,
-                  child: Padding(
-                    padding: EdgeInsets.all(6.w),
-                    child: Icon(
-                      Icons.settings_outlined,
-                      color: AppColors.textGray,
-                      size: 20.sp,
+                child: Semantics(
+                  button: true,
+                  label: 'a11y_account'.tr(),
+                  child: GestureDetector(
+                    onTap: () => _openAccount(context),
+                    behavior: HitTestBehavior.opaque,
+                    child: Padding(
+                      padding: EdgeInsets.all(6.w),
+                      child: Icon(
+                        Icons.settings_outlined,
+                        color: AppColors.textGray,
+                        size: 20.sp,
+                      ),
                     ),
                   ),
                 ),
@@ -544,54 +552,58 @@ class _EditableAvatarState extends State<_EditableAvatar> {
   @override
   Widget build(BuildContext context) {
     return PressScale(
-      child: GestureDetector(
-        onTap: _isSaving ? null : _change,
-        behavior: HitTestBehavior.opaque,
-        child: Stack(
-          children: [
-            PersonAvatar(
-              url: widget.person.avatarUrl,
-              name: widget.person.name,
-              size: 64.w,
-            ),
-            if (_isSaving)
-              Positioned.fill(
-                child: DecoratedBox(
-                  decoration: const BoxDecoration(
-                    color: Colors.black54,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Center(
-                    child: SizedBox(
-                      width: 18.w,
-                      height: 18.w,
-                      child: const CircularProgressIndicator(
-                        color: AppColors.primaryNeon,
-                        strokeWidth: 2,
+      child: Semantics(
+        button: true,
+        label: 'a11y_change_photo'.tr(),
+        child: GestureDetector(
+          onTap: _isSaving ? null : _change,
+          behavior: HitTestBehavior.opaque,
+          child: Stack(
+            children: [
+              PersonAvatar(
+                url: widget.person.avatarUrl,
+                name: widget.person.name,
+                size: 64.w,
+              ),
+              if (_isSaving)
+                Positioned.fill(
+                  child: DecoratedBox(
+                    decoration: const BoxDecoration(
+                      color: Colors.black54,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Center(
+                      child: SizedBox(
+                        width: 18.w,
+                        height: 18.w,
+                        child: const CircularProgressIndicator(
+                          color: AppColors.primaryNeon,
+                          strokeWidth: 2,
+                        ),
                       ),
                     ),
                   ),
-                ),
-              )
-            else
-              Positioned(
-                right: 0,
-                bottom: 0,
-                child: Container(
-                  padding: EdgeInsets.all(4.w),
-                  decoration: BoxDecoration(
-                    color: AppColors.buttonNeon,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: const Color(0xFF121212), width: 2.w),
+                )
+              else
+                Positioned(
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    padding: EdgeInsets.all(4.w),
+                    decoration: BoxDecoration(
+                      color: AppColors.buttonNeon,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: const Color(0xFF121212), width: 2.w),
+                    ),
+                    child: Icon(
+                      Icons.photo_camera,
+                      color: Colors.black,
+                      size: 10.sp,
+                    ),
                   ),
-                  child: Icon(
-                    Icons.photo_camera,
-                    color: Colors.black,
-                    size: 10.sp,
-                  ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );

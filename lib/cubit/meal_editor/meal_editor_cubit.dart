@@ -3,8 +3,8 @@ import 'dart:async';
 import 'package:equatable/equatable.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/error_text.dart';
 import '../../data/food_repository.dart';
 import '../../data/meal_repository.dart';
 import '../../models/visibility.dart';
@@ -247,7 +247,7 @@ class MealEditorCubit extends Cubit<MealEditorState> {
     } catch (error) {
       if (isClosed) return;
 
-      final String detail = _describe(error);
+      final String detail = describeError(error);
       debugPrint('Bulkr: meal save failed — $detail');
 
       emit(state.copyWith(
@@ -265,13 +265,4 @@ class MealEditorCubit extends Cubit<MealEditorState> {
     emit(state.copyWith(status: MealEditorStatus.editing, clearError: true));
   }
 
-  static String _describe(Object error) {
-    if (error is PostgrestException) {
-      return [error.code, error.message].whereType<String>().join(' · ');
-    }
-    if (error is StorageException) {
-      return [error.statusCode, error.message].whereType<String>().join(' · ');
-    }
-    return error.toString();
-  }
 }

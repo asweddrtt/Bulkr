@@ -176,15 +176,19 @@ class PostCard extends StatelessWidget {
           SizedBox(width: 8.w),
           PostLabelChip(label: post.label, onTap: onLabelTap),
           PressScale(
-            child: GestureDetector(
-              onTap: onShowActions,
-              behavior: HitTestBehavior.opaque,
-              child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 6.h),
-                child: Icon(
-                  Icons.more_horiz,
-                  color: AppColors.textGray,
-                  size: 18.sp,
+            child: Semantics(
+              button: true,
+              label: 'a11y_post_options'.tr(),
+              child: GestureDetector(
+                onTap: onShowActions,
+                behavior: HitTestBehavior.opaque,
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 6.h),
+                  child: Icon(
+                    Icons.more_horiz,
+                    color: AppColors.textGray,
+                    size: 18.sp,
+                  ),
                 ),
               ),
             ),
@@ -560,22 +564,26 @@ class _Photo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: ColoredBox(
-        color: const Color(0xFF232323),
-        // No decode width: this one is as wide as the screen, so there is
-        // nothing to shrink it to. The grey block while it loads is the same
-        // one behind it — a feed of spinners flickers, a feed of blocks fills
-        // in.
-        child: BulkrImage(
-          url: url,
-          placeholderColor: const Color(0xFF232323),
-          fallback: Center(
-            child: Icon(
-              Icons.image_not_supported_outlined,
-              color: AppColors.textGray,
-              size: 22.sp,
+    return Semantics(
+      button: true,
+      label: 'a11y_open_photo'.tr(),
+      child: GestureDetector(
+        onTap: onTap,
+        child: ColoredBox(
+          color: const Color(0xFF232323),
+          // No decode width: this one is as wide as the screen, so there is
+          // nothing to shrink it to. The grey block while it loads is the same
+          // one behind it — a feed of spinners flickers, a feed of blocks fills
+          // in.
+          child: BulkrImage(
+            url: url,
+            placeholderColor: const Color(0xFF232323),
+            fallback: Center(
+              child: Icon(
+                Icons.image_not_supported_outlined,
+                color: AppColors.textGray,
+                size: 22.sp,
+              ),
             ),
           ),
         ),

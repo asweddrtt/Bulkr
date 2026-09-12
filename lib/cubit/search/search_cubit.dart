@@ -3,8 +3,8 @@ import 'dart:async';
 import 'package:equatable/equatable.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/error_text.dart';
 import '../../data/app_preferences.dart';
 import '../../data/follow_repository.dart';
 import '../../data/group_repository.dart';
@@ -80,7 +80,7 @@ class SearchCubit extends Cubit<SearchState> {
     } catch (error) {
       if (isClosed) return;
 
-      final String detail = _describe(error);
+      final String detail = describeError(error);
       debugPrint('Bulkr: search suggestions failed — $detail');
 
       if (silent && state.status == SearchStatus.ready) {
@@ -193,7 +193,7 @@ class SearchCubit extends Cubit<SearchState> {
       if (isClosed) return;
       if (state.query.trim() != term) return;
 
-      final String detail = _describe(error);
+      final String detail = describeError(error);
       debugPrint('Bulkr: search failed — $detail');
 
       emit(state.copyWith(
@@ -225,7 +225,7 @@ class SearchCubit extends Cubit<SearchState> {
     } catch (error) {
       if (isClosed) return;
 
-      final String detail = _describe(error);
+      final String detail = describeError(error);
       debugPrint('Bulkr: follow failed — $detail');
 
       _replacePerson(person);
@@ -252,7 +252,7 @@ class SearchCubit extends Cubit<SearchState> {
     } catch (error) {
       if (isClosed) return;
 
-      final String detail = _describe(error);
+      final String detail = describeError(error);
       debugPrint('Bulkr: group membership failed — $detail');
 
       _replaceGroup(group);
@@ -300,11 +300,4 @@ class SearchCubit extends Cubit<SearchState> {
         .toList(growable: false);
   }
 
-  static String _describe(Object error) {
-    if (error is PostgrestException) {
-      return [error.message, if (error.code != null) '(${error.code})']
-          .join(' ');
-    }
-    return '$error';
-  }
 }

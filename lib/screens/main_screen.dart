@@ -5,9 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../core/analytics_events.dart';
+import '../core/deep_link.dart';
+import '../core/telemetry.dart';
 import '../cubit/conversations/conversations_cubit.dart';
 import '../cubit/feed/feed_cubit.dart';
 import '../cubit/notifications/notifications_cubit.dart';
+import '../data/deep_link_listener.dart';
 import '../data/chat_repository.dart';
 import '../data/push_service.dart';
 import '../models/conversation.dart';
@@ -22,6 +26,7 @@ import 'tracker_screen.dart';
 import 'dashboard_screen.dart';
 import 'chat_screen.dart';
 import 'conversations_screen.dart';
+import 'post_screen.dart';
 import 'notifications_screen.dart';
 
 /// Post-onboarding shell: bottom navigation over the main sections.
@@ -52,6 +57,16 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 
   StreamSubscription<PushTap>? _taps;
 
+  /// Links from outside the app — a shared post, tapped in a message.
+  ///
+  /// Owned by the shell for the same reason `_taps` is: both need a navigator,
+  /// and this is the first widget in the tree that has one and outlives every
+  /// tab.
+  final DeepLinkListener _deepLinks = DeepLinkListener();
+
+  /// False until the shell has drawn once. See [_openFromPush].
+  bool _shellIsWarm = false;
+
   /// Whether the nav bar is drawn small.
   ///
   /// Driven by scroll direction rather than position: what matters is that the
@@ -79,6 +94,19 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       if (tap != null) _openFromPush(tap);
     });
 
+    // Anything arriving after this first frame reached an app that was
+    // already open. Set in a post-frame callback rather than at the end of
+    // `initState`, because the cold-start tap resolves asynchronously and
+    // would otherwise race this flag.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _shellIsWarm = true);
+
+    // The same two cases as the notification above: one for a link tapped
+    // while the app is running, one for the link that launched it.
+    _deepLinks.start(_openFromLink);
+    _deepLinks.takeInitialLink().then((DeepLink? link) {
+      if (link != null) _openFromLink(link);
+    });
+
     // Fetched once when the shell mounts rather than on each tab switch, so
     // moving between tabs doesn't re-hit the network.
     context.read<ProfileCubit>().load();
@@ -89,9 +117,30 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    unawaited(_deepLinks.dispose());
     _taps?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  /// Where a shared link lands.
+  ///
+  /// Never throws, for the same reason [_openFromPush] does not: this runs on
+  /// a stream nobody awaits and on a future nobody catches, so an exception
+  /// here would be an unhandled one on the launch path.
+  Future<void> _openFromLink(DeepLink link) async {
+    if (!mounted) return;
+
+    try {
+      switch (link) {
+        case PostDeepLink(:final String postId):
+          await PostScreen.open(context, postId, source: 'deep_link');
+      }
+    } catch (error, stackTrace) {
+      debugPrint('Bulkr: could not open a link — $error');
+      unawaited(Telemetry.recordError(error, stackTrace,
+          reason: 'opening a deep link'));
+    }
   }
 
   /// Where a tapped notification lands.
@@ -101,6 +150,14 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   /// path, which is the worst place in the app to have one.
   Future<void> _openFromPush(PushTap tap) async {
     if (!mounted) return;
+
+    unawaited(Telemetry.send(AnalyticsEvent.pushOpened(
+      kind: tap.kind,
+      // A tap that arrived through `takeInitialTap` launched the app; one off
+      // the stream reached an app that was already running. The two say
+      // different things about whether notifications are bringing people back.
+      fromCold: !_shellIsWarm,
+    )));
 
     try {
       if (!tap.isMessage) {

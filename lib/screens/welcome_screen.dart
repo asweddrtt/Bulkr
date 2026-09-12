@@ -4,14 +4,16 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../core/config/legal_config.dart';
+import '../core/telemetry.dart';
 import '../cubit/auth/auth_cubit.dart';
 import '../cubit/onboarding/onboarding_cubit.dart';
 import '../cubit/profile/profile_cubit.dart';
 import '../go_router/app_routes.dart';
 import '../styles/app_color.dart';
 import '../widgets/animations/entrance.dart';
-import '../widgets/outlined_button.dart';
 import '../widgets/welcome_button.dart';
 
 /// Step 1 — identity.
@@ -134,13 +136,6 @@ class WelcomeScreen extends StatelessWidget {
                               state.pendingProvider == AuthProviderKind.google,
                           onPressed: busy ? null : cubit.signInWithGoogle,
                         ),
-                        SizedBox(height: 16.h),
-                        SecondaryOutlinedButton(
-                          label: 'other_options'.tr(),
-                          onPressed: busy
-                              ? null
-                              : () => _showOtherOptions(context),
-                        ),
                       ],
                     );
                   },
@@ -148,30 +143,7 @@ class WelcomeScreen extends StatelessWidget {
                 SizedBox(height: 40.h),
 
                 // --- 3. FOOTER ---
-                RichText(
-                  textAlign: TextAlign.center,
-                  text: TextSpan(
-                    children: [
-                      TextSpan(
-                        text: 'agree_prefix'.tr(),
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 11.sp,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.offWhiteMuted,
-                        ),
-                      ),
-                      TextSpan(
-                        text: 'policy'.tr(),
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 11.sp,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.offWhiteMuted,
-                          decoration: TextDecoration.underline,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                const _AgreementFooter(),
               ],
                 step: const Duration(milliseconds: 70),
               ),
@@ -182,24 +154,103 @@ class WelcomeScreen extends StatelessWidget {
     );
   }
 
-  /// Placeholder for additional providers. Surfacing a message beats a button
-  /// that silently does nothing when tapped.
-  void _showOtherOptions(BuildContext context) {
-    ScaffoldMessenger.of(context)
+  /// Cancellation is a translated key; anything from Supabase is passed
+  /// through as-is so real failures stay diagnosable.
+  String _friendlyError(String message) =>
+      message == 'auth_error_cancelled' ? 'auth_error_cancelled'.tr() : message;
+}
+
+/// "By continuing you agree to the Policy" — and the Policy opens.
+///
+/// This used to be a `RichText` whose second span was underlined and carried
+/// no recogniser, so it looked like a link and was not one. Worse than a
+/// missing link: it asked for agreement to a document nobody could read.
+///
+/// Now it is a link when there is something to link to, and plain text when
+/// there is not — see [LegalConfig] for why that is the honest default and
+/// what has to be set before release.
+class _AgreementFooter extends StatelessWidget {
+  const _AgreementFooter();
+
+  @override
+  Widget build(BuildContext context) {
+    final TextStyle base = GoogleFonts.jetBrainsMono(
+      fontSize: 11.sp,
+      fontWeight: FontWeight.bold,
+      color: AppColors.offWhiteMuted,
+    );
+
+    if (!LegalConfig.hasPrivacyPolicy) {
+      // No underline and no recogniser: the sentence still sets expectations,
+      // without the styling that promises a tap will do something.
+      return Text(
+        '${'agree_prefix'.tr()}${'policy'.tr()}',
+        textAlign: TextAlign.center,
+        style: base,
+      );
+    }
+
+    return Semantics(
+      link: true,
+      label: 'policy'.tr(),
+      child: GestureDetector(
+        onTap: () => _open(context),
+        // The text is 11sp and the word is short, so the row it sits in is the
+        // tap target rather than the glyphs themselves — a link nobody can hit
+        // is the same as no link.
+        behavior: HitTestBehavior.opaque,
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: 6.h),
+          child: RichText(
+            textAlign: TextAlign.center,
+            text: TextSpan(
+              children: [
+                TextSpan(text: 'agree_prefix'.tr(), style: base),
+                TextSpan(
+                  text: 'policy'.tr(),
+                  style: base.copyWith(
+                    color: Colors.white,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _open(BuildContext context) async {
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    final Uri url = Uri.parse(LegalConfig.privacyPolicyUrl);
+
+    // `externalApplication` rather than an in-app web view: a privacy policy
+    // is a document somebody may want to keep, search or send to themselves,
+    // and the browser does all three.
+    bool opened = false;
+    try {
+      opened = await launchUrl(url, mode: LaunchMode.externalApplication);
+    } catch (error, stackTrace) {
+      await Telemetry.recordError(error, stackTrace,
+          reason: 'opening the privacy policy');
+    }
+
+    if (opened) return;
+
+    // A device with no browser is close to impossible, but silently doing
+    // nothing is the failure this whole widget exists to remove — so if it
+    // cannot be opened, say so rather than repeat the original bug.
+    messenger
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
           backgroundColor: const Color(0xFF2A2A2A),
           content: Text(
-            'other_options_coming_soon'.tr(),
+            'policy_unavailable'.tr(),
             style: GoogleFonts.inter(color: Colors.white, fontSize: 13.sp),
           ),
         ),
       );
   }
-
-  /// Cancellation is a translated key; anything from Supabase is passed
-  /// through as-is so real failures stay diagnosable.
-  String _friendlyError(String message) =>
-      message == 'auth_error_cancelled' ? 'auth_error_cancelled'.tr() : message;
 }
