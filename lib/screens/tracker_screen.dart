@@ -4,10 +4,12 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../core/config/ads_config.dart';
 import '../core/dispose_after.dart';
 import '../cubit/meals/meals_cubit.dart';
 import '../cubit/profile/profile_cubit.dart';
 import '../cubit/tracker/tracker_cubit.dart';
+import '../data/ads_service.dart';
 import '../models/daily_log_entry.dart';
 import '../models/macros.dart';
 import '../models/meal.dart';
@@ -121,6 +123,14 @@ class _TrackerView extends StatelessWidget {
               SizedBox(height: 12.h),
               _StreakRow(streak: state.streak),
             ],
+            // Shown for one day only, and only when there is a rewarded ad to
+            // fill it with. See `supabase/streak_restore.sql` for why the
+            // window is that narrow: a streak that can be bought back whenever
+            // it breaks is not a streak.
+            if (state.canRestoreStreak && AdsConfig.hasRewarded) ...[
+              SizedBox(height: 12.h),
+              _StreakRestoreRow(days: state.restorableStreak - 1),
+            ],
             SizedBox(height: 12.h),
             _CalorieHeadline(state: state),
             SizedBox(height: 18.h),
@@ -204,6 +214,148 @@ class _StreakRow extends StatelessWidget {
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The offer to bring back a streak that ended yesterday.
+///
+/// The one place in Bulkr where a rewarded ad is worth more to the user than
+/// to us: they want something specific, the price is thirty seconds of
+/// attention, and nobody is worse off. It is also why it is bounded so
+/// tightly — a single missed day, on the day after, once a month, all decided
+/// by the server.
+///
+/// Not drawn at all when there is no rewarded ad unit configured, which is a
+/// deliberate absence rather than a disabled button. An offer that cannot be
+/// accepted reads as the app being broken.
+class _StreakRestoreRow extends StatefulWidget {
+  const _StreakRestoreRow({required this.days});
+
+  /// The length it had reached before it broke.
+  final int days;
+
+  @override
+  State<_StreakRestoreRow> createState() => _StreakRestoreRowState();
+}
+
+class _StreakRestoreRowState extends State<_StreakRestoreRow> {
+  bool _busy = false;
+
+  Future<void> _restore() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+
+    final AdsService ads = context.read<AdsService>();
+    final TrackerCubit tracker = context.read<TrackerCubit>();
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+
+    // The ad first, and the write only if it was actually watched. The other
+    // order would restore the streak for anybody who opened the video and
+    // closed it.
+    final bool earned = await ads.showRewarded(placement: 'streak_restore');
+
+    if (!earned) {
+      // Nothing is said when they closed it early — that was a choice, not an
+      // error. This message is for the case where no video could be shown at
+      // all, which `showRewarded` cannot tell apart from the other, so it errs
+      // towards the explanation somebody can act on.
+      if (mounted) setState(() => _busy = false);
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(_notice('ads_reward_unavailable'.tr()));
+      return;
+    }
+
+    final bool restored = await tracker.restoreStreak();
+    if (mounted) setState(() => _busy = false);
+
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(_notice(restored
+          ? 'streak_restored_notice'
+              .tr(namedArgs: {'days': '${widget.days + 1}'})
+          : 'streak_restore_failed'.tr()));
+  }
+
+  SnackBar _notice(String message) => SnackBar(
+        backgroundColor: const Color(0xFF2A2A2A),
+        content: Text(
+          message,
+          style: GoogleFonts.inter(color: Colors.white, fontSize: 12.sp),
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 12.h),
+      decoration: BoxDecoration(
+        color: _cardColor,
+        borderRadius: BorderRadius.circular(12.r),
+        border: Border.all(color: AppColors.darkBorder),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.local_fire_department_outlined,
+            color: Colors.white38,
+            size: 20.sp,
+          ),
+          SizedBox(width: 10.w),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'streak_lost_title'.tr(namedArgs: {'days': '${widget.days}'}),
+                  style: GoogleFonts.inter(
+                    color: Colors.white,
+                    fontSize: 12.sp,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                SizedBox(height: 2.h),
+                Text(
+                  'streak_restore_helper'.tr(),
+                  style: GoogleFonts.inter(
+                    color: Colors.white54,
+                    fontSize: 10.sp,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(width: 10.w),
+          if (_busy)
+            SizedBox(
+              width: 16.w,
+              height: 16.w,
+              child: const CircularProgressIndicator(
+                color: AppColors.primaryNeon,
+                strokeWidth: 2,
+              ),
+            )
+          else
+            TextButton(
+              onPressed: _restore,
+              style: TextButton.styleFrom(
+                padding: EdgeInsets.symmetric(horizontal: 10.w),
+                minimumSize: Size(0, 32.h),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: Text(
+                'streak_restore_action'.tr().toUpperCase(),
+                style: GoogleFonts.inter(
+                  color: AppColors.primaryNeon,
+                  fontSize: 10.sp,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.6,
+                ),
+              ),
+            ),
         ],
       ),
     );

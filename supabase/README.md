@@ -82,6 +82,12 @@ Run them in the SQL editor (Dashboard → SQL Editor → New query):
 | 26 | `tracker_insights.sql` | The insight queries behind the dashboard |
 | 27 | `weight_logs_policies.sql` | RLS on `weight_logs` — without it, 42501 |
 | 28 | `premium.sql` | `subscriptions`, `is_premium()`, the free tier's numbers |
+| 29 | `streak_restore.sql` | one earned day of grace; **replaces `logging_streak()`** |
+
+`streak_restore.sql` must come after `tracker_insights.sql`, because it
+replaces `logging_streak()` with a version that also counts restored days.
+Applying them the other way round leaves the old definition in place and the
+restore silently does nothing.
 
 `image_thumbnails.sql` says "run after every other migration" in its own
 header, but `feed_engagement_rpc.sql` reads the columns it adds, so it is

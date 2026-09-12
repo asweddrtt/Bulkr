@@ -73,10 +73,15 @@ class TrackerCubit extends Cubit<TrackerState> {
       final results = await Future.wait([
         _meals.fetchDayLog(state.day),
         _meals.fetchStreak(),
+        // Asked every load because the answer is almost always zero and
+        // costs one index scan — and because the one day it is not zero is
+        // the only day the offer can be made at all.
+        _meals.restorableStreak(),
       ]);
 
       final List<DailyLogEntry> entries = results[0] as List<DailyLogEntry>;
       final int streak = results[1] as int;
+      final int restorable = results[2] as int;
 
       // Water is secondary: a failure to read `water_logs` — most likely
       // `tracker_water.sql` not having been run — must not take the day's food
@@ -97,6 +102,7 @@ class TrackerCubit extends Cubit<TrackerState> {
         profile: profile,
         entries: entries,
         streak: streak,
+        restorableStreak: restorable,
         water: water,
         waterErrorDetail: waterError,
         clearWaterError: waterError == null,
@@ -320,4 +326,27 @@ class TrackerCubit extends Cubit<TrackerState> {
     return copied;
   }
 
+  /// Brings back a streak that ended yesterday.
+  ///
+  /// Called only after a rewarded ad has been watched. Everything about
+  /// whether it is allowed is decided by the server — see
+  /// `supabase/streak_restore.sql` — so a zero coming back means "not
+  /// restorable any more", not "something went wrong", and the row simply
+  /// disappears.
+  ///
+  /// Returns whether the streak actually came back, so the caller knows
+  /// whether to say anything.
+  Future<bool> restoreStreak() async {
+    try {
+      final int restored = await _meals.restoreStreak();
+      if (isClosed) return false;
+
+      emit(state.copyWith(streak: restored, restorableStreak: 0));
+      return restored > 1;
+    } catch (error) {
+      if (isClosed) return false;
+      debugPrint('Bulkr: could not restore the streak — $error');
+      return false;
+    }
+  }
 }

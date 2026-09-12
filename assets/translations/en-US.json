@@ -631,5 +631,10 @@
   "account_remove_ads_helper": "Watch a short video, no ads for 24 hours",
   "account_remove_ads_active": "Off for another {hours}",
   "ads_removed_notice": "Ads are off for the next 24 hours.",
-  "ads_reward_unavailable": "No video available right now. Try again later."
+  "ads_reward_unavailable": "No video available right now. Try again later.",
+  "streak_lost_title": "Your {days}-day streak ended",
+  "streak_restore_action": "Bring it back",
+  "streak_restore_helper": "Watch a short video. One day only, once a month.",
+  "streak_restored_notice": "Back to {days} days. Log something today to keep it.",
+  "streak_restore_failed": "Couldn't bring the streak back."
 }

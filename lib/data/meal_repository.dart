@@ -624,6 +624,43 @@ class MealRepository {
     }
   }
 
+  /// The streak that would come back if the one missed day were filled in, or
+  /// zero when there is nothing to restore.
+  ///
+  /// Non-zero only on the day after a streak broke, at most once every thirty
+  /// days, and never for a run of one day — all three enforced in
+  /// `restorable_streak()` rather than here, because a limit the client
+  /// enforces is a limit the client can be patched out of. See
+  /// `supabase/streak_restore.sql`.
+  Future<int> restorableStreak() async {
+    if (_userId == null) return 0;
+
+    try {
+      final Object? value = await _client.rpc('restorable_streak');
+      if (value is int) return value;
+      return int.tryParse('${value ?? ''}') ?? 0;
+    } catch (error) {
+      // Most likely `streak_restore.sql` not having been run. An offer that
+      // cannot be made is an absent row, not an error on the tracker.
+      debugPrint('Bulkr: streak restore unavailable — $error');
+      return 0;
+    }
+  }
+
+  /// Fills in the missed day. Returns the streak afterwards, or zero when
+  /// there was nothing to restore.
+  ///
+  /// Called only after a rewarded ad has actually been watched. The server
+  /// re-checks everything — between the offer being shown and a thirty-second
+  /// video finishing, the day can turn over and the answer can change.
+  Future<int> restoreStreak() async {
+    if (_userId == null) return 0;
+
+    final Object? value = await _client.rpc('restore_streak');
+    if (value is int) return value;
+    return int.tryParse('${value ?? ''}') ?? 0;
+  }
+
   /// The last seven days, reduced to one row by `weekly_recap()`.
   ///
   /// Null on failure, which the screen shows as "not available" rather than as
