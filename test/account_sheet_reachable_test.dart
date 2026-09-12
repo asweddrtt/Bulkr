@@ -69,6 +69,8 @@ void main() {
                       onCreateGroup: () {},
                       onChallenges: () {},
                       onEditProfile: () {},
+                      onPremium: () {},
+                      isPremium: false,
                     ),
                     child: const Text('open'),
                   ),

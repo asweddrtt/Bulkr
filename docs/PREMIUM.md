@@ -195,28 +195,41 @@ spent later on a win-back than at launch, when there is nobody to win back.
 
 ---
 
+## What is built
+
+- **The entitlement** — `subscriptions`, `is_premium()`, an app-wide cubit,
+  and a cached client copy that decides presentation only.
+- **Ads** — a banner in the feed, interstitials at two seams under six rules,
+  and rewarded videos for a day without ads and for restoring a broken streak.
+  See `docs/ADMOB.md`.
+- **Buying it** — `in_app_purchase`, the upgrade screen, restore purchases,
+  and `verify-purchase`, which asks the store itself and writes
+  `subscriptions` with the service key. **The app never writes that table** —
+  see the header of `supabase/premium.sql`.
+
 ## What is not built yet
 
-This slice built the *answer* — who is premium — and nothing that acts on it.
 Still to come:
 
-1. **Ads** (next slice): banner in the feed, interstitial after a completed
-   action and on returning after 4+ hours, rewarded for streak restore and 24
-   hours ad-free. All of them gated on `EntitlementState.showsAds`.
-2. **Enforcement**: the `free_*()` functions exist and no policy calls them
-   yet. Each is one `and (public.is_premium(auth.uid()) or <count> < ...)`
-   added to a policy that already exists.
-3. **The purchase itself**: `in_app_purchase`, the products above in App Store
-   Connect and Play Console, and an edge function that verifies the receipt
-   with the store and writes `subscriptions` with the service key. **The app
-   never writes that table** — see the header of `supabase/premium.sql`.
+1. **Enforcement**: the `free_*()` functions exist and no policy calls them
+   yet, so today free and premium differ only in ads. Each limit is one
+   `and (public.is_premium(auth.uid()) or <count> < ...)` added to a policy
+   that already exists — and each needs the screen that hits it to offer the
+   upgrade rather than show a 42501.
+2. **The two products in App Store Connect and Play Console.** Everything
+   else about buying is built; this is what it needs to exist. Ids, prices and
+   the trial are in the table at the top of this file. Until they exist, the
+   upgrade screen says the store is unreachable, which is the truth.
 
-   The trial matters here too: a subscription in its trial period is premium,
-   and `subscriptions.expires_at` is simply the end of the trial. Nothing in
-   the client distinguishes the two, which is deliberate — a trial user is a
-   premium user, and a second state to reason about is a second state to get
-   wrong. What the *backend* has to handle is the trial ending without a
-   payment: that is a normal lapse, and the row goes to `tier = 'free'` like
-   any other.
-4. **The upgrade screen**, and the `paywall_shown` / `upgrade_*` events that
-   are already defined and currently fired by nothing.
+   The trial needs no client work: a subscription in its trial is premium, and
+   `subscriptions.expires_at` is simply the end of the trial. Nothing in the
+   app distinguishes the two, deliberately — a trial user is a premium user,
+   and a second state to reason about is a second state to get wrong. A trial
+   that ends without a payment is a normal lapse.
+
+3. **Server notifications.** Apple's App Store Server Notifications V2 and
+   Google's Real-time Developer Notifications. Without them a *refund* is
+   never noticed, because it revokes access without changing any date. A
+   lapse is survivable without them — `expires_at` makes the row degrade on
+   its own — so this is worth doing before there are enough subscribers for
+   one refund to matter, and not before.

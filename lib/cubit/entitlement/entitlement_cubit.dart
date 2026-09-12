@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:equatable/equatable.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -32,11 +34,26 @@ part 'entitlement_state.dart';
 /// plane keeps what they bought, and the worst case is somebody whose
 /// subscription lapsed while they were offline getting an extra ad-free day.
 class EntitlementCubit extends Cubit<EntitlementState> {
-  EntitlementCubit({required EntitlementRepository repository})
-    : _repository = repository,
-      super(const EntitlementState());
+  EntitlementCubit({
+    required EntitlementRepository repository,
+    Stream<void>? purchases,
+  })  : _repository = repository,
+        super(const EntitlementState()) {
+    // A purchase can complete at any moment, including on a launch where no
+    // upgrade screen was ever opened — the store hands it back whenever it
+    // gets round to it. By then the server has already written the row, so
+    // this is only the app catching up with it.
+    _purchases = purchases?.listen((_) => refresh());
+  }
 
   final EntitlementRepository _repository;
+  StreamSubscription<void>? _purchases;
+
+  @override
+  Future<void> close() {
+    _purchases?.cancel();
+    return super.close();
+  }
 
   /// Cache first, then the server.
   ///

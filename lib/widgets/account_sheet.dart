@@ -21,6 +21,8 @@ class AccountSheet extends StatelessWidget {
     required this.onChallenges,
     this.onRemoveAds,
     this.adFreeRemaining,
+    required this.onPremium,
+    required this.isPremium,
     this.onEditProfile,
   });
 
@@ -44,6 +46,14 @@ class AccountSheet extends StatelessWidget {
   /// is a challenge post being on screen — scroll past it and the thing you
   /// joined is gone.
   final VoidCallback onChallenges;
+
+  /// Opens the upgrade screen, or — for somebody who already pays — says so.
+  ///
+  /// Present either way. A subscriber tapping "Bulkr Premium" and finding
+  /// nothing there is a subscriber wondering whether the payment worked.
+  final VoidCallback onPremium;
+
+  final bool isPremium;
 
   /// Watch a rewarded video, get a day without ads.
   ///
@@ -82,6 +92,8 @@ class AccountSheet extends StatelessWidget {
     VoidCallback? onEditProfile,
     VoidCallback? onRemoveAds,
     Duration? adFreeRemaining,
+    required VoidCallback onPremium,
+    required bool isPremium,
   }) {
     return showModalBottomSheet<void>(
       context: context,
@@ -104,6 +116,8 @@ class AccountSheet extends StatelessWidget {
         onEditProfile: onEditProfile,
         onRemoveAds: onRemoveAds,
         adFreeRemaining: adFreeRemaining,
+        onPremium: onPremium,
+        isPremium: isPremium,
       ),
     );
   }
@@ -190,9 +204,26 @@ class AccountSheet extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Ordered by how often they are wanted: your own details,
-                    // then what you kept, then making something, then the
-                    // moderation list nobody opens unless they mean to.
+                    // First, and the only row that is about something the
+                    // user does not already have. Everything below it is a
+                    // thing they own; this is the one thing for sale, and
+                    // burying it under four rows they never tap would be
+                    // coy rather than tasteful.
+                    SheetActionRow(
+                      icon: Icons.workspace_premium_outlined,
+                      label: 'account_premium'.tr(),
+                      helper: isPremium
+                          ? 'account_premium_active'.tr()
+                          : 'account_premium_helper'.tr(),
+                      onTap: () {
+                        Navigator.of(context).pop();
+                        onPremium();
+                      },
+                    ),
+                    SizedBox(height: 10.h),
+                    // Then, ordered by how often they are wanted: your own
+                    // details, then what you kept, then making something, then
+                    // the moderation list nobody opens unless they mean to.
                     if (onEditProfile != null) ...[
                       SheetActionRow(
                         icon: Icons.edit_outlined,
