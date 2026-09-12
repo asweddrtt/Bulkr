@@ -22,6 +22,7 @@ import 'cubit/tracker/tracker_cubit.dart';
 import 'cubit/profile/profile_cubit.dart';
 import 'data/app_preferences.dart';
 import 'data/auth_repository.dart';
+import 'data/ads_service.dart';
 import 'data/challenge_repository.dart';
 import 'data/entitlement_repository.dart';
 import 'data/follow_repository.dart';
@@ -160,6 +161,7 @@ class _BulkrAppState extends State<BulkrApp> {
   late final GroupRepository _groupRepository;
   late final ChallengeRepository _challengeRepository;
   late final EntitlementRepository _entitlementRepository;
+  late final AdsService _adsService;
   late final ModerationRepository _moderationRepository;
   late final ChatRepository _chatRepository;
   late final NotificationRepository _notificationRepository;
@@ -188,6 +190,11 @@ class _BulkrAppState extends State<BulkrApp> {
     _entitlementRepository = EntitlementRepository(
       preferences: _preferences,
     );
+    // Built here, started from the shell. Starting it at launch would put a
+    // consent form and iOS's tracking prompt in front of somebody who has not
+    // seen the app yet — and the tracking prompt is shown once per install,
+    // ever, so the moment it is asked is the only moment there is.
+    _adsService = AdsService(preferences: _preferences);
     _moderationRepository = ModerationRepository();
     _chatRepository = ChatRepository();
     _notificationRepository = NotificationRepository();
@@ -215,6 +222,7 @@ class _BulkrAppState extends State<BulkrApp> {
   @override
   void dispose() {
     _foodRepository.dispose();
+    _adsService.dispose();
     super.dispose();
   }
 
@@ -236,6 +244,9 @@ class _BulkrAppState extends State<BulkrApp> {
         // Read directly by the upgrade screen, which re-asks the server the
         // moment a purchase completes.
         RepositoryProvider.value(value: _entitlementRepository),
+        // Read by every banner and by every screen that finishes something.
+        // See lib/core/ad_moment.dart for why the call sites are one line.
+        RepositoryProvider.value(value: _adsService),
         // The blocked-people screen reads this directly — one query and one
         // write, opened rarely, and a cubit for it would say nothing more.
         RepositoryProvider.value(value: _moderationRepository),

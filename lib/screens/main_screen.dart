@@ -6,12 +6,14 @@ import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../core/analytics_events.dart';
+import '../core/ad_moment.dart';
 import '../core/deep_link.dart';
 import '../core/telemetry.dart';
 import '../cubit/conversations/conversations_cubit.dart';
 import '../cubit/entitlement/entitlement_cubit.dart';
 import '../cubit/feed/feed_cubit.dart';
 import '../cubit/notifications/notifications_cubit.dart';
+import '../data/ads_service.dart';
 import '../data/deep_link_listener.dart';
 import '../data/chat_repository.dart';
 import '../data/push_service.dart';
@@ -64,6 +66,13 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   /// and this is the first widget in the tree that has one and outlives every
   /// tab.
   final DeepLinkListener _deepLinks = DeepLinkListener();
+
+  /// When the app last went into the background.
+  ///
+  /// Null until it has, so the first resume of a launch — which on iOS
+  /// sometimes fires without a preceding pause — cannot be read as a return
+  /// from four hours away.
+  DateTime? _leftAt;
 
   /// False until the shell has drawn once. See [_openFromPush].
   bool _shellIsWarm = false;
@@ -119,6 +128,12 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     // second account signing in on the same launch would otherwise inherit the
     // first one's answer.
     context.read<EntitlementCubit>().load();
+
+    // Consent, the tracking prompt, then the SDK — started here rather than at
+    // launch so that a new account goes through onboarding before it is shown
+    // either prompt. Nothing waits on it; the first banner appearing a second
+    // late is invisible.
+    unawaited(context.read<AdsService>().start());
     context.read<FeedCubit>().load();
     context.read<TrackerCubit>().load();
   }
@@ -246,7 +261,21 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   /// has actually turned over.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      _leftAt = DateTime.now();
+      return;
+    }
+
     if (state != AppLifecycleState.resumed) return;
+
+    // Coming back after a real absence is a seam: nothing was interrupted,
+    // because nothing was in progress. Four hours is the threshold, and it is
+    // AdPolicy that enforces it — this only measures.
+    final DateTime? left = _leftAt;
+    if (left != null) {
+      _leftAt = null;
+      unawaited(AdMoment.of(context).returnedAfter(DateTime.now().difference(left)));
+    }
 
     context.read<ConversationsCubit>().refresh();
     context.read<NotificationsCubit>().refreshBadge();

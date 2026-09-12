@@ -8,12 +8,14 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../core/post_link.dart';
+import '../core/config/ads_config.dart';
 import '../cubit/auth/auth_cubit.dart';
 import '../cubit/entitlement/entitlement_cubit.dart';
 import '../cubit/author/author_cubit.dart';
 import '../cubit/profile/profile_cubit.dart';
 import '../data/meal_repository.dart';
 import '../data/moderation_repository.dart';
+import '../data/ads_service.dart';
 import '../data/push_service.dart';
 import '../data/follow_repository.dart';
 import '../data/post_repository.dart';
@@ -420,6 +422,15 @@ class _Header extends StatelessWidget {
     // absent rather than opening a sheet with nothing in its fields.
     final Person? person = context.read<AuthorCubit>().state.person;
 
+    // The rewarded offer, when there is one to make. Absent for a premium
+    // account — they already have what it buys — and absent in a build with no
+    // rewarded ad unit, which today is every build: the units still have to be
+    // created in the AdMob console. See docs/ADMOB.md.
+    final AdsService ads = context.read<AdsService>();
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    final bool canOfferAdFree =
+        AdsConfig.hasRewarded && !entitlement.state.isPremium;
+
     await AccountSheet.show(
       context,
       email: auth.state.user?.email,
@@ -444,7 +455,56 @@ class _Header extends StatelessWidget {
       onChallenges: () => MyChallengesScreen.open(context),
       onManageBlocked: () => BlockedPeopleScreen.open(context),
       onDeleteAccount: () => _deleteAccount(context, auth, router, users),
+      adFreeRemaining: ads.adFreeRemaining,
+      onRemoveAds: canOfferAdFree
+          ? () => _watchForAdFreeDay(ads, messenger)
+          : null,
     );
+  }
+
+  /// Watch a video, lose the ads for a day.
+  ///
+  /// The reward is granted only when AdMob says the video was actually
+  /// finished, and it is granted *before* anything else can fail — an app that
+  /// takes thirty seconds of somebody's attention and then does not deliver
+  /// has taught them never to accept an offer again, which is worth more than
+  /// the ad earned.
+  ///
+  /// Nothing is said when they close it early. That was a choice, not an
+  /// error, and a message about it would read as a telling-off.
+  static Future<void> _watchForAdFreeDay(
+    AdsService ads,
+    ScaffoldMessengerState messenger,
+  ) async {
+    final bool earned = await ads.showRewarded(placement: 'remove_ads_24h');
+
+    if (!earned) {
+      // Only when nothing could be shown at all. `showRewarded` cannot tell
+      // "closed it early" from "never loaded", so this errs towards the
+      // explanation that is actionable.
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(
+          backgroundColor: const Color(0xFF2A2A2A),
+          content: Text(
+            'ads_reward_unavailable'.tr(),
+            style: GoogleFonts.inter(color: Colors.white, fontSize: 12.sp),
+          ),
+        ));
+      return;
+    }
+
+    await ads.grantAdFree();
+
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        backgroundColor: const Color(0xFF2A2A2A),
+        content: Text(
+          'ads_removed_notice'.tr(),
+          style: GoogleFonts.inter(color: Colors.white, fontSize: 12.sp),
+        ),
+      ));
   }
 
   /// Starts a group and drops the user into it.

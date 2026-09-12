@@ -626,5 +626,10 @@
   "challenge_goal_short": "{amount} {unit} goal",
   "account_challenges": "Challenges",
   "account_challenges_helper": "The ones you've joined, and where you stand",
-  "image_explicit_refused": "That photo looks explicit, so it wasn't uploaded. Pick another one."
+  "image_explicit_refused": "That photo looks explicit, so it wasn't uploaded. Pick another one.",
+  "account_remove_ads": "Turn off ads for a day",
+  "account_remove_ads_helper": "Watch a short video, no ads for 24 hours",
+  "account_remove_ads_active": "Off for another {hours}",
+  "ads_removed_notice": "Ads are off for the next 24 hours.",
+  "ads_reward_unavailable": "No video available right now. Try again later."
 }

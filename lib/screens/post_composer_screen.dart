@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:easy_localization/easy_localization.dart';
@@ -8,6 +9,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../core/ad_moment.dart';
 import '../cubit/feed/feed_cubit.dart';
 import '../cubit/meals/meals_cubit.dart';
 import '../cubit/post_composer/post_composer_cubit.dart';
@@ -127,7 +129,12 @@ class PostComposerScreen extends StatelessWidget {
               onPosted?.call(post);
             }
 
+            // Publishing is the clearest seam in the app: the user set out to
+            // post something and it is posted. AdMoment decides whether
+            // anything follows — usually nothing.
+            final AdMoment moment = AdMoment.of(context);
             Navigator.of(context).pop();
+            unawaited(moment.completed('post_published'));
           },
         ),
         BlocListener<PostComposerCubit, PostComposerState>(

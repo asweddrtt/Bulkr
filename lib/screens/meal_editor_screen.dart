@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -5,6 +7,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
+
+import '../core/ad_moment.dart';
 
 import '../cubit/meal_editor/meal_editor_cubit.dart';
 import '../data/food_repository.dart';
@@ -136,7 +140,11 @@ class _MealEditorView extends StatelessWidget {
               );
           }
 
+          // A saved meal is a seam: the thing they came to do is done. What
+          // follows, if anything, is decided by AdPolicy — see AdMoment.
+          final AdMoment moment = AdMoment.of(context);
           Navigator.of(context).pop<Meal>(saved);
+          unawaited(moment.completed('meal_saved'));
           return;
         }
 

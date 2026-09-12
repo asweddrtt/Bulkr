@@ -1,11 +1,15 @@
-# AdMob — recorded, not yet integrated
+# AdMob
 
-The account exists and the IDs are issued. **No ad code ships today**: there is
-no `google_mobile_ads` dependency, nothing reads the IDs below, and no ad is
-requested or rendered anywhere in the app.
+Integrated. `google_mobile_ads` is a dependency, both app IDs are in the native
+manifests, a banner runs in the feed and interstitials fire at two seams.
 
-This file is the record, so the IDs are not sitting in a chat log, and so the
-next person to pick this up has the whole checklist rather than half of it.
+**One thing is still missing: the rewarded ad units do not exist.** They have
+to be created in the AdMob console — one per platform — and until they do,
+`AdsConfig.rewardedUnit` is null and every rewarded offer hides itself rather
+than failing in front of the user. See "What is left" at the bottom.
+
+This file is the record of the IDs, so they are not sitting in a chat log, and
+of the decisions behind where the ads go.
 
 ## The IDs
 
@@ -45,30 +49,73 @@ crashes the app on launch**, before Dart runs, which is the same symptom as the
 is the platform this project actually releases to (see `codemagic.yaml` — both
 workflows are iOS), that is the failure most likely to happen here.
 
-So when this is built, the lookup should be exhaustive rather than a ternary
-with a fallback:
+So the lookup in `lib/core/config/ads_config.dart` is exhaustive rather than a
+ternary with a fallback: it names each platform and throws on anything else.
+An unsupported platform — desktop, where this project is developed — fails
+where it is written rather than on a tester's phone, and `AdsConfig.isSupported`
+is what every caller checks first so that a development build is simply an app
+with no ads.
 
-```dart
-// Sketch only — nothing like this exists yet.
-static String get bannerUnit {
-  if (Platform.isAndroid) return 'ca-app-pub-6396760454728825/5069745808';
-  if (Platform.isIOS) return 'ca-app-pub-6396760454728825/2985286754';
-  // Desktop builds exist for development and have no AdMob app at all.
-  throw UnsupportedError('no ad unit for this platform');
-}
-```
+## Where the ads are, and why
 
-A `throw` rather than a placeholder string: an unsupported platform should fail
-where it is written, not on a tester's phone.
+### The banner — inline in the feed, every 5 posts
 
-## Intended placement
+`lib/widgets/feed_banner_ad.dart`. Not anchored above the navigation bar,
+which is the obvious choice and earns more: an anchored banner is fifty pixels
+of the phone the user never gets back, on the one screen they open daily, in
+an app whose pitch is that checking in takes five seconds. Scrolling past an
+ad is a thing people do without resentment; being permanently one banner
+shorter is not.
 
-**A banner in the feed**, and **an interstitial**.
+If that trade turns out to be wrong, anchoring it is a small change — and
+`BulkrNavBar.contentInset` plus `nav_bar_clearance_test.dart` are already
+watching for the layout half of it.
 
-The banner is the settled one. The interstitial still needs a decision about
-*when* it fires, and it is the decision that matters most here, because an
-interstitial is the format most able to make somebody delete a daily-use app.
-Some placements to rule out before picking one:
+Each slot keeps its ad alive (`AutomaticKeepAliveClientMixin`) so scrolling
+back and forth does not request a new one. An impression count inflated by
+list recycling is both a lie about how many ads were seen and the sort of
+pattern AdMob suspends accounts over.
+
+### The interstitial — two seams, six rules
+
+`lib/core/ad_policy.dart`, which is pure and tested, and `lib/core/ad_moment.dart`,
+which is the one line a screen calls.
+
+It fires after a **completed action** — a meal saved, a post published — and on
+**returning to the app after four hours or more away**. Both are seams: the
+user finished something, or nothing was in progress at all. Never between a
+tap and the thing that was tapped.
+
+The rules that decide whether anything actually shows:
+
+| Rule | Value | What it protects |
+|---|---|---|
+| new-user grace | 24 h from install | the value has to land before the ask does |
+| cooldown | 4 min | no two close together, whatever happened between |
+| daily cap | 4 | the heavy user, who is also the one worth keeping |
+| actions between | 3 | entering a week of meals must not be an ad per meal |
+| away threshold | 4 h | a glance at a notification is not "coming back" |
+| absolutes | premium, earned ad-free window | no timing makes either acceptable |
+
+The counters are persisted, and are deliberately **not** keyed by account or
+cleared on sign-out — a cap you can clear by signing out is not a cap.
+
+### Rewarded — a day without ads
+
+Offered in the account sheet: watch a video, no ads for 24 hours. The window
+extends from *now* rather than from any existing expiry, so a second video an
+hour in buys 24 hours and not 47.
+
+The reward is granted only when AdMob reports the video was finished, and the
+grant happens before anything else can fail. An app that takes thirty seconds
+of somebody's attention and then does not deliver has taught them never to
+accept an offer again, which is worth more than the ad earned.
+
+Closing the video early says nothing. That was a choice, not an error.
+
+## Placements ruled out
+
+Kept because the reasoning is the part that is easy to lose:
 
 - **Never on launch.** An ad before the first screen is a guideline 4.2 problem
   and the single most-reported reason for abandoning an app.
@@ -78,69 +125,78 @@ Some placements to rule out before picking one:
   opening a thread. The user asked for something specific; showing an ad
   instead reads as a bug.
 
-The defensible spots are the natural seams, where the user has *finished*
-something rather than asked for something: after a meal is saved, after a
-weigh-in is logged, or on returning to the app after a long absence. Google's
-own frequency-capping (`AdMob console → ad unit → frequency cap`) should be set
-regardless — an uncapped interstitial will fire far more often than intended.
+## What is done
 
-## What integrating it actually involves
+1. **The plugin.** `google_mobile_ads`, plus `app_tracking_transparency` for
+   the iOS prompt. Both are native code, which has a consequence specific to
+   this project: **this release cannot be a Shorebird patch.** It needs a full
+   `ios-testflight` run, and the release that produces becomes the one later
+   patches attach to — see `codemagic.yaml`.
 
-Listed because four of these are easy to miss and two of them are rejections
-rather than bugs.
+2. **The app ID in each native manifest.** Android in
+   `AndroidManifest.xml` as `com.google.android.gms.ads.APPLICATION_ID`, iOS in
+   `Info.plist` as `GADApplicationIdentifier`. `privacy_manifest_test.dart`
+   checks each platform has *its own* and not the other's — that mistake does
+   not serve no ads, it crashes the app on launch before Dart runs, which is
+   the same symptom that shipped build 4 as a white screen.
 
-1. **The plugin.** `google_mobile_ads`. This is native code on both platforms,
-   which has a consequence specific to this project: it cannot travel in a
-   Shorebird patch. Adding it needs a full `ios-testflight` release, and the
-   release it produces becomes the one later patches attach to — see
-   `codemagic.yaml`.
+3. **App Tracking Transparency.** `NSUserTrackingUsageDescription` is in
+   `Info.plist` and the prompt is requested once per install, after the UMP
+   consent form so it arrives with context. iOS never shows it twice, so the
+   moment it is asked is the only moment there is — which is why it is asked
+   from the shell, after onboarding, rather than at launch.
 
-2. **The right app ID in each native manifest.** The SDK reads it at startup
-   and *crashes the app on launch* if it is missing or belongs to another
-   platform — it is not a soft failure.
-   - `android/app/src/main/AndroidManifest.xml`: a `<meta-data>` named
-     `com.google.android.gms.ads.APPLICATION_ID`, holding the Android app ID
-     above.
-   - `ios/Runner/Info.plist`: a `GADApplicationIdentifier` key, holding the
-     **iOS** app ID. Not the Android one — see above for why that is a crash
-     rather than a misconfiguration.
+4. **The consent flow.** Google's UMP SDK, before any ad request. A failure
+   here is not fatal: without consent Google serves non-personalised ads,
+   which is less money and not no app.
 
-3. **App Tracking Transparency, on iOS.** Serving personalised ads needs the
-   IDFA, and the IDFA needs the ATT prompt. That means `NSUserTrackingUsageDescription`
-   in `Info.plist` and a call to request authorisation. Shipping ads without it
-   is an App Store rejection under guideline 5.1.2.
+5. **`PrivacyInfo.xcprivacy`.** Now declares `NSPrivacyTracking` true, names
+   Google's ad domains, marks the device identifier as used for third-party
+   advertising, and adds coarse location and advertising data. Guarded by
+   `privacy_manifest_test.dart`.
 
-4. **A consent flow.** Google's UMP SDK, for GDPR/ePrivacy in the EU and the
-   equivalent in other regions. AdMob will serve non-personalised ads without
-   consent, but the *asking* is not optional where it applies.
+6. **Test units off `kReleaseMode`.** `ad_policy_test.dart` asserts that a
+   non-release build can only ever return one of Google's public test units.
+   Google bans accounts that click their own live ads, and the manual version
+   of this switch is forgotten exactly once.
 
-5. **`PrivacyInfo.xcprivacy` changes.** The manifest added in this batch
-   declares that Bulkr does **not** track and lists no tracking domains, which
-   is true today. Ads make it false. At minimum it gains:
-   - `NSPrivacyTracking` set to `true`
-   - `NSPrivacyTrackingDomains` listing Google's ad domains
-   - `Device ID` under collected data types, with `NSPrivacyCollectedDataTypeTracking` true
+## What is left
 
-   The App Store privacy labels in App Store Connect have to change to match,
-   and so does whatever the "Policy" link on the welcome screen points at.
+### Create the two rewarded ad units — the only blocker
 
-6. **Layout.** `BulkrNavBar.contentInset` is what keeps the feed's last post
-   clear of the nav bar. A banner anchored above the bar adds to that height,
-   and `test/nav_bar_clearance_test.dart` is the test that will catch it if the
-   inset is not updated.
+AdMob console → the Bulkr app (each platform) → Ad units → Add ad unit →
+**Rewarded**. Then put each id in `AdsConfig`:
 
-7. **Test IDs during development.** Google bans accounts that click their own
-   live ads, and during development somebody always does. Use Google's public
-   test units for every build that is not a store build:
-   - banner: `ca-app-pub-3940256099942544/6300978111`
-   - interstitial: `ca-app-pub-3940256099942544/1033173712`
+```dart
+// lib/core/config/ads_config.dart
+static const String _androidRewarded = String.fromEnvironment(
+  'REWARDED_AD_UNIT_ANDROID',
+);
+```
 
-   Switch on `kReleaseMode` rather than by editing the string back and forth —
-   the manual version is forgotten exactly once, and the cost is the account.
+Either replace the `String.fromEnvironment` with the literal id — which is
+what the banner and interstitial units do, and what Shorebird prefers, since
+it compares dart-defines between a release and its patches — or pass
+`--dart-define` consistently in both `codemagic.yaml` workflows.
 
-## Why it is worth thinking about first
+Until then the offer is simply not shown. Nothing breaks.
 
-Bulkr's feed is the screen people scroll daily, and a banner there is the
-placement most likely to be seen — and the one most likely to be the reason
-somebody stops opening the app. Worth deciding deliberately whether it appears
-for everyone, or only for accounts past some threshold.
+### Set the frequency cap in the console as well
+
+`AdMob console → ad unit → frequency cap`. The app's own limits are in
+`AdPolicy` and are stricter, but the console cap is the one that still applies
+if a future call site forgets to go through `AdMoment`.
+
+### Two things only a person can do
+
+- **App Store privacy labels** in App Store Connect, to match the manifest.
+  They are entered separately and nothing checks that they agree.
+- **The privacy policy** has to mention advertising, Google as a processor,
+  and the identifiers involved. It is the page the welcome screen links to.
+
+## Still worth deciding
+
+Whether the banner should appear for everyone or only past some threshold —
+an account's first week, say. Today it appears for every free account from the
+first time they scroll five posts. The interstitial already has a 24-hour
+grace; the banner deliberately does not, because it is passive.

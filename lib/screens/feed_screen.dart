@@ -13,6 +13,7 @@ import '../core/post_link.dart';
 import '../models/post.dart';
 import '../styles/app_color.dart';
 import '../widgets/bulkr_nav_bar.dart';
+import '../widgets/feed_banner_ad.dart';
 import '../widgets/animations/motion.dart';
 import '../widgets/animations/press_scale.dart';
 import '../widgets/post_actions_sheet.dart';
@@ -550,7 +551,12 @@ class _FeedListState extends State<_FeedList> {
         final Post post = slice.posts[index];
         final bool isSavingMeal = busyPostId == post.id;
 
-        return PostCard(
+        // The ad rides under the card rather than taking a slot of its own, so
+        // the index arithmetic stays "post at index" and the keys below keep
+        // pointing at the right posts. `FeedBannerAd` draws nothing at all
+        // when the account is premium, when an ad-free window has been earned,
+        // or when the ad has not loaded.
+        final Widget card = PostCard(
           // Keyed by post id, not by index. Without it, deleting a post makes
           // every card below it reuse the state of the one that was there —
           // which for a multi-photo post means the carousel stays on page 2 of
@@ -577,6 +583,13 @@ class _FeedListState extends State<_FeedList> {
               ? () => ChallengeLeaderboardSheet.show(context, post.challenge!)
               : null,
           isJoiningChallenge: busyPostId == post.id,
+        );
+
+        if (!FeedBannerAd.followsPost(index)) return card;
+
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[card, const FeedBannerAd()],
         );
       },
     );

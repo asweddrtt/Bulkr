@@ -23,9 +23,9 @@ import 'app_preferences.dart';
 /// The decision about *whether* to interrupt lives in [AdPolicy], which is
 /// pure and tested. This class only carries out what that decides, and
 /// remembers the result.
-class AdsService {
+class AdsService extends ChangeNotifier {
   AdsService({AppPreferences? preferences})
-      : _preferences = preferences ?? AppPreferences();
+    : _preferences = preferences ?? AppPreferences();
 
   final AppPreferences _preferences;
 
@@ -71,8 +71,11 @@ class AdsService {
       _ready = true;
     } catch (error, stackTrace) {
       debugPrint('Bulkr: the ad SDK did not start — $error');
-      await Telemetry.recordError(error, stackTrace,
-          reason: 'MobileAds.initialize');
+      await Telemetry.recordError(
+        error,
+        stackTrace,
+        reason: 'MobileAds.initialize',
+      );
       return;
     }
 
@@ -109,8 +112,8 @@ class AdsService {
         }
       });
 
-      final ConsentStatus status =
-          await ConsentInformation.instance.getConsentStatus();
+      final ConsentStatus status = await ConsentInformation.instance
+          .getConsentStatus();
       await Telemetry.send(AnalyticsEvent.adConsent(status: status.name));
     } catch (error) {
       debugPrint('Bulkr: consent step skipped — $error');
@@ -136,9 +139,9 @@ class AdsService {
           ? await AppTrackingTransparency.requestTrackingAuthorization()
           : current;
 
-      await Telemetry.send(AnalyticsEvent.trackingPermission(
-        status: status.name,
-      ));
+      await Telemetry.send(
+        AnalyticsEvent.trackingPermission(status: status.name),
+      );
     } catch (error) {
       debugPrint('Bulkr: tracking prompt skipped — $error');
     }
@@ -169,10 +172,14 @@ class AdsService {
             _loadingInterstitial = false;
             _interstitial = null;
             debugPrint('Bulkr: interstitial did not load — ${error.message}');
-            unawaited(Telemetry.send(AnalyticsEvent.adFailed(
-              format: 'interstitial',
-              code: error.code,
-            )));
+            unawaited(
+              Telemetry.send(
+                AnalyticsEvent.adFailed(
+                  format: 'interstitial',
+                  code: error.code,
+                ),
+              ),
+            );
           },
         ),
       );
@@ -235,10 +242,9 @@ class AdsService {
 
     // Recorded on shown, never on requested — see AdPolicy.recordShown.
     await _save(AdPolicy.recordShown(_state));
-    await Telemetry.send(AnalyticsEvent.adShown(
-      format: 'interstitial',
-      placement: placement,
-    ));
+    await Telemetry.send(
+      AnalyticsEvent.adShown(format: 'interstitial', placement: placement),
+    );
 
     return true;
   }
@@ -269,28 +275,32 @@ class AdsService {
           onAdLoaded: (RewardedAd ad) {
             ad.fullScreenContentCallback =
                 FullScreenContentCallback<RewardedAd>(
-              onAdDismissedFullScreenContent: (RewardedAd ad) {
-                ad.dispose();
-                // Dismissed without the reward callback having fired means
-                // they closed it early. Not a failure — a choice.
-                if (!earned.isCompleted) earned.complete(false);
-              },
-              onAdFailedToShowFullScreenContent: (RewardedAd ad, AdError e) {
-                ad.dispose();
-                if (!earned.isCompleted) earned.complete(false);
+                  onAdDismissedFullScreenContent: (RewardedAd ad) {
+                    ad.dispose();
+                    // Dismissed without the reward callback having fired means
+                    // they closed it early. Not a failure — a choice.
+                    if (!earned.isCompleted) earned.complete(false);
+                  },
+                  onAdFailedToShowFullScreenContent:
+                      (RewardedAd ad, AdError e) {
+                        ad.dispose();
+                        if (!earned.isCompleted) earned.complete(false);
+                      },
+                );
+
+            ad.show(
+              onUserEarnedReward: (AdWithoutView ad, RewardItem reward) {
+                if (!earned.isCompleted) earned.complete(true);
               },
             );
-
-            ad.show(onUserEarnedReward: (AdWithoutView ad, RewardItem reward) {
-              if (!earned.isCompleted) earned.complete(true);
-            });
           },
           onAdFailedToLoad: (LoadAdError error) {
             debugPrint('Bulkr: rewarded did not load — ${error.message}');
-            unawaited(Telemetry.send(AnalyticsEvent.adFailed(
-              format: 'rewarded',
-              code: error.code,
-            )));
+            unawaited(
+              Telemetry.send(
+                AnalyticsEvent.adFailed(format: 'rewarded', code: error.code),
+              ),
+            );
             if (!earned.isCompleted) earned.complete(false);
           },
         ),
@@ -353,6 +363,10 @@ class AdsService {
 
   Future<void> _save(AdState next) async {
     _state = next;
+    // Listened to by the banner, which has to disappear the moment a rewarded
+    // ad buys an ad-free day. A banner that stayed up until the next scroll
+    // would be the app visibly not honouring what it just promised.
+    notifyListeners();
     try {
       await _preferences.setAdState(jsonEncode(next.toJson()));
     } catch (error) {
@@ -360,8 +374,10 @@ class AdsService {
     }
   }
 
+  @override
   void dispose() {
     _interstitial?.dispose();
     _interstitial = null;
+    super.dispose();
   }
 }
