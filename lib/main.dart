@@ -13,6 +13,7 @@ import 'core/config/supabase_config.dart';
 import 'core/telemetry.dart';
 import 'cubit/auth/auth_cubit.dart';
 import 'cubit/conversations/conversations_cubit.dart';
+import 'cubit/entitlement/entitlement_cubit.dart';
 import 'cubit/feed/feed_cubit.dart';
 import 'cubit/notifications/notifications_cubit.dart';
 import 'cubit/meals/meals_cubit.dart';
@@ -22,6 +23,7 @@ import 'cubit/profile/profile_cubit.dart';
 import 'data/app_preferences.dart';
 import 'data/auth_repository.dart';
 import 'data/challenge_repository.dart';
+import 'data/entitlement_repository.dart';
 import 'data/follow_repository.dart';
 import 'data/chat_repository.dart';
 import 'data/notification_repository.dart';
@@ -157,6 +159,7 @@ class _BulkrAppState extends State<BulkrApp> {
   late final FollowRepository _followRepository;
   late final GroupRepository _groupRepository;
   late final ChallengeRepository _challengeRepository;
+  late final EntitlementRepository _entitlementRepository;
   late final ModerationRepository _moderationRepository;
   late final ChatRepository _chatRepository;
   late final NotificationRepository _notificationRepository;
@@ -178,6 +181,13 @@ class _BulkrAppState extends State<BulkrApp> {
     _followRepository = FollowRepository();
     _groupRepository = GroupRepository();
     _challengeRepository = ChallengeRepository();
+    // Shares the one [AppPreferences] rather than making a second: the
+    // cached entitlement is cleared by `AppPreferences.clear()` on sign-out,
+    // and a second instance would mean one of them still holding the last
+    // account's answer.
+    _entitlementRepository = EntitlementRepository(
+      preferences: _preferences,
+    );
     _moderationRepository = ModerationRepository();
     _chatRepository = ChatRepository();
     _notificationRepository = NotificationRepository();
@@ -223,6 +233,9 @@ class _BulkrAppState extends State<BulkrApp> {
         RepositoryProvider.value(value: _followRepository),
         RepositoryProvider.value(value: _groupRepository),
         RepositoryProvider.value(value: _challengeRepository),
+        // Read directly by the upgrade screen, which re-asks the server the
+        // moment a purchase completes.
+        RepositoryProvider.value(value: _entitlementRepository),
         // The blocked-people screen reads this directly — one query and one
         // write, opened rarely, and a cubit for it would say nothing more.
         RepositoryProvider.value(value: _moderationRepository),
@@ -284,6 +297,14 @@ class _BulkrAppState extends State<BulkrApp> {
         BlocProvider(
           create: (_) =>
               NotificationsCubit(repository: _notificationRepository),
+        ),
+        // App-wide because almost every surface asks whether this account is
+        // premium — the feed before drawing a banner, the meal library before
+        // saving another meal, the tracker before scrolling past last week.
+        // One answer for all of them, or they disagree.
+        BlocProvider(
+          create: (_) =>
+              EntitlementCubit(repository: _entitlementRepository)..load(),
         ),
         BlocProvider(
           create: (_) => FeedCubit(

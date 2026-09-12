@@ -160,3 +160,6 @@ No action needed; listed so nobody re-checks them by hand.
 | `analytics_events_test.dart` | an event name Firebase would silently drop, or a parameter carrying user content |
 | `meal_repository_test.dart` | a meal logged against the wrong day in a non-UTC timezone |
 | `post_repository_test.dart` | keyset paging turning back into an offset |
+| `plan_limits_test.dart` | the free tier's numbers in the app and in `premium.sql` drifting apart, or a write policy appearing on `subscriptions` |
+| `entitlement_test.dart` | an unknown tier, a corrupt cache or a failed refresh resolving to premium instead of free |
+| `analytics_events_test.dart` | a new event that nobody added to the list the name rules are checked against |

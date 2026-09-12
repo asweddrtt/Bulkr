@@ -115,13 +115,57 @@ class AppPreferences {
     await prefs?.remove(_searchHistoryKey);
   }
 
+  // --- Entitlement --------------------------------------------------------
+
+  /// The last answer the server gave about what this user has paid for, as
+  /// JSON.
+  ///
+  /// Here so that a paying user opening the app on a train is not shown ads
+  /// for the two seconds before the network answers — which is the whole
+  /// reason this is cached, and also the reason it is only a cache. What it
+  /// decides is presentation. What may actually be saved, read and joined is
+  /// decided by policies in `supabase/premium.sql` against a table this device
+  /// cannot write.
+  ///
+  /// Keyed by user for the same reason onboarding is: one device, more than
+  /// one account, and a premium flag that outlived its owner would hand the
+  /// next person an ad-free app they did not pay for.
+  static const String _entitlementKey = 'entitlement_json';
+  static const String _entitlementUserKey = 'entitlement_user_id';
+
+  /// The cached JSON for [userId], or null when there is none for *this* user.
+  Future<String?> cachedEntitlement(String userId) async {
+    final SharedPreferences? prefs = await _prefs();
+    if (prefs == null) return null;
+    if (prefs.getString(_entitlementUserKey) != userId) return null;
+
+    return prefs.getString(_entitlementKey);
+  }
+
+  Future<void> setCachedEntitlement(String userId, String json) async {
+    final SharedPreferences? prefs = await _prefs();
+    if (prefs == null) return;
+
+    await prefs.setString(_entitlementUserKey, userId);
+    await prefs.setString(_entitlementKey, json);
+  }
+
+  Future<void> clearEntitlement() async {
+    final SharedPreferences? prefs = await _prefs();
+    await prefs?.remove(_entitlementKey);
+    await prefs?.remove(_entitlementUserKey);
+  }
+
   /// Called on sign-out, so the next account decides for itself.
   ///
-  /// Takes the search history with it. The next person to sign in on this
-  /// device should not be looking at what the last one searched for.
+  /// Takes the search history and the cached entitlement with it. The next
+  /// person to sign in on this device should not be looking at what the last
+  /// one searched for, nor inheriting what they paid for.
   Future<void> clear() async {
     final SharedPreferences? prefs = await _prefs();
     await prefs?.remove(_onboardedUserKey);
     await prefs?.remove(_searchHistoryKey);
+    await prefs?.remove(_entitlementKey);
+    await prefs?.remove(_entitlementUserKey);
   }
 }

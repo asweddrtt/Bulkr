@@ -9,6 +9,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../core/post_link.dart';
 import '../cubit/auth/auth_cubit.dart';
+import '../cubit/entitlement/entitlement_cubit.dart';
 import '../cubit/author/author_cubit.dart';
 import '../cubit/profile/profile_cubit.dart';
 import '../data/meal_repository.dart';
@@ -410,6 +411,7 @@ class _Header extends StatelessWidget {
   static Future<void> _openAccount(BuildContext context) async {
     final AuthCubit auth = context.read<AuthCubit>();
     final PushService push = context.read<PushService>();
+    final EntitlementCubit entitlement = context.read<EntitlementCubit>();
     final GoRouter router = GoRouter.of(context);
     final UserRepository users = context.read<UserRepository>();
     final String username =
@@ -429,6 +431,11 @@ class _Header extends StatelessWidget {
         // notifications until they registered their own.
         await push.signOut();
         await auth.signOut();
+        // In memory as well as on disk. `auth.signOut` clears the cached
+        // entitlement from preferences, but the cubit is still holding the
+        // last answer, and the next account to sign in on this launch would
+        // read it before its own arrived.
+        await entitlement.clear();
         router.go(AppRoutes.welcome);
       },
       onEditProfile: person == null ? null : () => _edit(context, person),

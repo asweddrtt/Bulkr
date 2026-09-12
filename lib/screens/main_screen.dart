@@ -9,6 +9,7 @@ import '../core/analytics_events.dart';
 import '../core/deep_link.dart';
 import '../core/telemetry.dart';
 import '../cubit/conversations/conversations_cubit.dart';
+import '../cubit/entitlement/entitlement_cubit.dart';
 import '../cubit/feed/feed_cubit.dart';
 import '../cubit/notifications/notifications_cubit.dart';
 import '../data/deep_link_listener.dart';
@@ -111,6 +112,13 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     // moving between tabs doesn't re-hit the network.
     context.read<ProfileCubit>().load();
     context.read<MealsCubit>().load();
+    // Cache first, then the server — so a subscriber is not shown the ads they
+    // paid to remove for the second it takes to ask. Called here as well as
+    // where the cubit is created, because this is the point at which an
+    // account is actually signed in: the provider runs once per process, and a
+    // second account signing in on the same launch would otherwise inherit the
+    // first one's answer.
+    context.read<EntitlementCubit>().load();
     context.read<FeedCubit>().load();
     context.read<TrackerCubit>().load();
   }
@@ -243,6 +251,10 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     context.read<ConversationsCubit>().refresh();
     context.read<NotificationsCubit>().refreshBadge();
     context.read<TrackerCubit>().refreshIfDayChanged();
+    // A subscription can start, renew or lapse while the app is closed, and
+    // none of those reaches the phone — a renewal is between the store and the
+    // backend. Coming back is when it is worth re-asking, and it is one row.
+    context.read<EntitlementCubit>().refresh();
   }
 
   /// Index of the Tracker tab, which needs a nudge the others do not.
