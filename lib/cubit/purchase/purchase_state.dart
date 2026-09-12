@@ -19,7 +19,7 @@ enum PaywallStatus {
 class PurchaseState extends Equatable {
   const PurchaseState({
     this.status = PaywallStatus.initial,
-    this.products = const <ProductDetails>[],
+    this.plans = const <PremiumPlan>[],
     this.selectedId,
     this.busy = false,
     this.pending = false,
@@ -29,9 +29,13 @@ class PurchaseState extends Equatable {
 
   final PaywallStatus status;
 
-  /// Yearly first. Prices come from the store, in the user's own currency —
-  /// never from anything written down in this app.
-  final List<ProductDetails> products;
+  /// Yearly first, one per product id. Prices come from the store, in the
+  /// user's own currency — never from anything written down in this app.
+  ///
+  /// [PremiumPlan] rather than the store's own `ProductDetails`, because on
+  /// Play those arrive one per *offer* and two of them can describe the same
+  /// plan. See that class for what goes wrong otherwise.
+  final List<PremiumPlan> plans;
 
   final String? selectedId;
 
@@ -48,12 +52,12 @@ class PurchaseState extends Equatable {
 
   final PurchaseFailure? failure;
 
-  ProductDetails? get selected {
+  PremiumPlan? get selected {
     final String? id = selectedId;
     if (id == null) return null;
 
-    for (final ProductDetails product in products) {
-      if (product.id == id) return product;
+    for (final PremiumPlan plan in plans) {
+      if (plan.id == id) return plan;
     }
     return null;
   }
@@ -64,17 +68,14 @@ class PurchaseState extends Equatable {
   /// already used it is not offered it again — and promising a trial to
   /// someone who will be charged today is a lie as well as a guideline
   /// problem. See [TrialOffer].
-  TrialOffer? get trial {
-    final ProductDetails? product = selected;
-    return product == null ? null : TrialOffer.of(product);
-  }
+  TrialOffer? get trial => selected?.trial;
 
   bool get canBuy =>
       status == PaywallStatus.ready && selected != null && !busy;
 
   PurchaseState copyWith({
     PaywallStatus? status,
-    List<ProductDetails>? products,
+    List<PremiumPlan>? plans,
     String? selectedId,
     bool? busy,
     bool? pending,
@@ -84,7 +85,7 @@ class PurchaseState extends Equatable {
   }) {
     return PurchaseState(
       status: status ?? this.status,
-      products: products ?? this.products,
+      plans: plans ?? this.plans,
       selectedId: selectedId ?? this.selectedId,
       busy: busy ?? this.busy,
       pending: pending ?? this.pending,
@@ -99,7 +100,7 @@ class PurchaseState extends Equatable {
     // By id: ProductDetails has no value equality, so two identical lists
     // from two queries would otherwise never compare equal and every
     // refresh would rebuild the screen.
-    products.map((ProductDetails p) => p.id).toList(),
+    plans,
     selectedId,
     busy,
     pending,

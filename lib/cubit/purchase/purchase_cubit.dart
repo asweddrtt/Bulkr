@@ -10,6 +10,7 @@ import '../../core/config/premium_products.dart';
 import '../../core/telemetry.dart';
 import '../../core/trial_offer.dart';
 import '../../data/purchase_service.dart';
+import '../../models/premium_plan.dart';
 
 part 'purchase_state.dart';
 
@@ -51,28 +52,31 @@ class PurchaseCubit extends Cubit<PurchaseState> {
       return;
     }
 
-    // Yearly first, because it is the one being recommended and the one
-    // carrying the trial. Sorted rather than assumed: the store returns them
-    // in whatever order it likes.
-    final List<ProductDetails> ordered = <ProductDetails>[...products]
-      ..sort(
-        (ProductDetails a, ProductDetails b) =>
-            PremiumProducts.isYearly(a.id) == PremiumProducts.isYearly(b.id)
-            ? 0
-            : (PremiumProducts.isYearly(a.id) ? -1 : 1),
-      );
+    // Google Play answers with one entry per *offer*, so a yearly plan with a
+    // free trial attached comes back twice under the same id. Folding them
+    // into one plan each is what stops the screen drawing "Yearly" twice, one
+    // of them priced at nothing — see [PremiumPlan].
+    final List<PremiumPlan> plans = PremiumPlan.from(products);
+
+    // Yearly first: it is the one being recommended and the one carrying the
+    // trial. Sorted rather than assumed, because the store returns them in
+    // whatever order it likes.
+    plans.sort(
+      (PremiumPlan a, PremiumPlan b) =>
+          PremiumProducts.isYearly(a.id) == PremiumProducts.isYearly(b.id)
+          ? 0
+          : (PremiumProducts.isYearly(a.id) ? -1 : 1),
+    );
 
     emit(
       state.copyWith(
         status: PaywallStatus.ready,
-        products: ordered,
+        plans: plans,
         selectedId:
             state.selectedId ??
-            (ordered.any(
-                  (ProductDetails p) => p.id == PremiumProducts.preferred,
-                )
+            (plans.any((PremiumPlan p) => p.id == PremiumProducts.preferred)
                 ? PremiumProducts.preferred
-                : ordered.first.id),
+                : plans.first.id),
       ),
     );
   }
@@ -84,15 +88,19 @@ class PurchaseCubit extends Cubit<PurchaseState> {
 
   /// Opens the store's own sheet. The result arrives later, on the stream.
   Future<void> buy() async {
-    final ProductDetails? product = state.selected;
-    if (product == null || state.busy) return;
+    final PremiumPlan? plan = state.selected;
+    if (plan == null || state.busy) return;
 
     emit(state.copyWith(busy: true, clearFailure: true));
 
-    await Telemetry.send(AnalyticsEvent.upgradeStarted(product: product.id));
+    await Telemetry.send(AnalyticsEvent.upgradeStarted(product: plan.id));
 
     try {
-      await _service.buy(product);
+      // `plan.purchase`, not the base plan: on Play, handing the billing flow
+      // the base plan instead of the trial offer buys the subscription without
+      // the trial, and nothing anywhere says so — the user is simply charged
+      // today.
+      await _service.buy(plan.purchase);
     } catch (error) {
       if (isClosed) return;
       debugPrint('Bulkr: could not open the purchase sheet — $error');

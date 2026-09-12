@@ -227,6 +227,21 @@ Still to come:
    the trial are in the table at the top of this file. Until they exist, the
    upgrade screen says the store is unreachable, which is the truth.
 
+   **On Play, the trial is an *offer* on the yearly base plan**, not a setting
+   on the subscription. Adding it makes `queryProductDetails` answer with two
+   entries for `bulkr_premium_yearly` — the base plan and the offer — and the
+   app folds them back into one row (`PremiumPlan`). Two things depend on that
+   fold and are easy to get wrong by hand: the price shown must come from the
+   first *non-free* pricing phase, and the billing flow must be handed the
+   **offer**, because launching it with the base plan buys the subscription
+   without the trial and charges the buyer today without saying so.
+
+   **Play returns nothing at all until a build is on a track.** Internal
+   testing is enough, but the upload must carry the same `applicationId`
+   (`com.alimahmoud.bulkr`), be signed with the key Play expects, and the
+   account testing it must be on the tester list and have opted in. An empty
+   product list is the normal symptom of that, not of a code problem.
+
    The trial needs no client work: a subscription in its trial is premium, and
    `subscriptions.expires_at` is simply the end of the trial. Nothing in the
    app distinguishes the two, deliberately — a trial user is a premium user,

@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:in_app_purchase/in_app_purchase.dart';
 
 import '../core/config/premium_products.dart';
 import '../core/plan_limits.dart';
@@ -13,6 +12,7 @@ import '../core/trial_offer.dart';
 import '../cubit/entitlement/entitlement_cubit.dart';
 import '../cubit/purchase/purchase_cubit.dart';
 import '../data/purchase_service.dart';
+import '../models/premium_plan.dart';
 import '../styles/app_color.dart';
 import '../widgets/animations/press_scale.dart';
 
@@ -304,11 +304,11 @@ class _Plans extends StatelessWidget {
 
         return Column(
           children: <Widget>[
-            for (final ProductDetails product in state.products)
+            for (final PremiumPlan plan in state.plans)
               _PlanCard(
-                product: product,
-                selected: product.id == state.selectedId,
-                onTap: () => context.read<PurchaseCubit>().select(product.id),
+                plan: plan,
+                selected: plan.id == state.selectedId,
+                onTap: () => context.read<PurchaseCubit>().select(plan.id),
               ),
           ],
         );
@@ -319,18 +319,18 @@ class _Plans extends StatelessWidget {
 
 class _PlanCard extends StatelessWidget {
   const _PlanCard({
-    required this.product,
+    required this.plan,
     required this.selected,
     required this.onTap,
   });
 
-  final ProductDetails product;
+  final PremiumPlan plan;
   final bool selected;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final bool yearly = PremiumProducts.isYearly(product.id);
+    final bool yearly = PremiumProducts.isYearly(plan.id);
 
     return Padding(
       padding: EdgeInsets.only(bottom: 12.h),
@@ -404,7 +404,7 @@ class _PlanCard extends StatelessWidget {
                         // The store's own formatting, in the user's own
                         // currency. Never anything written down in this app.
                         (yearly ? 'premium_per_year' : 'premium_per_month').tr(
-                          namedArgs: <String, String>{'price': product.price},
+                          namedArgs: <String, String>{'price': plan.priceLabel},
                         ),
                         style: GoogleFonts.inter(
                           color: Colors.white54,
@@ -489,7 +489,7 @@ class _Footer extends StatelessWidget {
       },
       builder: (BuildContext context, PurchaseState state) {
         final TrialOffer? trial = state.trial;
-        final ProductDetails? product = state.selected;
+        final PremiumPlan? plan = state.selected;
 
         return Container(
           padding: EdgeInsets.fromLTRB(20.w, 12.h, 20.w, 16.h),
@@ -552,7 +552,7 @@ class _Footer extends StatelessWidget {
               ),
               SizedBox(height: 10.h),
               Text(
-                _terms(state, trial, product),
+                _terms(state, trial, plan),
                 textAlign: TextAlign.center,
                 style: GoogleFonts.inter(
                   color: Colors.white38,
@@ -572,23 +572,21 @@ class _Footer extends StatelessWidget {
   /// Both stores require these next to the button rather than behind a link,
   /// and it is also the sentence that prevents most refund requests — a charge
   /// nobody was expecting is the one that gets disputed.
-  String _terms(
-    PurchaseState state,
-    TrialOffer? trial,
-    ProductDetails? product,
-  ) {
-    if (product == null) return '';
+  String _terms(PurchaseState state, TrialOffer? trial, PremiumPlan? plan) {
+    if (plan == null) return '';
 
     final String store = Platform.isIOS
         ? 'premium_store_apple'.tr()
         : 'premium_store_google'.tr();
 
-    final String price = PremiumProducts.isYearly(product.id)
+    // The recurring price, not the trial's. What the terms have to quote is
+    // what will be charged on day eight.
+    final String price = PremiumProducts.isYearly(plan.id)
         ? 'premium_per_year'.tr(
-            namedArgs: <String, String>{'price': product.price},
+            namedArgs: <String, String>{'price': plan.priceLabel},
           )
         : 'premium_per_month'.tr(
-            namedArgs: <String, String>{'price': product.price},
+            namedArgs: <String, String>{'price': plan.priceLabel},
           );
 
     if (trial == null) {
