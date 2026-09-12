@@ -65,20 +65,17 @@ the question review cares about most:
 `test/privacy_manifest_test.dart` guards the manifest. Only a person can guard
 App Store Connect.
 
-## 2b. Create the two rewarded ad units — or that feature is invisible
+## 2b. Set a frequency cap on the interstitial unit
 
-The banner and interstitial units exist. The **rewarded** units do not, and
-they are what two features run on: turning ads off for a day, and bringing back
-a broken streak.
+All six ad units now exist and are in `AdsConfig`. One thing is still worth
+doing in the AdMob console: a frequency cap on each interstitial unit. The
+app's own limits in `AdPolicy` are stricter, but the console cap is the one
+that still applies if a future call site forgets to go through `AdMoment`.
 
-Neither breaks without them — `AdsConfig.rewardedUnit` is null, and both offers
-are absent rather than disabled — but neither exists either. AdMob console → the
-Bulkr app, each platform → Ad units → Add ad unit → Rewarded, then put the ids
-in `lib/core/config/ads_config.dart`. See `docs/ADMOB.md`.
-
-While in the console: set a frequency cap on the interstitial unit. The app's
-own limits in `AdPolicy` are stricter, but the console cap is the one that
-still applies if a future call site forgets to go through `AdMoment`.
+Note that the rewarded units are **rewarded interstitial**, a different format
+from plain rewarded. The code matches them. If either is ever recreated as the
+other format, the ad stops filling and the error says only "no fill" — see
+`docs/ADMOB.md`.
 
 ## 3. This release cannot be a Shorebird patch
 

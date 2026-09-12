@@ -50,33 +50,60 @@ class AdsConfig {
   static const String _iosInterstitial =
       'ca-app-pub-6396760454728825/6249386527';
 
-  /// Rewarded units do not exist yet — they have to be created in the AdMob
-  /// console, one per platform, before anything can serve.
+  /// The rewarded units are **rewarded interstitial**, which is a different
+  /// AdMob format from plain "rewarded" and is loaded through a different
+  /// class — `RewardedInterstitialAd`, not `RewardedAd`. An id of one format
+  /// requested as the other does not fill, and the error it produces is a
+  /// bare "no fill", which looks exactly like a unit nobody has bought
+  /// inventory for.
   ///
-  /// Empty rather than absent so the app compiles and every rewarded offer
-  /// hides itself ([hasRewarded]) instead of requesting an ad against an ID
-  /// that is not there. A `--dart-define` is accepted so a staging build can
-  /// point somewhere else without a code change; the default is what ships,
-  /// deliberately, because Shorebird compares dart-defines between a release
-  /// and its patches and a flag present on one build and missing on another
-  /// reads as a diff and the patch is refused.
+  /// The format also carries a policy requirement: the user has to be told an
+  /// ad is coming and be able to decline. Bulkr's two offers are buttons
+  /// saying "watch a short video" that nobody taps by accident, which is that
+  /// announcement — and it is why the copy on them says "video" rather than
+  /// something coyer.
+  ///
+  /// A `--dart-define` is accepted so a staging build can point elsewhere
+  /// without a code change, but the literal is what ships: Shorebird compares
+  /// dart-defines between a release and its patches, and a flag present on one
+  /// build and missing on another reads as a diff and the patch is refused.
   static const String _androidRewarded = String.fromEnvironment(
     'REWARDED_AD_UNIT_ANDROID',
+    defaultValue: 'ca-app-pub-6396760454728825/5821388995',
   );
   static const String _iosRewarded = String.fromEnvironment(
     'REWARDED_AD_UNIT_IOS',
+    defaultValue: 'ca-app-pub-6396760454728825/6498824654',
   );
 
   // --- Google's public test units ----------------------------------------
   //
-  // The same on both platforms, from
-  // https://developers.google.com/admob/android/test-ads — safe to click, and
-  // the only units any non-release build ever requests.
+  // From https://developers.google.com/admob/android/test-ads and its iOS
+  // counterpart. Safe to click, and the only units any non-release build ever
+  // requests.
+  //
+  // **They are per-platform, like the real ones.** This is easy to get wrong
+  // and was wrong here: an Android test unit requested on iOS does not fill,
+  // and a debug build with no ads in it looks precisely like an integration
+  // that does not work. Anything that looks up a unit goes through
+  // [_perPlatform], test units included.
 
-  static const String testBanner = 'ca-app-pub-3940256099942544/6300978111';
-  static const String testInterstitial =
-      'ca-app-pub-3940256099942544/1033173712';
-  static const String testRewarded = 'ca-app-pub-3940256099942544/5224354917';
+  static String get testBanner => _perPlatform(
+    'ca-app-pub-3940256099942544/6300978111',
+    'ca-app-pub-3940256099942544/2934735716',
+  );
+
+  static String get testInterstitial => _perPlatform(
+    'ca-app-pub-3940256099942544/1033173712',
+    'ca-app-pub-3940256099942544/4411468910',
+  );
+
+  /// Rewarded **interstitial**, matching the real units above. Google's plain
+  /// rewarded test units are different ids again.
+  static String get testRewarded => _perPlatform(
+    'ca-app-pub-3940256099942544/5354046379',
+    'ca-app-pub-3940256099942544/6978759866',
+  );
 
   static String get bannerUnit =>
       kReleaseMode ? _perPlatform(_androidBanner, _iosBanner) : testBanner;
@@ -87,10 +114,11 @@ class AdsConfig {
 
   /// The rewarded unit, or null when this build has none.
   ///
-  /// Null is a real answer rather than an error: the units are not created
-  /// yet, and a rewarded *offer* — "watch an ad to restore your streak" — that
-  /// cannot be filled must not be on screen at all. Offering something and
-  /// then failing to deliver it is worse than never offering it.
+  /// Null is a real answer rather than an error. A rewarded *offer* — "watch
+  /// an ad to restore your streak" — that cannot be filled must not be on
+  /// screen at all: offering something and then failing to deliver it is
+  /// worse than never offering it. It stays null on desktop, and would again
+  /// if the ids below were ever blanked out.
   static String? get rewardedUnit {
     if (!isSupported) return null;
     if (!kReleaseMode) return testRewarded;

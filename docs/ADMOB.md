@@ -1,12 +1,8 @@
 # AdMob
 
-Integrated. `google_mobile_ads` is a dependency, both app IDs are in the native
-manifests, a banner runs in the feed and interstitials fire at two seams.
-
-**One thing is still missing: the rewarded ad units do not exist.** They have
-to be created in the AdMob console — one per platform — and until they do,
-`AdsConfig.rewardedUnit` is null and every rewarded offer hides itself rather
-than failing in front of the user. See "What is left" at the bottom.
+Integrated, and all six ad units exist. `google_mobile_ads` is a dependency,
+both app IDs are in the native manifests, a banner runs in the feed,
+interstitials fire at two seams, and two rewarded offers pay out.
 
 This file is the record of the IDs, so they are not sitting in a chat log, and
 of the decisions behind where the ads go.
@@ -20,6 +16,7 @@ of the decisions behind where the ads go.
 | App ID | `ca-app-pub-6396760454728825~3257970685` |
 | Ad unit — feed banner | `ca-app-pub-6396760454728825/5069745808` |
 | Ad unit — interstitial | `ca-app-pub-6396760454728825/1130500796` |
+| Ad unit — rewarded interstitial | `ca-app-pub-6396760454728825/5821388995` |
 
 The separator tells them apart: an app ID uses `~`, an ad unit uses `/`.
 
@@ -34,6 +31,7 @@ the AdMob console, not the obscurity of these strings.
 | App ID | `ca-app-pub-6396760454728825~3261840114` |
 | Ad unit — feed banner | `ca-app-pub-6396760454728825/2985286754` |
 | Ad unit — interstitial | `ca-app-pub-6396760454728825/6249386527` |
+| Ad unit — rewarded interstitial | `ca-app-pub-6396760454728825/6498824654` |
 
 ### The two sets are not interchangeable
 
@@ -100,11 +98,24 @@ The rules that decide whether anything actually shows:
 The counters are persisted, and are deliberately **not** keyed by account or
 cleared on sign-out — a cap you can clear by signing out is not a cap.
 
-### Rewarded — a day without ads
+### Rewarded interstitial — a day without ads, and a rescued streak
 
-Offered in the account sheet: watch a video, no ads for 24 hours. The window
+Two offers, both explicit buttons: "turn off ads for a day" in the account
+sheet, and "bring it back" on a streak that ended yesterday. The ad-free window
 extends from *now* rather than from any existing expiry, so a second video an
 hour in buys 24 hours and not 47.
+
+**The format is rewarded *interstitial*, not plain rewarded**, because that is
+what the units are — and the two are not interchangeable. They load through
+different classes (`RewardedInterstitialAd` vs `RewardedAd`), and an id of one
+format requested as the other does not fill. The error it produces is a bare
+"no fill", which is indistinguishable from a unit nobody has bought inventory
+for, so this is a mistake that hides for weeks.
+
+The format also carries a policy requirement: the user must be told an ad is
+coming and be able to decline. Both offers are buttons saying "watch a short
+video" that nobody taps by accident, which is that announcement — and it is
+why the copy says "video" rather than something coyer.
 
 The reward is granted only when AdMob reports the video was finished, and the
 grant happens before anything else can fail. An app that takes thirty seconds
@@ -155,31 +166,18 @@ Kept because the reasoning is the part that is easy to lose:
    advertising, and adds coarse location and advertising data. Guarded by
    `privacy_manifest_test.dart`.
 
-6. **Test units off `kReleaseMode`.** `ad_policy_test.dart` asserts that a
-   non-release build can only ever return one of Google's public test units.
-   Google bans accounts that click their own live ads, and the manual version
-   of this switch is forgotten exactly once.
+6. **Test units off `kReleaseMode`.** Google bans accounts that click their
+   own live ads, and the manual version of this switch is forgotten exactly
+   once.
+
+   Google's test units are **per-platform too**, which is easy to miss and was
+   wrong here at first: the Android test ids were used for both, so a debug
+   build on iOS would have had no ads in it at all — indistinguishable from an
+   integration that does not work. `ad_policy_test.dart` now reads this file's
+   source and fails if any lookup hands the same id to both platforms, or if a
+   unit id appears twice anywhere in it.
 
 ## What is left
-
-### Create the two rewarded ad units — the only blocker
-
-AdMob console → the Bulkr app (each platform) → Ad units → Add ad unit →
-**Rewarded**. Then put each id in `AdsConfig`:
-
-```dart
-// lib/core/config/ads_config.dart
-static const String _androidRewarded = String.fromEnvironment(
-  'REWARDED_AD_UNIT_ANDROID',
-);
-```
-
-Either replace the `String.fromEnvironment` with the literal id — which is
-what the banner and interstitial units do, and what Shorebird prefers, since
-it compares dart-defines between a release and its patches — or pass
-`--dart-define` consistently in both `codemagic.yaml` workflows.
-
-Until then the offer is simply not shown. Nothing breaks.
 
 ### Set the frequency cap in the console as well
 

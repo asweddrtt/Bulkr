@@ -261,6 +261,17 @@ class AdsService extends ChangeNotifier {
   /// on true even if something goes wrong afterwards: an app that takes the
   /// thirty seconds and then does not deliver has taught the user never to
   /// accept an offer again, which costs more than the ad earned.
+  ///
+  /// The format is **rewarded interstitial**, because that is what the ad
+  /// units are — see [AdsConfig]. It loads through a different class from
+  /// plain rewarded, and an id of one format requested as the other simply
+  /// does not fill. Everything the user sees is the same: they opt in, watch,
+  /// and earn.
+  ///
+  /// Loaded on demand rather than held, unlike the interstitial. Somebody who
+  /// has decided to watch an ad will wait two seconds for it, and pre-loading
+  /// one for every user against an offer most of them never tap is a request
+  /// that is nearly always wasted.
   Future<bool> showRewarded({required String placement}) async {
     final String? unit = AdsConfig.rewardedUnit;
     if (unit == null || !_ready) return false;
@@ -268,21 +279,21 @@ class AdsService extends ChangeNotifier {
     final Completer<bool> earned = Completer<bool>();
 
     try {
-      await RewardedAd.load(
+      await RewardedInterstitialAd.load(
         adUnitId: unit,
         request: const AdRequest(),
-        rewardedAdLoadCallback: RewardedAdLoadCallback(
-          onAdLoaded: (RewardedAd ad) {
+        rewardedInterstitialAdLoadCallback: RewardedInterstitialAdLoadCallback(
+          onAdLoaded: (RewardedInterstitialAd ad) {
             ad.fullScreenContentCallback =
-                FullScreenContentCallback<RewardedAd>(
-                  onAdDismissedFullScreenContent: (RewardedAd ad) {
+                FullScreenContentCallback<RewardedInterstitialAd>(
+                  onAdDismissedFullScreenContent: (RewardedInterstitialAd ad) {
                     ad.dispose();
                     // Dismissed without the reward callback having fired means
                     // they closed it early. Not a failure — a choice.
                     if (!earned.isCompleted) earned.complete(false);
                   },
                   onAdFailedToShowFullScreenContent:
-                      (RewardedAd ad, AdError e) {
+                      (RewardedInterstitialAd ad, AdError e) {
                         ad.dispose();
                         if (!earned.isCompleted) earned.complete(false);
                       },

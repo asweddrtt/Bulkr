@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:bulkr/core/ad_policy.dart';
 import 'package:bulkr/core/config/ads_config.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -272,31 +274,83 @@ void main() {
     });
   });
 
-  group('which ad units a non-release build uses', () {
-    test('never a real one', () {
-      // Google bans accounts that click their own live ads, and during
-      // development somebody always does. This is the assertion that keeps the
-      // switch automatic rather than a string somebody edits back and forth
-      // and forgets exactly once.
-      expect(AdsConfig.bannerUnit, AdsConfig.testBanner);
-      expect(AdsConfig.interstitialUnit, AdsConfig.testInterstitial);
-
-      for (final String unit in <String>[
-        AdsConfig.bannerUnit,
-        AdsConfig.interstitialUnit,
-      ]) {
-        expect(unit, startsWith('ca-app-pub-3940256099942544/'),
-            reason: 'that is not one of Google\'s public test units');
-      }
-    });
-
-    test('desktop has no ad units at all', () {
-      // Where this project is developed. Everything ad-shaped checks this
-      // first, so a development build is an app with no ads rather than an app
-      // that throws on its first frame.
+  group('ad units', () {
+    test('desktop has none, and says so rather than guessing', () {
+      // Where this project is developed. Everything ad-shaped checks
+      // `isSupported` first, so a development build is an app with no ads —
+      // and asking for a unit anyway throws here, in the line that asked,
+      // rather than returning something plausible that would fail on a
+      // tester's phone.
       expect(AdsConfig.isSupported, isFalse);
       expect(AdsConfig.rewardedUnit, isNull);
       expect(AdsConfig.hasRewarded, isFalse);
+
+      expect(() => AdsConfig.bannerUnit, throwsUnsupportedError);
+      expect(() => AdsConfig.interstitialUnit, throwsUnsupportedError);
+    });
+
+    group('every lookup is per-platform', () {
+      // The bug this exists for: Google's *test* units are per-platform too,
+      // and this file originally used the Android ones for both. An Android
+      // test unit requested on iOS does not fill, so a debug build on iOS
+      // would have had no ads in it at all — which looks exactly like an
+      // integration that does not work, and is the kind of thing somebody
+      // spends a day on.
+      //
+      // The real units have the same shape and a worse failure: the wrong app
+      // ID crashes on launch.
+      late final String source =
+          File('lib/core/config/ads_config.dart').readAsStringSync();
+
+      test('no _perPlatform call passes the same id twice', () {
+        final Iterable<RegExpMatch> calls = RegExp(
+          r"_perPlatform\(\s*'([^']+)'\s*,\s*'([^']+)'\s*,?\s*\)",
+          dotAll: true,
+        ).allMatches(source);
+
+        expect(calls, isNotEmpty,
+            reason: 'the scan found no unit lookups at all');
+
+        for (final RegExpMatch call in calls) {
+          expect(
+            call.group(1),
+            isNot(call.group(2)),
+            reason: 'the same ad unit is used for both platforms — one of '
+                'them is wrong, and it will simply never fill',
+          );
+        }
+      });
+
+      test('no ad unit id appears twice anywhere in the file', () {
+        // Catches the same mistake made through the constants rather than
+        // inline, which is how the real units are written.
+        final List<String> units = RegExp(r"'(ca-app-pub-[\d]+/[\d]+)'")
+            .allMatches(source)
+            .map((RegExpMatch match) => match.group(1)!)
+            .toList();
+
+        expect(units, isNotEmpty);
+        expect(units.toSet(), hasLength(units.length),
+            reason: 'an ad unit id is used in two places, which for a '
+                'per-platform lookup means one platform has the other\'s');
+      });
+
+      test('test units and real units never overlap', () {
+        // Google's test publisher id is 3940256099942544. A real unit reached
+        // in a debug build is how an AdMob account gets suspended for clicking
+        // its own ads; a test unit reached in a release build is a day of
+        // revenue thrown away.
+        final Iterable<String> testUnits = RegExp(
+          r"'(ca-app-pub-3940256099942544/[\d]+)'",
+        ).allMatches(source).map((RegExpMatch match) => match.group(1)!);
+
+        expect(testUnits, hasLength(6),
+            reason: 'three formats, two platforms');
+
+        for (final String unit in testUnits) {
+          expect(unit, startsWith('ca-app-pub-3940256099942544/'));
+        }
+      });
     });
   });
 }
