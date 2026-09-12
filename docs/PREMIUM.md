@@ -1,8 +1,33 @@
 # Free and premium
 
-Premium is **$7/month**. This file is the tour behind that number: everything
-the app currently does, which side of the line each thing could sit on, and
-three ways of drawing the line — because the split is a pricing decision, not
+**Decided:** Option A below — free keeps every feature and screen, and cannot
+accumulate. **$6.99/month or $39.99/year**, yearly shown first.
+
+| | Free | Premium |
+|---|---|---|
+| Logging, food search, tracker, feed, DMs | unlimited | unlimited |
+| Saved meal library | 20 | unlimited |
+| Tracker history | last 7 days | all of it |
+| Weekly recap | current week | every week |
+| Active challenges | 1 | unlimited |
+| Insights, trends, projections | all of them | all of them |
+| Ads | banner + interstitial | none |
+
+Store products, to be created in App Store Connect and Play Console:
+
+| Product id | Price | Notes |
+|---|---|---|
+| `bulkr_premium_monthly` | $6.99 / month | exists mostly to make the yearly look cheap |
+| `bulkr_premium_yearly` | $39.99 / year | ~$3.33/mo, 52% off. Show first, default to it. |
+
+No free trial at launch. It lifts conversion, and it also lands the first
+charge a week after the excitement wears off, which is where refund requests
+come from — worth revisiting once there are enough subscribers to measure
+churn against.
+
+The rest of this file is the tour behind those numbers: everything the app
+does, which side of the line each thing could sit on, and the two splits that
+were considered and not taken — because the split is a pricing decision, not
 an engineering one, and it is the part that is expensive to change later.
 
 The mechanism is already built and is deliberately separate from the policy:
@@ -67,7 +92,7 @@ ransom.
 
 ## Three ways to draw the line
 
-### Option A — Accumulation only (recommended)
+### Option A — Accumulation only — **chosen**
 
 Free keeps every feature and every screen. What it cannot do is *pile up*.
 
@@ -93,7 +118,7 @@ there is no second set of screens to keep working.
 anything. That is what `plan_limit_reached` in analytics is for — if nobody
 fires it, the numbers are wrong and they are one line each to change.
 
-### Option B — Accumulation plus depth ("less analytics")
+### Option B — Accumulation plus depth ("less analytics") — not taken
 
 Option A, and the analysis screens are thinner on free.
 
@@ -115,7 +140,7 @@ not. If you take this, lock the *projection* and the *chart history*, not the
 advice: advice is what makes the app feel like it is paying attention, and a
 user who feels ignored on day two never reaches day ninety.
 
-### Option C — Photos and social, too
+### Option C — Photos and social, too — not taken
 
 Option B, plus: free gets 1 photo per post, premium 4. Free gets 3 groups,
 premium unlimited.
@@ -130,37 +155,26 @@ app is large enough that image spend is visible on a bill.**
 
 ---
 
-## Recommendation
+## Why A, and why this price
 
-**Option A**, with two of Option B's lines added only if conversion is flat
-after a month: lock the *projection* and *chart history*, leave the insights
-alone.
+The pitch has to be a sentence anyone can repeat: **"the app, without
+ceilings, without ads."** "The app, but with more analytics" is not that, and
+it invites a comparison with free apps that have plenty of analytics.
 
-At $7/month the pitch has to be "the app, without ceilings, without ads" —
-which is a sentence anyone can repeat. "The app, but with more analytics" is
-not, and it invites a comparison with free apps that have plenty.
+If conversion is flat after a month, the first thing to try is two of Option
+B's lines — lock the *projection* and the *chart history*, leave the insights
+alone — rather than tightening A's numbers. Advice is what makes the app feel
+like it is paying attention; a user who feels ignored on day two never reaches
+day ninety.
 
-### On the price itself
+On the price: this is towards the top of the category per month (MyFitnessPal
+Premium ~$20/mo or ~$80/yr, Cronometer Gold ~$50/yr, MacroFactor ~$12/mo or
+~$72/yr) and below all of them per year, which is where this category actually
+converts. That is the trade being made deliberately.
 
-$7/month is towards the top of this category (MyFitnessPal Premium is ~$20/mo
-or ~$80/yr; Cronometer Gold ~$50/yr; MacroFactor ~$12/mo or ~$72/yr). That is
-fine — it is not a reason to lower it — but it means **the yearly price is the
-one that will actually sell.** Suggested:
-
-- `bulkr_premium_monthly` — **$6.99/month**
-- `bulkr_premium_yearly` — **$39.99/year** (~$3.33/mo, 52% off)
-
-The yearly is the one to show first and the one to default to. Monthly exists
-so the yearly has something to look cheap against, and so somebody can try a
-month.
-
-Also worth deciding before the store listing goes in:
-
-- **A free trial?** 7 days on the yearly is standard and lifts conversion a
-  lot. It also means the first charge lands a week after the excitement, which
-  is where the refund requests come from. Recommended anyway.
-- **Introductory price?** Both stores support it. Better used later, on a
-  win-back, than at launch when there is nobody to win back.
+An **introductory price** is worth keeping in reserve. Both stores support it,
+and it is better spent later on a win-back than at launch, when there is
+nobody to win back.
 
 ---
 
