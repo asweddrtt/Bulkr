@@ -58,9 +58,14 @@ void main() {
     });
 
     test('the limit is a ceiling, not an off-by-one', () {
-      // 19 saved means the 20th may be saved. 20 saved means it may not.
-      expect(PlanLimits.free.canSaveAnotherMeal(19), isTrue);
-      expect(PlanLimits.free.canSaveAnotherMeal(20), isFalse);
+      // One below the cap may still save; at the cap may not. Written
+      // against the constant rather than a literal, so changing the number is
+      // one edit and not three.
+      final int cap = PlanLimits.free.savedMeals!;
+
+      expect(PlanLimits.free.canSaveAnotherMeal(cap - 1), isTrue);
+      expect(PlanLimits.free.canSaveAnotherMeal(cap), isFalse);
+      expect(PlanLimits.free.canSaveAnotherMeal(cap + 10), isFalse);
     });
 
     test('being over the limit reads as zero remaining, never negative', () {

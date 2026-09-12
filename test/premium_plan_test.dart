@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:bulkr/core/config/premium_products.dart';
 import 'package:bulkr/models/premium_plan.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -92,6 +94,60 @@ void main() {
             .trial,
         isNull,
       );
+    });
+  });
+
+  group('the debug-only preview', () {
+    // It exists so the paywall can be photographed for App Store Connect
+    // before the products exist — Apple wants a review screenshot of the
+    // purchase screen attached to a subscription it has not yet let you
+    // create. The screen has to be the real one; only the prices are stood in.
+    test('offers both plans, with the trial on the yearly', () {
+      final List<PremiumPlan> samples = PremiumPlan.samples();
+
+      expect(samples.map((PremiumPlan p) => p.id), <String>[
+        PremiumProducts.yearly,
+        PremiumProducts.monthly,
+      ]);
+      expect(samples.first.trial?.days, 7);
+      expect(samples.last.trial, isNull);
+      for (final PremiumPlan plan in samples) {
+        expect(plan.priceLabel, isNotEmpty);
+      }
+    });
+
+    test('is unreachable in a release build', () {
+      // The worst bug this file could have is a paywall quoting invented
+      // prices to a real buyer. The guard is one `kDebugMode` at one call
+      // site, so the guard itself is what gets checked.
+      final List<String> sources = Directory('lib')
+          .listSync(recursive: true)
+          .whereType<File>()
+          .where((File file) => file.path.endsWith('.dart'))
+          .map((File file) => file.readAsStringSync())
+          .toList();
+
+      final Iterable<String> callers = sources.where(
+        (String source) =>
+            source.contains('PremiumPlan.samples()') &&
+            !source.contains('static List<PremiumPlan> samples()'),
+      );
+
+      expect(callers, hasLength(1),
+          reason: 'the preview should be built in exactly one place');
+
+      final String caller = callers.single;
+      final int call = caller.indexOf('PremiumPlan.samples()');
+      final String before = caller.substring(0, call);
+
+      // The guard opens shortly above the call and has not been closed.
+      final int guard = before.lastIndexOf('kDebugMode');
+      expect(guard, isNot(-1),
+          reason: 'PremiumPlan.samples() is no longer behind kDebugMode — a '
+              'release build would show invented prices to a real buyer');
+      expect(before.substring(guard).split('}').length - 1, 0,
+          reason: 'the kDebugMode block closes before the call, so the call '
+              'is not actually inside it');
     });
   });
 

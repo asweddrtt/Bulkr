@@ -154,7 +154,7 @@ grant execute on function public.is_premium(uuid) to authenticated, service_role
 -- without a join, and IMMUTABLE so the planner folds them to a constant.
 
 create or replace function public.free_saved_meal_limit()
-returns int language sql immutable as $$ select 20 $$;
+returns int language sql immutable as $$ select 5 $$;
 
 create or replace function public.free_history_days()
 returns int language sql immutable as $$ select 7 $$;

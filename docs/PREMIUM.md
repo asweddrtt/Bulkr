@@ -6,7 +6,7 @@ accumulate. **$6.99/month or $39.99/year**, yearly shown first.
 | | Free | Premium |
 |---|---|---|
 | Logging, food search, tracker, feed, DMs | unlimited | unlimited |
-| Saved meal library | 20 | unlimited |
+| Saved meal library | 5 | unlimited |
 | Tracker history | last 7 days | all of it |
 | Weekly recap | current week | every week |
 | Active challenges | 1 | unlimited |
@@ -116,7 +116,7 @@ Free keeps every feature and every screen. What it cannot do is *pile up*.
 | | Free | Premium |
 |---|---|---|
 | Logging | unlimited | unlimited |
-| Saved meal library | **20** | unlimited |
+| Saved meal library | **5** | unlimited |
 | Tracker history | **last 7 days** | all of it |
 | Weekly recap | current week | every week |
 | Active challenges | **1** | unlimited |
@@ -131,9 +131,17 @@ is the pattern that makes people uninstall rather than upgrade. And it is the
 cheapest to maintain: premium is the same app with the ceilings removed, so
 there is no second set of screens to keep working.
 
-**Risk.** Somebody who never saves meals and never scrolls back may never hit
-anything. That is what `plan_limit_reached` in analytics is for — if nobody
-fires it, the numbers are wrong and they are one line each to change.
+**Risk.** The meal cap was tightened from twenty to five, which is the most
+aggressive number in the table: somebody who repeats meals — most people, and
+nearly everyone bulking — reaches it in week one rather than month one. That
+is the point and it is also the danger, because a free tier that walls up
+immediately is a trial with extra steps, and it loses the user who would have
+paid in month three.
+
+Watch `plan_limit_reached` against `upgrade_completed`. If people hit five and
+leave rather than pay, the cap is converting nobody and costing users; if
+nobody hits anything at all, the numbers are too generous. Both are one line
+each to change.
 
 ### Option B — Accumulation plus depth ("less analytics") — not taken
 
@@ -214,7 +222,7 @@ spent later on a win-back than at launch, when there is nobody to win back.
   anyway — which is the pattern guideline 3.1.2 exists to stop.
 - **The limits** — `premium_limits.sql`. The meal library and the challenge
   cap are enforced by triggers raising their own SQLSTATE, so the app can say
-  "you have reached the 20 meals a free account keeps" rather than "you do not
+  "you have reached the 5 meals a free account keeps" rather than "you do not
   have permission". The history window is gated in the app only, and the
   header of that file says why: restricting reads of `daily_logs` would also
   cap every free account's streak at seven days, which is a worse bug than the

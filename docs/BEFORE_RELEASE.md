@@ -163,6 +163,39 @@ What to check on the first TestFlight build, in this order:
 Then watch `ad_failed` in analytics. Code 3 is "no fill" and is normal for a
 new unit; anything else in volume is a misconfigured unit.
 
+## 2c. The App Store Connect chicken-and-egg, and how to get the screenshot
+
+**"The store isn't reachable right now" is the paywall telling the truth.**
+StoreKit answers with an empty product list, and it will keep doing that until
+three things are true:
+
+1. The subscription exists in App Store Connect, in a subscription group, with
+   a price and at least one localisation.
+2. It is at least **Ready to Submit**. A subscription still marked *Missing
+   Metadata* does not resolve, in sandbox or anywhere else.
+3. The **Paid Applications agreement** is signed and active — Business →
+   Agreements, Tax, and Banking. This is the one that catches everybody: with
+   it unsigned, every product request comes back empty and nothing anywhere
+   says why.
+
+Then the catch: Apple wants a **review screenshot of the purchase screen**
+attached to the subscription before it will let you submit it — a screenshot
+of a paywall that cannot render until the subscription exists.
+
+There is no ordering that solves that, so the app solves it instead. **In a
+debug build**, a paywall that gets no products back renders with stand-in
+prices rather than the unavailable message. Not a mock-up drawn elsewhere: the
+same screen, the same copy, the same layout, with $39.99 / $6.99 and a
+seven-day trial filled in. Run a debug build, open Profile → account sheet →
+Bulkr Premium, and screenshot that.
+
+It is `kDebugMode`-only and `premium_plan_test.dart` fails if that guard is
+ever removed — a release paywall quoting invented prices to a real buyer is
+the worst version of this feature.
+
+Same applies on Play: products stay empty until a build is on a track, signed
+with the key Play expects, with the tester account opted in.
+
 ## 4d. Re-run `premium.sql` for the `product_id` column
 
 It was added after that file first shipped, so a project that already ran it

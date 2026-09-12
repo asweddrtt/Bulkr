@@ -23,6 +23,7 @@ class PurchaseState extends Equatable {
     this.selectedId,
     this.busy = false,
     this.pending = false,
+    this.preview = false,
     this.succeeded = false,
     this.failure,
   });
@@ -46,6 +47,12 @@ class PurchaseState extends Equatable {
   /// finished nor lost, and it can be hours, so the screen says so instead of
   /// spinning.
   final bool pending;
+
+  /// These plans came from [PremiumPlan.samples], not from a store.
+  ///
+  /// Debug builds only, so the paywall can be photographed before the products
+  /// exist — see that method. Nothing can be bought in this state.
+  final bool preview;
 
   /// Verified, written, and premium. The screen closes itself on this.
   final bool succeeded;
@@ -79,6 +86,7 @@ class PurchaseState extends Equatable {
     String? selectedId,
     bool? busy,
     bool? pending,
+    bool? preview,
     bool? succeeded,
     PurchaseFailure? failure,
     bool clearFailure = false,
@@ -89,6 +97,7 @@ class PurchaseState extends Equatable {
       selectedId: selectedId ?? this.selectedId,
       busy: busy ?? this.busy,
       pending: pending ?? this.pending,
+      preview: preview ?? this.preview,
       succeeded: succeeded ?? this.succeeded,
       failure: clearFailure ? null : (failure ?? this.failure),
     );
@@ -104,6 +113,7 @@ class PurchaseState extends Equatable {
     selectedId,
     busy,
     pending,
+    preview,
     succeeded,
     failure,
   ];

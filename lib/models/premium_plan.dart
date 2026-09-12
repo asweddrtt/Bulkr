@@ -3,6 +3,7 @@ import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:in_app_purchase_android/billing_client_wrappers.dart';
 import 'package:in_app_purchase_android/in_app_purchase_android.dart';
 
+import '../core/config/premium_products.dart';
 import '../core/trial_offer.dart';
 
 /// One row on the upgrade screen: a plan, its price, and its trial.
@@ -124,6 +125,55 @@ class PremiumPlan extends Equatable {
     // store's own label is better than an empty string on a button.
     return product.price;
   }
+
+
+  /// Plausible plans for a **debug build only**, so the paywall can be
+  /// photographed before the products exist.
+  ///
+  /// App Store Connect wants a review screenshot of the purchase screen
+  /// attached to each subscription *before* it will let you submit it — and
+  /// until the subscription exists and the Paid Applications agreement is
+  /// signed, StoreKit answers with nothing and the paywall correctly says the
+  /// store is unreachable. There is no order of operations that resolves
+  /// that; Apple simply expects a representative screenshot.
+  ///
+  /// So these exist to make the real screen renderable without a store behind
+  /// it. Not a mock-up drawn somewhere else: the same widgets, the same
+  /// layout, the same copy, with stand-in prices — which is what makes the
+  /// screenshot honest.
+  ///
+  /// **Never reachable in a release build.** The single call site is guarded
+  /// by `kDebugMode`, and `premium_plan_test.dart` reads the source and fails
+  /// if that guard is ever removed or a second call site appears. A paywall
+  /// showing invented prices to a real buyer is the worst bug this file could
+  /// have.
+  static List<PremiumPlan> samples() => <PremiumPlan>[
+    PremiumPlan(
+      id: PremiumProducts.yearly,
+      priceLabel: r'$39.99',
+      trial: const TrialOffer(days: 7),
+      purchase: ProductDetails(
+        id: PremiumProducts.yearly,
+        title: 'Bulkr Premium',
+        description: 'No ads, no limits',
+        price: r'$39.99',
+        rawPrice: 39.99,
+        currencyCode: 'USD',
+      ),
+    ),
+    PremiumPlan(
+      id: PremiumProducts.monthly,
+      priceLabel: r'$6.99',
+      purchase: ProductDetails(
+        id: PremiumProducts.monthly,
+        title: 'Bulkr Premium',
+        description: 'No ads, no limits',
+        price: r'$6.99',
+        rawPrice: 6.99,
+        currencyCode: 'USD',
+      ),
+    ),
+  ];
 
   @override
   List<Object?> get props => <Object?>[id, priceLabel, purchase.id, trial];

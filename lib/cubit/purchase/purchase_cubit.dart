@@ -48,6 +48,24 @@ class PurchaseCubit extends Cubit<PurchaseState> {
       // Either the store is unreachable, or the products have not been created
       // yet. The screen says so rather than showing a button that cannot work
       // — see `docs/PREMIUM.md` for the two ids that have to exist.
+      //
+      // Except in a debug build, where the screen is drawn with stand-in
+      // prices instead. That is not a lie to anybody: it exists so the paywall
+      // can be photographed for App Store Connect's review screenshot, which
+      // Apple wants *before* it will accept the subscription that would make
+      // this branch stop being taken. See [PremiumPlan.samples].
+      if (kDebugMode) {
+        emit(
+          state.copyWith(
+            status: PaywallStatus.ready,
+            preview: true,
+            plans: PremiumPlan.samples(),
+            selectedId: state.selectedId ?? PremiumProducts.preferred,
+          ),
+        );
+        return;
+      }
+
       emit(state.copyWith(status: PaywallStatus.unavailable));
       return;
     }
@@ -90,6 +108,11 @@ class PurchaseCubit extends Cubit<PurchaseState> {
   Future<void> buy() async {
     final PremiumPlan? plan = state.selected;
     if (plan == null || state.busy) return;
+
+    // Nothing behind these but a screenshot. Handing a made-up product to the
+    // billing flow would throw, and the point of the preview is a screen that
+    // looks exactly like the real one.
+    if (state.preview) return;
 
     emit(state.copyWith(busy: true, clearFailure: true));
 

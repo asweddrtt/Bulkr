@@ -48,13 +48,18 @@ class PlanLimits extends Equatable {
 
   /// What an account gets before paying.
   ///
-  /// Twenty saved meals is roughly a month of eating for someone who repeats
-  /// meals, which is most people — enough that the library is useful rather
-  /// than a teaser, and few enough that anybody building a real cookbook hits
-  /// it. Seven days of history is the weekly recap and nothing further back.
-  /// One challenge at a time is enough to be in the one your friends are in.
+  /// Five saved meals is a deliberate tightening from twenty, and it is the
+  /// most aggressive number here: somebody who repeats meals — which is most
+  /// people, and nearly everyone bulking — reaches it in their first week
+  /// rather than their first month. That is the point, and it is also the
+  /// risk. Watch `plan_limit_reached` against `upgrade_completed`: if people
+  /// hit this and leave instead of paying, the cap is converting nobody and
+  /// costing the users who would have paid in month three.
+  ///
+  /// Seven days of history is the weekly recap and nothing further back. One
+  /// challenge at a time is enough to be in the one your friends are in.
   static const PlanLimits free = PlanLimits(
-    savedMeals: 20,
+    savedMeals: 5,
     historyDays: 7,
     activeChallenges: 1,
     showsAds: true,
