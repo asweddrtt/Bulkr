@@ -232,6 +232,24 @@ class ProfileCubit extends Cubit<ProfileState> {
     return _write(() => _userRepository.applyPlan(plan: plan));
   }
 
+  /// Targets the user typed in themselves. Premium only — the database says
+  /// so, and `_write` surfaces the refusal like any other failure.
+  Future<void> setCustomTargets({
+    required int calories,
+    required int proteinG,
+    required int carbsG,
+    required int fatG,
+  }) {
+    return _write(
+      () => _userRepository.setCustomTargets(
+        calories: calories,
+        proteinG: proteinG,
+        carbsG: carbsG,
+        fatG: fatG,
+      ),
+    );
+  }
+
   /// One write path: flag saving, run it, reload on success, and surface a
   /// message on failure without tearing down what is already on screen.
   Future<void> _write(Future<void> Function() write) async {

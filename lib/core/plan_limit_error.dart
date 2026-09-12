@@ -30,7 +30,17 @@ enum PlanLimit {
   /// Not enforced in the database — see the header of `premium_limits.sql` for
   /// why restricting reads of `daily_logs` would cap every free account's
   /// streak at seven days. The app raises this one itself.
-  historyDays('history_days');
+  historyDays('history_days'),
+
+  /// Setting the four nutrition targets by hand rather than taking the
+  /// computed plan. Enforced by a trigger in `custom_targets.sql`, and
+  /// prompted for by the dashboard before the write is attempted.
+  ///
+  /// Not a *cap* like the others — it is a capability premium adds rather than
+  /// a ceiling free runs into — but it arrives through the same SQLSTATE and
+  /// needs the same sentence with the same way out, which is what this enum
+  /// is for.
+  customTargets('custom_targets');
 
   const PlanLimit(this.key);
 
@@ -71,6 +81,7 @@ String planLimitMessage(PlanLimit limit) {
       namedArgs: <String, String>{'count': '${PlanLimits.free.savedMeals}'},
     ),
     PlanLimit.activeChallenges => 'limit_active_challenges'.tr(),
+    PlanLimit.customTargets => 'limit_custom_targets'.tr(),
     PlanLimit.historyDays => 'limit_history_days'.tr(
       namedArgs: <String, String>{'days': '${PlanLimits.free.historyDays}'},
     ),

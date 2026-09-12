@@ -20,6 +20,11 @@ import '../widgets/animations/press_scale.dart';
 import '../widgets/insight_list.dart';
 import '../widgets/body_stats_sheet.dart';
 import '../widgets/recalculate_sheet.dart';
+import '../cubit/entitlement/entitlement_cubit.dart';
+import '../core/plan_limit_error.dart';
+import '../widgets/sheet_action_row.dart';
+import '../widgets/plan_limit_notice.dart';
+import '../widgets/custom_targets_sheet.dart';
 import '../widgets/weight_chart.dart';
 import '../widgets/wheel_picker_sheet.dart';
 
@@ -100,6 +105,7 @@ class DashboardScreen extends StatelessWidget {
                 onEditTarget: (kg) =>
                     context.read<ProfileCubit>().updateTargetWeight(kg),
                 onRecalculate: () => _openRecalculateSheet(context),
+                onEditTargets: () => _editTargets(context),
                 onEditBodyStats: () => _openBodyStatsSheet(context),
               );
           }
@@ -134,6 +140,15 @@ class DashboardScreen extends StatelessWidget {
       return;
     }
 
+    // Recalculating replaces the four targets. When those were set by hand,
+    // that is somebody's work being thrown away, so it is asked about once —
+    // and only then, because the question is meaningless for a plan that was
+    // computed in the first place.
+    if (profile.targetsAreCustom) {
+      final bool replace = await _confirmReplacingTargets(context);
+      if (!replace || !context.mounted) return;
+    }
+
     final NutritionPlan? plan = await RecalculateSheet.show(
       context,
       initialWeeklyGainKg: cubit.suggestedWeeklyGainKg,
@@ -145,6 +160,94 @@ class DashboardScreen extends StatelessWidget {
     );
 
     if (plan != null) await cubit.applyPlan(plan);
+  }
+
+  /// Asked once, before a recalculation overwrites numbers somebody chose.
+  ///
+  /// A real question with two real answers, not a warning with an OK button:
+  /// "Keep mine" is the default-looking option because it is the one that
+  /// loses nothing.
+  static Future<bool> _confirmReplacingTargets(BuildContext context) async {
+    final bool? replace = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (BuildContext sheetContext) => SheetShell(
+        title: 'targets_recalc_title'.tr(),
+        children: <Widget>[
+          Text(
+            'targets_recalc_body'.tr(),
+            style: GoogleFonts.inter(
+              color: Colors.white54,
+              fontSize: 11.sp,
+              height: 1.5,
+            ),
+          ),
+          SizedBox(height: 14.h),
+          SheetActionRow(
+            icon: Icons.lock_outline,
+            label: 'targets_recalc_keep'.tr(),
+            onTap: () => Navigator.of(sheetContext).pop(false),
+          ),
+          SizedBox(height: 10.h),
+          SheetActionRow(
+            icon: Icons.refresh,
+            label: 'targets_recalc_confirm'.tr(),
+            isDestructive: true,
+            onTap: () => Navigator.of(sheetContext).pop(true),
+          ),
+        ],
+      ),
+    );
+
+    return replace == true;
+  }
+
+  /// Setting the four numbers by hand. Premium only.
+  ///
+  /// Free accounts are sent to the paywall rather than into a sheet whose save
+  /// the database would refuse — the refusal is the real gate, this is the
+  /// polite version of it.
+  static Future<void> _editTargets(BuildContext context) async {
+    final ProfileCubit cubit = context.read<ProfileCubit>();
+    final UserProfile? profile = cubit.state.profile;
+    if (profile == null) return;
+
+    if (!context.read<EntitlementCubit>().state.isPremium) {
+      PlanLimitNotice.show(
+        context,
+        PlanLimit.customTargets,
+        source: 'custom_targets',
+      );
+      return;
+    }
+
+    // Taken before the sheet, not after: `context` may be gone by the time it
+    // closes, and a messenger resolved from a dead context throws.
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+
+    final CustomTargets? targets =
+        await CustomTargetsSheet.show(context, profile);
+    if (targets == null) return;
+
+    await cubit.setCustomTargets(
+      calories: targets.calories,
+      proteinG: targets.proteinG,
+      carbsG: targets.carbsG,
+      fatG: targets.fatG,
+    );
+
+    // Said out loud. The sheet closes either way, and four numbers changing
+    // behind it on a card the user may not be looking at is not confirmation
+    // that anything happened.
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        backgroundColor: const Color(0xFF2A2A2A),
+        content: Text(
+          'targets_saved'.tr(),
+          style: GoogleFonts.inter(color: Colors.white, fontSize: 12.sp),
+        ),
+      ));
   }
 
   /// Corrects the biometrics, then offers to move the target that follows from
@@ -206,6 +309,7 @@ class _ProfileView extends StatelessWidget {
     required this.onLogWeight,
     required this.onEditTarget,
     required this.onRecalculate,
+    required this.onEditTargets,
     required this.onEditBodyStats,
   });
 
@@ -233,6 +337,10 @@ class _ProfileView extends StatelessWidget {
   final ValueChanged<double> onLogWeight;
   final ValueChanged<double> onEditTarget;
   final Future<void> Function() onRecalculate;
+
+  /// Opens the sheet that sets the four targets by hand. Premium only;
+  /// a free account is sent to the paywall instead.
+  final Future<void> Function() onEditTargets;
 
   bool get _isMetric => profile.units.isMetric;
 
@@ -1166,14 +1274,68 @@ class _ProfileView extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 8.h),
-            child: Text(
-              'macros_title'.tr().toUpperCase(),
-              style: GoogleFonts.anton(
-                color: Colors.white,
-                fontSize: 14.sp,
-                letterSpacing: 1.5,
-              ),
+            padding: EdgeInsets.fromLTRB(16.w, 16.h, 8.w, 8.h),
+            child: Row(
+              children: [
+                // Flexible, because the title, the badge and the action have
+                // to share 327 logical pixels on a small phone and the title
+                // is the one that can afford to lose a character.
+                Flexible(
+                  child: Text(
+                    'macros_title'.tr().toUpperCase(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.anton(
+                      color: Colors.white,
+                      fontSize: 14.sp,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
+                ),
+                // Says whose numbers these are. Without it, somebody who set
+                // their own has no way to tell them apart from a computed plan
+                // that happens to look similar.
+                if (profile.targetsAreCustom) ...[
+                  SizedBox(width: 8.w),
+                  Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 6.w,
+                      vertical: 2.h,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryNeon.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(4.r),
+                    ),
+                    child: Text(
+                      'targets_custom_badge'.tr().toUpperCase(),
+                      style: GoogleFonts.inter(
+                        color: AppColors.primaryNeon,
+                        fontSize: 8.sp,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
+                ],
+                SizedBox(width: 8.w),
+                TextButton(
+                  onPressed: isSaving ? null : () => onEditTargets(),
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.symmetric(horizontal: 8.w),
+                    minimumSize: Size(0, 32.h),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: Text(
+                    'targets_edit'.tr(),
+                    maxLines: 1,
+                    style: GoogleFonts.inter(
+                      color: AppColors.primaryNeon,
+                      fontSize: 10.sp,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
           _buildMacroRow(

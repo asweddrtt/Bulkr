@@ -477,6 +477,11 @@ class UserRepository {
   }
 
   /// Writes a freshly calculated plan over the stored targets.
+  ///
+  /// Clears `targets_are_custom`, because that is exactly what this is: the
+  /// computed plan taking over again. The screen asks first when there were
+  /// custom numbers to lose — see the dashboard's recalculate flow — so by the
+  /// time this runs the answer has been given.
   Future<void> applyPlan({required NutritionPlan plan}) async {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) return;
@@ -488,6 +493,38 @@ class UserRepository {
           'protein_target_g': plan.proteinG,
           'carbs_target_g': plan.carbsG,
           'fat_target_g': plan.fatG,
+          'targets_are_custom': false,
+        })
+        .eq('id', userId);
+  }
+
+  /// Stores numbers the user chose themselves.
+  ///
+  /// Premium only, and enforced in the database rather than here — a trigger
+  /// raises SQLSTATE `BLKR2` when a free account tries to set the flag, which
+  /// the app already knows how to turn into a sentence with a way out of it.
+  /// See `supabase/custom_targets.sql`.
+  ///
+  /// The four numbers are written together with the flag, so there is no
+  /// moment where the targets are custom and the flag says otherwise, or the
+  /// reverse.
+  Future<void> setCustomTargets({
+    required int calories,
+    required int proteinG,
+    required int carbsG,
+    required int fatG,
+  }) async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) return;
+
+    await _client
+        .from('users')
+        .update({
+          'daily_calorie_target': calories,
+          'protein_target_g': proteinG,
+          'carbs_target_g': carbsG,
+          'fat_target_g': fatG,
+          'targets_are_custom': true,
         })
         .eq('id', userId);
   }

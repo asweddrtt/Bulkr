@@ -28,6 +28,7 @@ class UserProfile extends Equatable {
     required this.carbsTargetG,
     required this.fatTargetG,
     required this.onboardingCompleted,
+    this.targetsAreCustom = false,
     this.waterTargetMl,
   });
 
@@ -47,6 +48,14 @@ class UserProfile extends Equatable {
   final int carbsTargetG;
   final int fatTargetG;
   final bool onboardingCompleted;
+
+  /// Whether the four target numbers were set by hand rather than computed.
+  ///
+  /// It exists to stop a recalculation quietly throwing away numbers somebody
+  /// chose — see `supabase/custom_targets.sql`. Defaults false, which is both
+  /// the normal state and the safe reading of a row written before the column
+  /// existed.
+  final bool targetsAreCustom;
 
   /// A water goal the user set by hand, or null to derive one from bodyweight.
   ///
@@ -89,6 +98,7 @@ class UserProfile extends Equatable {
       carbsTargetG: _parseInt(map['carbs_target_g']) ?? 0,
       fatTargetG: _parseInt(map['fat_target_g']) ?? 0,
       onboardingCompleted: map['onboarding_completed'] == true,
+      targetsAreCustom: map['targets_are_custom'] == true,
       waterTargetMl: _parseInt(map['water_target_ml']),
     );
   }
@@ -163,5 +173,6 @@ class UserProfile extends Equatable {
         fatTargetG,
         onboardingCompleted,
         waterTargetMl,
+        targetsAreCustom,
       ];
 }

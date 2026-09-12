@@ -29,6 +29,10 @@ void main() {
         planLimitReached(limit('active_challenges')),
         PlanLimit.activeChallenges,
       );
+      expect(
+        planLimitReached(limit('custom_targets')),
+        PlanLimit.customTargets,
+      );
     });
 
     test('tolerates the hint being padded', () {
@@ -104,6 +108,7 @@ void main() {
         'limit_saved_meals',
         'limit_active_challenges',
         'limit_history_days',
+        'limit_custom_targets',
       ]) {
         expect(
           '${translations[key]}'.toLowerCase(),
