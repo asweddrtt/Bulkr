@@ -60,85 +60,48 @@ later patches attach to.
 
 ---
 
-## 4. Mirror the Android nudity model — recommended, not blocking
+## 4. Deploy `moderate-image`, or nothing is checked
 
-The check **now runs on Android.** It did not before: the model id is the same
-on both platforms, but only iOS bundles it — the plugin's Android descriptor
-carries a `downloadUrl`, so the ~11 MB `OpenNSFW2.tflite` has to be fetched
-once, and nothing fetched it. Every Android scan threw `ModelNotFound`, scored
-nothing, and the fail-open branch allowed the upload.
+Image moderation now runs server-side through AWS Rekognition. **Until the
+function is deployed and its secrets are set, every upload passes unchecked** —
+the client fails open on purpose, and says so.
 
-`ImageSafety.ensureModelReady()` now downloads it once and is awaited before
-any image is scored. `ImageSafety.warmUp()` starts the fetch from
-`ImageSourceSheet.show` — the one choke point every picker goes through — so it
-overlaps with the user choosing a photo instead of being paid when they press
-Post.
+Setup is in `supabase/functions/moderate-image/README.md`: an IAM user with one
+permission, three secrets, one deploy command.
 
-### What is left to decide
+Then watch `image_check_skipped` in analytics. It should be near zero. Anything
+else means the function is down, undeployed, or the key is wrong.
 
-By default the download comes from a **third-party GitHub release**:
+### The on-device check is gone
 
-    github.com/nexas105/flutter_nsfw_scaner/releases/.../OpenNSFW2.tflite.zip
+`lib/core/image_safety.dart` has been deleted rather than kept as a fallback.
+It worked on neither platform — iOS scored a full nude below a topless photo,
+Android's model 404s — and a broken fallback is worse than none, because it
+restores exactly the false confidence this replaced.
 
-Two problems with leaning on that for a moderation feature, neither urgent:
+### Still advisory
 
-1. **It is not ours.** If that repo is renamed, the release deleted, or the
-   asset swapped, Android moderation stops working — silently, in the
-   fail-open direction.
-2. **It is not verified.** The plugin supports pinning a SHA-256 and its own
-   source comment says to pin "any URL the integrator does not fully control" —
-   but the built-in OpenNSFW2 descriptor leaves it null, so the bytes are
-   trusted as they arrive.
+The function is called *by the client*, so a patched client can skip it. The
+AWS key is safe and the model is good, but the decision is not yet enforced.
 
-Both are fixed the same way. The archive is ~11 MB and never changes, so it is
-a one-time upload to a bucket you already have:
+Closing that is the next slice: move the upload into the function and lock the
+buckets to service-role writes, so a client that skips moderation cannot write
+anything at all.
 
-```sh
-flutter build appbundle \
-  --dart-define=NSFW_MODEL_URL=https://<project>.supabase.co/storage/v1/object/public/models/OpenNSFW2.tflite.zip
-```
+## 5. Calibrate against your own photos
 
-`ModerationConfig` validates it — an https URL with a host, or it is ignored
-and the default is used, rather than silently turning the check off.
+The policy in `supabase/functions/moderate-image/policy.ts` is written from
+Rekognition's documented taxonomy, not from your feed. The labels it allows —
+`Male Swimwear Or Underwear`, `Barechested Male`, `Emaciated Bodies` — are the
+ones a bulking app must never reject, but that list is reasoned, not measured.
 
-### What still fails open
+Worth doing once with real images: post a shirtless progress photo, a lean
+cutting photo, a gym selfie, a meal — and confirm each is allowed. Then confirm
+an explicit image is refused. `image_allowed` carries the labels each one
+produced, so the dashboard tells you what the model actually saw.
 
-A first post on a phone with no connection, or a download past the 45-second
-timeout, still ends in an allowed upload. That direction is unchanged and
-deliberate: fail-closed would mean one bad network moment turns "post a photo"
-into a feature that does not work.
-
-What changed is that it is now rare and loud instead of universal and silent.
-Watch two counts on Android:
-
-- `image_check_skipped` with `reason=model_unavailable` — an upload went
-  through unchecked
-- `moderation_model_failed` — why the model was missing (`timeout` or `error`)
-
-If either is anything but near-zero, Android moderation is not working.
-`moderation_model_ready` carries how long the fetch took, which is the number
-that says whether the warm-up needs to move earlier than the picker.
-
-## 5. Calibrate the nudity threshold, now that there is data to do it with
-
-`ImageSafety.threshold` is still 0.75, still picked by intuition, and the file
-still says so. What has changed is that the numbers now leave the phone:
-
-- `image_refused` — score, threshold, and which channel order produced it
-- `image_allowed` — the same, for images that passed
-
-Refusals alone cannot calibrate a threshold: they are the complaints, and the
-false negatives are the half that never complains. Both halves are now
-recorded.
-
-`channelOrderIsUnverified` is still true, so every image is scored twice — once
-RGB, once with red and blue swapped, higher score wins. The `variant` parameter
-says which one fired. Once one order is doing the work consistently, drop to a
-single scan; that one **is** patchable, since it is a Dart constant with no
-asset behind it.
-
-The score is no longer shown to the user. `test/moderation_error_test.dart`
-fails if that is turned back on.
+If a physique photo is ever refused, the fix is one line in `NEVER_REFUSE` and
+a redeploy — no app release, which is most of why the policy lives server-side.
 
 ---
 
@@ -185,8 +148,8 @@ No action needed; listed so nobody re-checks them by hand.
 | `deep_link_test.dart` | the Android intent-filter for `post` going missing, or the parser answering the OAuth callback |
 | `translation_keys_test.dart` | a `.tr()` key with no entry, or an entry nothing uses |
 | `accessibility_test.dart` | a new icon-only control with no label |
-| `moderation_error_test.dart` | the model score reappearing in a refusal |
-| `image_safety_test.dart` | the model id drifting from the one the plugin registers, or the fetch timeout dropping below a usable one |
+| `moderation_error_test.dart` | a model score or label reappearing in a user-facing refusal |
+| `policy.test.ts` | the moderation policy starting to reject shirtless or lean physique photos |
 | `analytics_events_test.dart` | an event name Firebase would silently drop, or a parameter carrying user content |
 | `meal_repository_test.dart` | a meal logged against the wrong day in a non-UTC timezone |
 | `post_repository_test.dart` | keyset paging turning back into an offset |

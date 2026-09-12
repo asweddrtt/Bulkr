@@ -1,5 +1,4 @@
 import 'package:bulkr/core/moderation_error.dart';
-import 'package:bulkr/core/image_safety.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -95,10 +94,27 @@ void _refusalTests() {
     );
   });
 
-  test('the flag that put the score there is off', () {
-    // Asserted directly as well as through the text above, so that turning it
-    // back on for a calibration run fails here rather than silently shipping.
-    expect(ImageSafety.showScoreInRefusal, isFalse);
+  test('the refusal carries no label either', () {
+    // Rekognition names what it saw — "Exposed Male Genitalia" — and that is
+    // enormously useful in a log and the wrong thing entirely to put on a
+    // user's screen. It rides on the exception for Crashlytics and stops
+    // there.
+    final String? refusal = explicitImageRefusal(
+      const ExplicitImageException(0.97, label: 'Exposed Male Genitalia'),
+    );
+
+    expect(refusal, isNotNull);
+    expect(refusal, isNot(contains('Genitalia')));
+    expect(refusal, isNot(contains('Exposed')));
+  });
+
+  test('the exception still carries both, for the log', () {
+    const ExplicitImageException error =
+        ExplicitImageException(0.97, label: 'Exposed Male Genitalia');
+
+    expect(error.score, 0.97);
+    expect(error.label, 'Exposed Male Genitalia');
+    expect('$error', contains('Exposed Male Genitalia'));
   });
 
   test('other failures are still not image refusals', () {

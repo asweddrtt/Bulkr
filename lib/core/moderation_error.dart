@@ -1,8 +1,6 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'image_safety.dart';
-
 /// The SQLSTATE `supabase/moderation_terms.sql` raises when a post or comment
 /// contains a blocked term.
 ///
@@ -36,25 +34,47 @@ String? blockedTermRefusal(Object error) {
   return '$message $hint';
 }
 
+/// Thrown when a picked image was refused and not uploaded.
+///
+/// Its own type rather than a generic failure: every caller shows a different
+/// surface, and "we could not upload that" is the wrong sentence for "we are
+/// not going to".
+///
+/// Carries what the server said for the log and for Crashlytics. Neither field
+/// is ever shown to the person holding the phone — see [explicitImageRefusal].
+class ExplicitImageException implements Exception {
+  const ExplicitImageException(this.score, {this.label});
+
+  /// How confident the model was, 0 to 1.
+  final double score;
+
+  /// The label that caused it — `Exposed Male Genitalia`, and so on.
+  ///
+  /// Null when the refusal came from somewhere that does not name one. This is
+  /// most of why Rekognition was chosen over a scalar: a log line naming the
+  /// label is something a person can act on and argue with, where a bare 0.97
+  /// is not.
+  final String? label;
+
+  @override
+  String toString() =>
+      'Image refused${label == null ? '' : ' as $label'} at $score';
+}
+
 /// The refusal to show when a picked image was judged explicit.
 ///
 /// A real translation key rather than a string from the database, unlike
-/// [blockedTermRefusal]: adding the on-device check needs a store build for its
-/// native model anyway, so there was nothing to buy by keeping this
-/// patch-shaped.
+/// [blockedTermRefusal]: the moderation policy now lives in an edge function
+/// and changes without an app release either way, so there is nothing to buy
+/// by keeping this one patch-shaped.
+///
+/// Deliberately carries no score and no label. An earlier version appended
+/// `(scored 0.812, threshold 0.75)` while the on-device threshold was being
+/// calibrated, which meant a false positive on somebody's progress photo
+/// showed them a number they could not act on and read as the app
+/// malfunctioning. The numbers go to analytics now, where they are useful.
 String? explicitImageRefusal(Object error) {
   if (error is! ExplicitImageException) return null;
 
-  final String refusal = 'image_explicit_refused'.tr();
-
-  // While calibrating, the score rides along. A refusal is the only moment the
-  // number is worth anything: it is what says whether the model was sure or
-  // whether the threshold is sitting on top of ordinary progress photos, and
-  // the person holding the phone has no other way to see it.
-  if (ImageSafety.showScoreInRefusal) {
-    return '$refusal (scored ${error.score.toStringAsFixed(3)}, '
-        'threshold ${ImageSafety.threshold})';
-  }
-
-  return refusal;
+  return 'image_explicit_refused'.tr();
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'moderation_service.dart';
 import '../core/storage_cache.dart';
 import '../models/activity_level.dart';
 import '../models/gender.dart';
@@ -9,7 +10,6 @@ import '../models/unit_system.dart';
 import '../models/user_profile.dart';
 import '../models/water_entry.dart';
 import '../models/weight_entry.dart';
-import '../core/image_safety.dart';
 import 'username_generator.dart';
 
 /// Raised when the handle the user typed themselves is already taken. A
@@ -25,12 +25,22 @@ class UsernameTakenException implements Exception {
 
 /// Writes the one row the whole onboarding flow has been building up to.
 class UserRepository {
-  UserRepository({SupabaseClient? client, UsernameGenerator? usernameGenerator})
-    : _client = client ?? Supabase.instance.client,
-      _usernames = usernameGenerator ?? UsernameGenerator();
+  UserRepository({
+    SupabaseClient? client,
+    UsernameGenerator? usernameGenerator,
+    ModerationService? moderation,
+  })  : _client = client ?? Supabase.instance.client,
+        _usernames = usernameGenerator ?? UsernameGenerator(),
+        // `client` passed through rather than dropped, so an injected client
+        // reaches the moderation call too — the same mistake `MealRepository`
+        // made with its food repository.
+        _moderation = moderation ?? ModerationService(client: client);
 
   final SupabaseClient _client;
   final UsernameGenerator _usernames;
+
+  /// Who decides whether an avatar may be uploaded. See [updateAvatar].
+  final ModerationService _moderation;
 
   /// The signed-in user's id, or null when there is no session.
   ///
@@ -412,7 +422,7 @@ class UserRepository {
     // has to be repeated here. Worth catching: an avatar is the most-seen image
     // in the app — it sits next to every post and every comment its owner has
     // written — so it is the last one that should have been the exception.
-    await ImageSafety.refuseIfExplicit(bytes);
+    await _moderation.refuseIfExplicit(bytes);
 
     final String path =
         '$userId/${DateTime.now().toUtc().microsecondsSinceEpoch}.$extension';

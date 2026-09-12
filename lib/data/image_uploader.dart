@@ -3,8 +3,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../core/image_resize.dart';
 import '../core/storage_cache.dart';
+import 'moderation_service.dart';
 
-import '../core/image_safety.dart';
 
 /// A picture in the two sizes the app shows it at.
 @immutable
@@ -31,10 +31,18 @@ class UploadedImage {
 /// sits beside its original as `<microseconds>_t.jpg`, inside the same folder,
 /// so the same policy covers it with no change.
 class ImageUploader {
-  const ImageUploader({required SupabaseClient client, required this.bucket})
-    : _client = client;
+  ImageUploader({
+    required SupabaseClient client,
+    required this.bucket,
+    ModerationService? moderation,
+  })  : _client = client,
+        _moderation = moderation ?? ModerationService(client: client);
 
   final SupabaseClient _client;
+
+  /// Who decides whether a picture may be uploaded. Injectable so the
+  /// repositories that own an uploader can be tested without a network.
+  final ModerationService _moderation;
 
   /// Which bucket to write to — `meal-images`, `post-images`, `avatars`.
   final String bucket;
@@ -57,7 +65,15 @@ class ImageUploader {
     // photos, meal photos, avatars, group pictures — so this is the one place
     // the check has to exist, and putting it before `_put` means an explicit
     // image never reaches a public URL at all.
-    await ImageSafety.refuseIfExplicit(bytes);
+    //
+    // This used to be `ImageSafety.refuseIfExplicit`, an on-device model that
+    // worked on neither platform: on iOS it scored a full nude below a topless
+    // photo, and on Android the model it wanted 404s so it never ran. It now
+    // asks the server, which holds the credentials, a far better model, and a
+    // policy that can change without an app release.
+    //
+    // Same exception on refusal, which is why nothing downstream changed.
+    await _moderation.refuseIfExplicit(bytes);
 
     final String stem =
         name ?? '${DateTime.now().toUtc().microsecondsSinceEpoch}';
