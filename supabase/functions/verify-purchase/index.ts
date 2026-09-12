@@ -52,6 +52,10 @@ interface Verdict {
   active: boolean;
   expiresAt: string | null;
   storeId: string;
+  /// Which plan, as the *store* reported it. The request body carries one too
+  /// and it is ignored: nothing here is taken from the client, including the
+  /// parts that only label a screen.
+  productId: string | null;
   source: "app_store" | "play";
 }
 
@@ -134,6 +138,7 @@ Deno.serve(async (request: Request) => {
       expires_at: verdict.expiresAt,
       source: verdict.source,
       store_id: verdict.storeId,
+      product_id: verdict.productId,
     }, { onConflict: "user_id" });
 
   if (writeError) {
@@ -249,6 +254,7 @@ function appleVerdict(
   let expiresAt: number | null = null;
   let active = false;
   let originalId = transactionId;
+  let productId: string | null = null;
 
   for (const group of groups) {
     const transactions = Array.isArray((group as Record<string, unknown>)
@@ -286,6 +292,9 @@ function appleVerdict(
       if (isActive && (expiresAt === null || (expiry ?? 0) > expiresAt)) {
         active = true;
         expiresAt = expiry;
+        productId = typeof signed?.productId === "string"
+          ? signed.productId as string
+          : productId;
       }
     }
   }
@@ -294,6 +303,7 @@ function appleVerdict(
     active,
     expiresAt: expiresAt === null ? null : new Date(expiresAt).toISOString(),
     storeId: originalId,
+    productId,
     source: "app_store",
   };
 }
@@ -372,10 +382,16 @@ function googleVerdict(
   const lineItems = Array.isArray(payload.lineItems) ? payload.lineItems : [];
 
   let expiresAt: string | null = null;
+  let productId: string | null = null;
   for (const item of lineItems) {
-    const expiry = (item as Record<string, unknown>).expiryTime;
+    const line = item as Record<string, unknown>;
+    const expiry = line.expiryTime;
     if (typeof expiry !== "string") continue;
-    if (expiresAt === null || expiry > expiresAt) expiresAt = expiry;
+
+    if (expiresAt === null || expiry > expiresAt) {
+      expiresAt = expiry;
+      productId = typeof line.productId === "string" ? line.productId : null;
+    }
   }
 
   const stillRunning = expiresAt !== null &&
@@ -393,6 +409,7 @@ function googleVerdict(
     // transaction id is stabler; Play has no equivalent that survives a plan
     // change, and this is the closest thing.
     storeId: purchaseToken,
+    productId,
     source: "play",
   };
 }

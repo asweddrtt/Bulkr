@@ -163,6 +163,15 @@ What to check on the first TestFlight build, in this order:
 Then watch `ad_failed` in analytics. Code 3 is "no fill" and is normal for a
 new unit; anything else in volume is a misconfigured unit.
 
+## 4d. Re-run `premium.sql` for the `product_id` column
+
+It was added after that file first shipped, so a project that already ran it
+needs it again. The statement is guarded (`add column if not exists`), so
+re-running the whole file changes nothing else.
+
+Without it the membership screen simply shows less, and Play opens the list of
+every subscription the user has rather than this one. Nothing breaks.
+
 ## 5. Calibrate against your own photos
 
 The policy in `supabase/functions/moderate-image/policy.ts` is written from
@@ -231,6 +240,8 @@ No action needed; listed so nobody re-checks them by hand.
 | `streak_state_test.dart` | the restore offer appearing next to a running streak, or for a one-day run |
 | `plan_limit_error_test.dart` | a full free tier being reported as a permission error, or a limit with no sentence and no way out of it |
 | `trial_offer_test.dart` | a store period the parser does not understand being shown as "0 days free" |
+| `store_links_test.dart` | the Play package drifting from `applicationId`, which turns the cancel link into a page that does not name the subscription |
+| `premium_plan_test.dart` | Play's per-offer entries drawing the same plan twice, one of them priced at nothing |
 | `meal_repository_test.dart` | a meal logged against the wrong day in a non-UTC timezone |
 | `post_repository_test.dart` | keyset paging turning back into an offset |
 | `plan_limits_test.dart` | the free tier's numbers in the app and in `premium.sql` drifting apart, or a write policy appearing on `subscriptions` |

@@ -45,6 +45,7 @@ import 'people_list_screen.dart';
 import 'blocked_people_screen.dart';
 import 'post_comments_sheet.dart';
 import 'post_composer_screen.dart';
+import 'subscription_screen.dart';
 import 'upgrade_screen.dart';
 
 /// The signed-in user's own profile.
@@ -457,31 +458,22 @@ class _Header extends StatelessWidget {
       onManageBlocked: () => BlockedPeopleScreen.open(context),
       onDeleteAccount: () => _deleteAccount(context, auth, router, users),
       isPremium: entitlement.state.isPremium,
-      onPremium: () => entitlement.state.isPremium
-          ? _sayAlreadyPremium(messenger)
-          : UpgradeScreen.open(context, source: 'settings'),
+      // Somebody who pays goes to their membership — status, renewal date,
+      // and the route to cancelling. Somebody who does not goes straight to
+      // the offer, because a status screen saying "you are on free" in front
+      // of the buy button is a step that helps nobody.
+      //
+      // A lapsed account counts as the first case: they have history worth
+      // seeing, and "renew" is a different sentence from "subscribe".
+      onPremium: () =>
+          entitlement.state.isPremium || entitlement.state.hasLapsed
+              ? SubscriptionScreen.open(context)
+              : UpgradeScreen.open(context, source: 'settings'),
       adFreeRemaining: ads.adFreeRemaining,
       onRemoveAds: canOfferAdFree
           ? () => _watchForAdFreeDay(ads, messenger)
           : null,
     );
-  }
-
-  /// For a subscriber who taps the premium row.
-  ///
-  /// Showing them the upgrade screen would be worse than useless: it would ask
-  /// somebody who already pays to pay, which is the moment they go and check
-  /// whether they are being charged twice.
-  static void _sayAlreadyPremium(ScaffoldMessengerState messenger) {
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(
-        backgroundColor: const Color(0xFF2A2A2A),
-        content: Text(
-          'premium_already'.tr(),
-          style: GoogleFonts.inter(color: Colors.white, fontSize: 12.sp),
-        ),
-      ));
   }
 
   /// Watch a video, lose the ads for a day.

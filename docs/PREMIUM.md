@@ -206,6 +206,12 @@ spent later on a win-back than at launch, when there is nobody to win back.
   and `verify-purchase`, which asks the store itself and writes
   `subscriptions` with the service key. **The app never writes that table** —
   see the header of `supabase/premium.sql`.
+- **Managing it** — a membership screen showing status, renewal date and
+  where it was bought, with one tap to the store's own cancel page. Leaving is
+  one step *fewer* than arriving, and there is deliberately no "are you sure?"
+  in front of it: neither store lets an app cancel its own subscription, so
+  that dialog would be friction in front of a page the user can back out of
+  anyway — which is the pattern guideline 3.1.2 exists to stop.
 - **The limits** — `premium_limits.sql`. The meal library and the challenge
   cap are enforced by triggers raising their own SQLSTATE, so the app can say
   "you have reached the 20 meals a free account keeps" rather than "you do not

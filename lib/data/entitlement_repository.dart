@@ -71,7 +71,7 @@ class EntitlementRepository {
     try {
       row = await _client
           .from('subscriptions')
-          .select('tier, expires_at, source')
+          .select('tier, expires_at, source, product_id')
           .eq('user_id', userId)
           .maybeSingle()
           .timeout(timeout);

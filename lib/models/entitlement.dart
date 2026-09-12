@@ -39,7 +39,12 @@ enum Tier {
 ///
 /// See `supabase/premium.sql`.
 class Entitlement extends Equatable {
-  const Entitlement({required this.tier, this.expiresAt, this.source});
+  const Entitlement({
+    required this.tier,
+    this.expiresAt,
+    this.source,
+    this.productId,
+  });
 
   /// Nobody has paid. The state every account starts in, and the one assumed
   /// whenever the answer is not known yet.
@@ -55,6 +60,15 @@ class Entitlement extends Equatable {
   /// support questions, which are nearly always "I paid, why am I not
   /// premium" and are unanswerable without it.
   final String? source;
+
+  /// Which plan — `bulkr_premium_yearly`. Decides nothing; it labels the
+  /// membership screen and lets Play open the specific subscription rather
+  /// than the list of everything this person has ever subscribed to.
+  ///
+  /// Written by `verify-purchase` from the store's own answer, so an old row
+  /// from before that column existed simply has none, and the screen says a
+  /// little less rather than being wrong.
+  final String? productId;
 
   /// Whether premium features are on **right now**.
   ///
@@ -80,6 +94,7 @@ class Entitlement extends Equatable {
     tier: Tier.fromDbValue(row['tier']),
     expiresAt: DateTime.tryParse('${row['expires_at']}')?.toLocal(),
     source: row['source'] as String?,
+    productId: row['product_id'] as String?,
   );
 
   /// For the local cache. Only the fields that survive a restart.
@@ -87,11 +102,12 @@ class Entitlement extends Equatable {
     'tier': tier.dbValue,
     if (expiresAt != null) 'expires_at': expiresAt!.toUtc().toIso8601String(),
     if (source != null) 'source': source,
+    if (productId != null) 'product_id': productId,
   };
 
   factory Entitlement.fromJson(Map<String, dynamic> json) =>
       Entitlement.fromRow(json);
 
   @override
-  List<Object?> get props => <Object?>[tier, expiresAt, source];
+  List<Object?> get props => <Object?>[tier, expiresAt, source, productId];
 }

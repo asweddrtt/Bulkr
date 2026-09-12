@@ -5,9 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../core/config/legal_config.dart';
 import '../core/config/premium_products.dart';
+import '../core/config/store_links.dart';
 import '../core/plan_limits.dart';
+import '../core/telemetry.dart';
 import '../core/trial_offer.dart';
 import '../cubit/entitlement/entitlement_cubit.dart';
 import '../cubit/purchase/purchase_cubit.dart';
@@ -560,6 +564,8 @@ class _Footer extends StatelessWidget {
                   height: 1.5,
                 ),
               ),
+              SizedBox(height: 6.h),
+              const _LegalLinks(),
             ],
           ),
         );
@@ -602,5 +608,88 @@ class _Footer extends StatelessWidget {
         'store': store,
       },
     );
+  }
+}
+
+/// The two links App Store guideline 3.1.2 requires on the paywall itself.
+///
+/// Not in a settings screen, not in the store listing — on the page with the
+/// buy button, working. A missing or dead terms link here is one of the most
+/// common rejections there is, and it is invisible from inside the app: the
+/// screen looks finished either way.
+///
+/// Terms fall back to Apple's standard licence agreement, which Apple accepts
+/// in place of custom terms and which is the right answer for a subscription
+/// that grants nothing unusual. If `LegalConfig.termsUrl` is ever set, it wins.
+class _LegalLinks extends StatelessWidget {
+  const _LegalLinks();
+
+  @override
+  Widget build(BuildContext context) {
+    final String terms = LegalConfig.hasTerms
+        ? LegalConfig.termsUrl
+        : StoreLinks.appleStandardEula;
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: <Widget>[
+        _LegalLink(label: 'premium_terms_link'.tr(), url: terms),
+        Text(
+          '  ·  ',
+          style: GoogleFonts.inter(color: Colors.white24, fontSize: 9.sp),
+        ),
+        _LegalLink(
+          label: 'premium_privacy_link'.tr(),
+          url: LegalConfig.privacyPolicyUrl,
+        ),
+      ],
+    );
+  }
+}
+
+class _LegalLink extends StatelessWidget {
+  const _LegalLink({required this.label, required this.url});
+
+  final String label;
+  final String url;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => _open(context),
+      child: Text(
+        label,
+        style: GoogleFonts.inter(
+          color: Colors.white54,
+          fontSize: 9.sp,
+          decoration: TextDecoration.underline,
+          decorationColor: Colors.white24,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _open(BuildContext context) async {
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+
+    bool opened = false;
+    try {
+      opened = await launchUrl(
+        Uri.parse(url),
+        mode: LaunchMode.externalApplication,
+      );
+    } catch (error, stackTrace) {
+      await Telemetry.recordError(
+        error,
+        stackTrace,
+        reason: 'opening a paywall legal link',
+      );
+    }
+
+    if (opened) return;
+
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(UpgradeScreen._notice('policy_unavailable'.tr()));
   }
 }

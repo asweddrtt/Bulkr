@@ -60,6 +60,13 @@ create table if not exists public.subscriptions (
   -- purchase cannot be attached to two accounts.
   store_id    text        unique,
 
+  -- Which plan they are on — `bulkr_premium_yearly` and so on. Not used to
+  -- decide anything: it labels the membership screen, and it lets Play open
+  -- the specific subscription rather than the list of everything the user has
+  -- ever subscribed to. Written from the store's own answer, never from the
+  -- app's request body.
+  product_id  text,
+
   updated_at  timestamptz not null default now(),
   created_at  timestamptz not null default now()
 );
@@ -70,6 +77,12 @@ create table if not exists public.subscriptions (
 create index if not exists subscriptions_expiring_idx
   on public.subscriptions (expires_at)
   where tier = 'premium';
+
+-- Added after the table shipped, so it is a separate statement rather than
+-- part of the `create table` above — a project that already ran this file
+-- would otherwise never get the column.
+alter table public.subscriptions
+  add column if not exists product_id text;
 
 -- ---------------------------------------------------------------------------
 -- 2. Row level security
