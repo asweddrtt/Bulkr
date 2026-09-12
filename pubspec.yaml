@@ -125,6 +125,8 @@ dependencies:
   # there. See lib/core/analytics_events.dart for what is recorded and, more
   # importantly, what deliberately is not.
   firebase_analytics: ^12.5.0
+  google_mobile_ads: ^9.1.0
+  app_tracking_transparency: ^2.0.7
   # NOTE: `nsfw_detect` was removed here. It was on-device nudity detection and
   # it worked on neither platform: on iOS the Core ML conversion declares RGB
   # input while baking in open_nsfw's BGR channel means, so a full nude scored

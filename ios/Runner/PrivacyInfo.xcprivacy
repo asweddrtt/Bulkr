@@ -22,21 +22,41 @@
 <plist version="1.0">
 <dict>
 	<!--
-	  False, and it has to stay honest.
+	  True, as of the release that added AdMob.
 
 	  "Tracking" in Apple's sense is linking this data to third-party data for
-	  advertising or data-broker purposes. Bulkr does not: Firebase Analytics
-	  is configured with the Supabase user id and no advertising identifier,
-	  and there is no ad SDK in the binary.
+	  advertising or data-broker purposes. That is exactly what a personalised
+	  ad is, and Bulkr asks for permission to do it — see
+	  NSUserTrackingUsageDescription in Info.plist.
 
-	  Adding AdMob makes this true — see docs/ADMOB.md, which lists this file
-	  as one of the things that has to change with it.
+	  It stays true even for users who decline the prompt, and even for
+	  subscribers who see no ads at all. This declares what the *binary* is
+	  capable of, not what happens to any one person: the SDK is in the app,
+	  and a manifest that said otherwise because most users opt out would be
+	  false in the way Apple checks for.
 	-->
 	<key>NSPrivacyTracking</key>
-	<false/>
+	<true/>
 
+	<!--
+	  Every domain the tracking above reaches. Apple's privacy report lists
+	  connections to these, and a domain that is contacted but not declared is
+	  the discrepancy that gets noticed.
+
+	  These are Google's published AdMob endpoints. If mediation is ever turned
+	  on in the AdMob console, each mediated network adds its own and they have
+	  to be added here too:
+	  https://developers.google.com/admob/ios/privacy/strategies
+	-->
 	<key>NSPrivacyTrackingDomains</key>
-	<array/>
+	<array>
+		<string>googleads.g.doubleclick.net</string>
+		<string>pagead2.googlesyndication.com</string>
+		<string>googleadservices.com</string>
+		<string>google-analytics.com</string>
+		<string>doubleclick.net</string>
+		<string>googletagservices.com</string>
+	</array>
 
 	<key>NSPrivacyCollectedDataTypes</key>
 	<array>
@@ -176,9 +196,16 @@
 		</dict>
 
 		<!--
-		  The FCM registration token in `device_tokens`. Declared as Device ID
-		  because that is what it is: an identifier for this install, used to
-		  deliver a notification and nothing else.
+		  Two identifiers under one data type, which is how Apple files them.
+
+		  The FCM registration token in `device_tokens` — an identifier for
+		  this install, used to deliver a notification and nothing else — and,
+		  since AdMob, the IDFA, which is read only when the user allows it at
+		  the tracking prompt.
+
+		  Tracking is true here because of the second one. It cannot be split:
+		  the data type is declared once, and if any use of it is for
+		  advertising then the declaration has to say so.
 		-->
 		<dict>
 			<key>NSPrivacyCollectedDataType</key>
@@ -186,10 +213,48 @@
 			<key>NSPrivacyCollectedDataTypeLinked</key>
 			<true/>
 			<key>NSPrivacyCollectedDataTypeTracking</key>
-			<false/>
+			<true/>
 			<key>NSPrivacyCollectedDataTypePurposes</key>
 			<array>
 				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+				<string>NSPrivacyCollectedDataTypePurposeThirdPartyAdvertising</string>
+			</array>
+		</dict>
+
+		<!--
+		  What AdMob is told in order to choose an ad: coarse location derived
+		  from the IP address, the device model, and the ad interactions
+		  themselves. None of it is asked for by Bulkr — it is what the SDK
+		  sends — which does not make it any less collected.
+		-->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeCoarseLocation</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeThirdPartyAdvertising</string>
+			</array>
+		</dict>
+
+		<!--
+		  Ad impressions and taps, reported by the SDK to Google. Distinct from
+		  the Product Interaction entry above, which is Firebase Analytics and
+		  carries no advertising identifier.
+		-->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeAdvertisingData</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeThirdPartyAdvertising</string>
 			</array>
 		</dict>
 	</array>

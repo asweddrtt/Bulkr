@@ -63,8 +63,11 @@ void main() {
       'NSPrivacyCollectedDataTypeProductInteraction',
       // Crashlytics, added in this release.
       'NSPrivacyCollectedDataTypeCrashData',
-      // The FCM token in device_tokens.
+      // The FCM token in device_tokens, and the IDFA once AdMob has it.
       'NSPrivacyCollectedDataTypeDeviceID',
+      // What the ad SDK sends to choose an ad, and what it reports back.
+      'NSPrivacyCollectedDataTypeCoarseLocation',
+      'NSPrivacyCollectedDataTypeAdvertisingData',
     ];
 
     for (final String type in expected) {
@@ -74,18 +77,104 @@ void main() {
     }
   });
 
-  test('does not claim to track', () {
-    // True today: there is no ad SDK in the binary and no advertising
-    // identifier is read. Adding AdMob makes it false, and docs/ADMOB.md
-    // lists this file as one of the things that has to change with it — so
-    // this assertion is what turns "we forgot" into a failing test.
-    expect(manifest, contains('<key>NSPrivacyTracking</key>'));
+  group('declares the tracking that AdMob does', () {
+    // This used to assert the opposite, and correctly: before AdMob there was
+    // no ad SDK in the binary and no advertising identifier was read. The
+    // direction has flipped, and the assertion is worth as much pointing this
+    // way — a manifest that says `false` with an ad SDK in the app is the
+    // discrepancy Apple's privacy report surfaces.
+    test('NSPrivacyTracking is true', () {
+      expect(manifest, contains('<key>NSPrivacyTracking</key>'));
+      expect(
+        manifest.split('<key>NSPrivacyTracking</key>')[1].trimLeft(),
+        startsWith('<true/>'),
+        reason: 'google_mobile_ads is a dependency, so the binary is capable '
+            'of tracking — whatever any one user answers at the prompt',
+      );
+    });
+
+    test('and names the domains it reaches', () {
+      // `true` with an empty domain list is the worst of both: it admits the
+      // tracking and tells the privacy report nothing about where the
+      // connections go.
+      for (final String domain in const <String>[
+        'googleads.g.doubleclick.net',
+        'pagead2.googlesyndication.com',
+        'doubleclick.net',
+      ]) {
+        expect(manifest, contains(domain));
+      }
+    });
+
+    test('the device identifier says it is used for advertising', () {
+      // The IDFA rides in the same data type as the FCM token, and a
+      // `Tracking: false` on that entry would contradict the flag above.
+      final String deviceId = manifest
+          .split('<string>NSPrivacyCollectedDataTypeDeviceID</string>')[1];
+
+      expect(
+        deviceId.split('<key>NSPrivacyCollectedDataTypeTracking</key>')[1]
+            .trimLeft(),
+        startsWith('<true/>'),
+      );
+      expect(
+        deviceId.split('</dict>').first,
+        contains('NSPrivacyCollectedDataTypePurposeThirdPartyAdvertising'),
+      );
+    });
+  });
+
+  test('the tracking prompt has a usage description', () {
+    // Reading the IDFA without NSUserTrackingUsageDescription in Info.plist
+    // does not fail politely — iOS will not show the prompt, ATT returns
+    // denied forever, and the rejection under guideline 5.1.2 arrives later.
+    final String plist = File('ios/Runner/Info.plist').readAsStringSync();
+
+    expect(plist, contains('<key>NSUserTrackingUsageDescription</key>'));
+
+    final String description =
+        plist.split('<key>NSUserTrackingUsageDescription</key>')[1];
+    expect(description.trimLeft(), startsWith('<string>'));
     expect(
-      manifest.split('<key>NSPrivacyTracking</key>')[1].trimLeft(),
-      startsWith('<false/>'),
-      reason: 'if an ad SDK has been added this has to become true, along '
-          'with NSPrivacyTrackingDomains and the App Store privacy labels',
+      description.split('</string>').first.length,
+      greaterThan(30),
+      reason: 'a one-word usage description is a rejection on its own',
     );
+  });
+
+  group('the AdMob application identifier', () {
+    // Not a privacy question, but the same class of mistake and there is
+    // nowhere better: the SDK reads this at startup and *crashes the app on
+    // launch* when it is missing or belongs to the other platform. The
+    // symptom is a white screen before Dart runs, which is exactly what
+    // shipped build 4.
+    test('is in Info.plist, and is the iOS one', () {
+      final String plist = File('ios/Runner/Info.plist').readAsStringSync();
+
+      expect(plist, contains('<key>GADApplicationIdentifier</key>'));
+      expect(plist, contains('ca-app-pub-6396760454728825~3261840114'));
+      expect(
+        plist,
+        isNot(contains('ca-app-pub-6396760454728825~3257970685')),
+        reason: 'that is the ANDROID app ID — in Info.plist it crashes the '
+            'app on launch. See docs/ADMOB.md',
+      );
+    });
+
+    test('is in AndroidManifest.xml, and is the Android one', () {
+      final String androidManifest =
+          File('android/app/src/main/AndroidManifest.xml').readAsStringSync();
+
+      expect(androidManifest,
+          contains('com.google.android.gms.ads.APPLICATION_ID'));
+      expect(
+          androidManifest, contains('ca-app-pub-6396760454728825~3257970685'));
+      expect(
+        androidManifest,
+        isNot(contains('ca-app-pub-6396760454728825~3261840114')),
+        reason: 'that is the iOS app ID',
+      );
+    });
   });
 
   group('is in the built app, not just in the repo', () {

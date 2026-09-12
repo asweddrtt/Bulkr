@@ -338,4 +338,9 @@ final List<AnalyticsEvent> _everyEvent = <AnalyticsEvent>[
   AnalyticsEvent.upgradeCompleted(product: 'bulkr_premium_monthly'),
   AnalyticsEvent.upgradeFailed(reason: 'cancelled'),
   AnalyticsEvent.purchasesRestored(found: true),
+  AnalyticsEvent.adShown(format: 'interstitial', placement: 'meal_saved'),
+  AnalyticsEvent.adFailed(format: 'rewarded', code: 3),
+  AnalyticsEvent.rewardEarned(placement: 'streak_restore'),
+  AnalyticsEvent.adConsent(status: 'obtained'),
+  AnalyticsEvent.trackingPermission(status: 'denied'),
 ];

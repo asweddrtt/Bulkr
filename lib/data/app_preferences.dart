@@ -156,6 +156,29 @@ class AppPreferences {
     await prefs?.remove(_entitlementUserKey);
   }
 
+  // --- Ads ----------------------------------------------------------------
+
+  /// How many full-screen ads have been shown, when, and whether an ad-free
+  /// window has been earned — as JSON. See `lib/core/ad_policy.dart`.
+  ///
+  /// **Not keyed by user, and not cleared on sign-out**, unlike everything
+  /// else in this file. Two reasons, and they point the same way: the caps are
+  /// about how often a *person holding this phone* is interrupted, which does
+  /// not reset because they switched accounts — and a limit that could be
+  /// cleared by signing out and back in would be a limit somebody could clear
+  /// by signing out and back in.
+  static const String _adStateKey = 'ad_state';
+
+  Future<String?> adState() async {
+    final SharedPreferences? prefs = await _prefs();
+    return prefs?.getString(_adStateKey);
+  }
+
+  Future<void> setAdState(String json) async {
+    final SharedPreferences? prefs = await _prefs();
+    await prefs?.setString(_adStateKey, json);
+  }
+
   /// Called on sign-out, so the next account decides for itself.
   ///
   /// Takes the search history and the cached entitlement with it. The next

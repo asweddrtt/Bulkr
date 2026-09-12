@@ -5,6 +5,41 @@
 	<!-- image_picker: shown when the user attaches a photo to a meal. iOS
 	     rejects the app at review time without these, and crashes the picker at
 	     runtime with no message the user can act on. -->
+	<!-- AdMob. The SDK reads this at startup and CRASHES THE APP ON LAUNCH if
+	     it is missing or belongs to the other platform — it is not a soft
+	     failure, and the symptom (a white screen, before Dart runs) is exactly
+	     the one that shipped build 4.
+
+	     This is the iOS app ID. The Android one lives in
+	     android/app/src/main/AndroidManifest.xml and the two are NOT
+	     interchangeable. See docs/ADMOB.md. -->
+	<key>GADApplicationIdentifier</key>
+	<string>ca-app-pub-6396760454728825~3261840114</string>
+	<!-- App Tracking Transparency. Personalised ads need the IDFA, the IDFA
+	     needs this prompt, and shipping ads without asking is a rejection
+	     under guideline 5.1.2.
+
+	     Worded as what the user gets rather than what we take: the prompt is
+	     shown once per install and iOS will never show it again, so the
+	     sentence is the only chance there is. -->
+	<key>NSUserTrackingUsageDescription</key>
+	<string>Bulkr uses this to keep the ads you see relevant, and to keep the app free. You can say no and still use everything.</string>
+	<!-- SKAdNetwork: how an install is attributed without the IDFA, so this is
+	     what earns money when someone declines the prompt above.
+
+	     Only Google's own identifier is listed. If mediation is ever turned on
+	     in the AdMob console, every mediated network needs its identifier here
+	     too — Google publishes the current list at
+	     https://developers.google.com/admob/ios/privacy/strategies, and a
+	     missing entry is revenue that is silently not attributed rather than
+	     an error anybody sees. -->
+	<key>SKAdNetworkItems</key>
+	<array>
+		<dict>
+			<key>SKAdNetworkIdentifier</key>
+			<string>cstr6suwn9.skadnetwork</string>
+		</dict>
+	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>Bulkr uses the camera so you can photograph a meal you are adding.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

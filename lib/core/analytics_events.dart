@@ -557,4 +557,47 @@ class AnalyticsEvent {
   /// invisible unless the failures are counted.
   factory AnalyticsEvent.purchasesRestored({required bool found}) =>
       AnalyticsEvent('purchases_restored', {'found': found});
+
+  // --- Ads ---------------------------------------------------------------
+
+  /// An ad was actually shown. [format] is `banner`, `interstitial` or
+  /// `rewarded`; [placement] is where — `feed`, `meal_saved`, `return`,
+  /// `streak_restore`.
+  ///
+  /// Recorded on shown rather than on requested, which is the same rule the
+  /// frequency cap follows: a request that never filled is not an
+  /// interruption, and counting it would make the ad load look like ad
+  /// fatigue.
+  factory AnalyticsEvent.adShown({
+    required String format,
+    required String placement,
+  }) =>
+      AnalyticsEvent('ad_shown', {'format': format, 'placement': placement});
+
+  /// An ad did not load. [code] is Google's numeric error code — 3 is "no
+  /// fill", which is normal and not a bug; anything else, in volume, is a
+  /// misconfigured unit.
+  factory AnalyticsEvent.adFailed({required String format, int? code}) =>
+      AnalyticsEvent('ad_failed', {'format': format, 'code': code});
+
+  /// The user finished a rewarded ad and earned something. The denominator for
+  /// "is the rewarded offer worth having at all".
+  factory AnalyticsEvent.rewardEarned({required String placement}) =>
+      AnalyticsEvent('reward_earned', {'placement': placement});
+
+  /// Where the UMP consent flow ended up — `obtained`, `notRequired`,
+  /// `required`, `unknown`. Worth watching: a region where this stays
+  /// `required` is a region serving no personalised ads and earning a fraction
+  /// of what it should.
+  factory AnalyticsEvent.adConsent({required String status}) =>
+      AnalyticsEvent('ad_consent', {'status': status});
+
+  /// The iOS App Tracking Transparency answer — `authorized`, `denied`,
+  /// `restricted`, `notDetermined`, `notSupported`.
+  ///
+  /// Asked once per install and never again, so this is a one-way number: if
+  /// it skews denied, the prompt is being shown at the wrong moment and there
+  /// is no second attempt to fix it with.
+  factory AnalyticsEvent.trackingPermission({required String status}) =>
+      AnalyticsEvent('tracking_permission', {'status': status});
 }
