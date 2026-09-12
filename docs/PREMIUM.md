@@ -20,10 +20,27 @@ Store products, to be created in App Store Connect and Play Console:
 | `bulkr_premium_monthly` | $6.99 / month | exists mostly to make the yearly look cheap |
 | `bulkr_premium_yearly` | $39.99 / year | ~$3.33/mo, 52% off. Show first, default to it. |
 
-No free trial at launch. It lifts conversion, and it also lands the first
-charge a week after the excitement wears off, which is where refund requests
-come from — worth revisiting once there are enough subscribers to measure
-churn against.
+**7-day free trial on the yearly.** Configured as an introductory offer in the
+store, not in app code — App Store Connect calls it a *free* introductory
+offer, Play Console a *free trial* on the base plan. Do not build a trial into
+Bulkr: a home-grown one is a date the client can move, and both stores handle
+eligibility, one-per-account, and the cancel-before-renewal flow that Apple
+requires you not to reimplement.
+
+Three things follow from having one:
+
+- **Eligibility is the store's answer, not ours.** Somebody who already used
+  the trial sees the plain price. The upgrade screen has to read the offer off
+  the product rather than hardcode "7 days free", or it will promise a trial
+  to people who cannot have one — which is a guideline 2.3.1 problem as well
+  as a lie.
+- **The screen must say what happens on day 8.** "Free for 7 days, then
+  $39.99/year. Cancel any time." Both stores require the full terms next to
+  the button, and it is also the thing that stops the refund request.
+- **The first charge lands a week after the excitement wears off.** That is
+  where refunds come from, and it is the cost of the higher conversion. Worth
+  watching `upgrade_completed` against cancellations once there are enough
+  subscribers to measure.
 
 The rest of this file is the tour behind those numbers: everything the app
 does, which side of the line each thing could sit on, and the two splits that
@@ -172,9 +189,9 @@ Premium ~$20/mo or ~$80/yr, Cronometer Gold ~$50/yr, MacroFactor ~$12/mo or
 ~$72/yr) and below all of them per year, which is where this category actually
 converts. That is the trade being made deliberately.
 
-An **introductory price** is worth keeping in reserve. Both stores support it,
-and it is better spent later on a win-back than at launch, when there is
-nobody to win back.
+A **discounted introductory price** is worth keeping in reserve — the trial
+above uses the free variety of the same mechanism, and a paid one is better
+spent later on a win-back than at launch, when there is nobody to win back.
 
 ---
 
@@ -193,5 +210,13 @@ Still to come:
    Connect and Play Console, and an edge function that verifies the receipt
    with the store and writes `subscriptions` with the service key. **The app
    never writes that table** — see the header of `supabase/premium.sql`.
+
+   The trial matters here too: a subscription in its trial period is premium,
+   and `subscriptions.expires_at` is simply the end of the trial. Nothing in
+   the client distinguishes the two, which is deliberate — a trial user is a
+   premium user, and a second state to reason about is a second state to get
+   wrong. What the *backend* has to handle is the trial ending without a
+   payment: that is a normal lapse, and the row goes to `tier = 'free'` like
+   any other.
 4. **The upgrade screen**, and the `paywall_shown` / `upgrade_*` events that
    are already defined and currently fired by nothing.
