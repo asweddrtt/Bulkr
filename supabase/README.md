@@ -104,6 +104,10 @@ Deployed separately, with `supabase functions deploy <name>`:
   Server-side so the FDC key is not shipped in the app binary. Writes what it
   finds into `cached_off_foods`, so tier 1 gets better as the app is used.
 - **`send-push/`** — turns a `notifications` row into an FCM message.
+- **`moderate-image/`** — AWS Rekognition, called before a photo is uploaded.
+- **`verify-purchase/`** — turns a store receipt into a `subscriptions` row.
+  Needed because the app has no write access to that table at all, which is the
+  whole point: a client that can grant itself premium is a client that will.
 
 Each has its own README with the environment variables it needs. Those
 variables hold real credentials and are correctly kept out of this repository
