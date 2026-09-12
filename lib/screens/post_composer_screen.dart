@@ -928,6 +928,7 @@ class _ImageStrip extends StatelessWidget {
 
   static Future<void> _pick(BuildContext context) async {
     final PostComposerCubit cubit = context.read<PostComposerCubit>();
+
     final ImageSourceChoice? choice = await ImageSourceSheet.show(context);
 
     final ImageSource? source = choice?.pluginSource;

@@ -282,6 +282,8 @@ final List<AnalyticsEvent> _everyEvent = <AnalyticsEvent>[
   AnalyticsEvent.imageRefused(score: 0.9, threshold: 0.75, variant: 'rgb'),
   AnalyticsEvent.imageAllowed(score: 0.1, variant: 'rgb'),
   AnalyticsEvent.imageCheckDidNotRun(reason: 'android_no_model'),
+  AnalyticsEvent.moderationModelReady(milliseconds: 4200, mirrored: true),
+  AnalyticsEvent.moderationModelFailed(kind: 'timeout', milliseconds: 45000),
   AnalyticsEvent.termBlocked(surface: 'post'),
   AnalyticsEvent.contentReported(reason: 'spam', surface: 'post'),
   AnalyticsEvent.userBlocked(blocked: true),

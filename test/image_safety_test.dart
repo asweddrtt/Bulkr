@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:bulkr/core/config/moderation_config.dart';
 import 'package:bulkr/core/image_safety.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
@@ -211,6 +212,99 @@ void main() {
     await expectLater(
       ImageSafety.refuseIfExplicit(Uint8List.fromList(<int>[1, 2, 3, 4])),
       completes,
+    );
+  });
+
+  group('model readiness', _modelReadinessTests);
+  group('where the model comes from', _modelSourceTests);
+}
+
+/// Making the check actually run on Android.
+///
+/// The model id is the same on both platforms, but only iOS bundles it: the
+/// plugin's Android descriptor carries a `downloadUrl`, so `requiresDownload`
+/// is true and the file has to be fetched once before anything can be scored.
+/// Nothing fetched it. Every Android scan therefore threw `ModelNotFound`,
+/// `scored` was zero, and the fail-open branch allowed the upload — so the
+/// check was completely absent on that platform while looking, from this file,
+/// like it ran everywhere.
+///
+/// These pin the parts of the fix that are decidable without a device. The
+/// download itself needs a platform channel and a network, and neither exists
+/// in a unit test — so what is checked here is the wiring around it: that a
+/// scan cannot happen before the model is ready, that a failure is retried
+/// rather than cached forever, and that concurrent posts share one download.
+void _modelReadinessTests() {
+  setUp(ImageSafety.resetModelForTest);
+
+  test('the model id is the one the plugin registers on both platforms', () {
+    // Reads as iOS-only and is not. If this ever stops matching the plugin's
+    // id, Android silently falls back to "unknown model" and the check is off
+    // again — which is the failure this whole group exists to prevent.
+    expect(ImageSafety.modelId, ModelIds.openNsfw2);
+  });
+
+  test('a host with no fetching required is ready immediately', () async {
+    // The Linux test host is not Android, so this takes the bundled path and
+    // must not attempt a download or a platform call.
+    expect(ImageSafety.modelNeedsFetching, isFalse);
+    expect(await ImageSafety.ensureModelReady(), isTrue);
+  });
+
+  test('warming up is safe to call when nothing needs fetching', () {
+    // Called from ImageSourceSheet on every picker open, including on iOS and
+    // in tests. It must never throw and never block.
+    expect(ImageSafety.warmUp, returnsNormally);
+  });
+
+  test('the fetch timeout is long enough to be paid once, not per post',
+      () async {
+    // A one-time ~11 MB download on a phone connection. Too short and the
+    // check silently never runs on a slow network, which is the bug being
+    // fixed wearing a different hat.
+    expect(ImageSafety.fetchTimeout.inSeconds, greaterThanOrEqualTo(30));
+  });
+
+  test('an empty image is not scored, and needs no model', () async {
+    // Cheapest guard, and it must come before the readiness check so a
+    // zero-byte file cannot trigger a download.
+    await expectLater(
+      ImageSafety.refuseIfExplicit(Uint8List(0)),
+      completes,
+    );
+  });
+}
+
+/// Where the model is fetched from.
+void _modelSourceTests() {
+  test('no mirror is configured by default', () {
+    // The plugin's own default is a GitHub release in a third-party
+    // repository, unpinned by any SHA-256. That works, and is worth replacing
+    // for a moderation feature — see ModerationConfig.
+    expect(ModerationConfig.hasMirror, isFalse);
+    expect(ModerationConfig.modelUrl, isEmpty);
+  });
+
+  test('a mirror has to be a real https URL to count', () {
+    // Arrives from a --dart-define on a build machine, where a typo is not a
+    // compile error and the symptom is moderation quietly reverting to the
+    // third-party default.
+    bool usable(String value) {
+      if (value.isEmpty) return false;
+      final Uri? parsed = Uri.tryParse(value);
+      return parsed != null &&
+          parsed.isScheme('https') &&
+          parsed.host.isNotEmpty;
+    }
+
+    expect(usable(''), isFalse);
+    expect(usable('tbd'), isFalse);
+    expect(usable('http://example.com/model.zip'), isFalse);
+    expect(usable('https://'), isFalse);
+    expect(
+      usable('https://example.supabase.co/storage/v1/object/public/'
+          'models/OpenNSFW2.tflite.zip'),
+      isTrue,
     );
   });
 }

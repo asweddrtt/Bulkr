@@ -412,6 +412,35 @@ class AnalyticsEvent {
   factory AnalyticsEvent.imageCheckDidNotRun({required String reason}) =>
       AnalyticsEvent('image_check_skipped', {'reason': reason});
 
+  /// The Android model finished downloading and loading, and how long it took.
+  ///
+  /// The number that says whether the fetch is fast enough to sit behind a
+  /// post, or whether it needs to move earlier than the composer.
+  factory AnalyticsEvent.moderationModelReady({
+    required int milliseconds,
+    required bool mirrored,
+  }) =>
+      AnalyticsEvent('moderation_model_ready', {
+        'duration_ms': milliseconds,
+        // Whether it came from our own mirror or the plugin's third-party
+        // default — see ModerationConfig.
+        'mirrored': mirrored,
+      });
+
+  /// The model could not be fetched, so the next upload goes unchecked.
+  ///
+  /// Paired with [imageCheckDidNotRun]. This one says *why* the model was
+  /// missing; that one says an upload went through without it. If either is
+  /// anything but near-zero on Android, moderation is off there.
+  factory AnalyticsEvent.moderationModelFailed({
+    required String kind,
+    required int milliseconds,
+  }) =>
+      AnalyticsEvent('moderation_model_failed', {
+        'kind': kind,
+        'duration_ms': milliseconds,
+      });
+
   /// A blocked term was refused by the database. [surface] is post, comment or
   /// message. The term itself is emphatically not sent.
   factory AnalyticsEvent.termBlocked({required String surface}) =>

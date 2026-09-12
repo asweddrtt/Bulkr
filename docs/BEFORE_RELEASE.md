@@ -60,36 +60,64 @@ later patches attach to.
 
 ---
 
-## 4. The nudity check does not run on Android
+## 4. Mirror the Android nudity model — recommended, not blocking
 
-The most important item here, because it is silent and it is a safety feature
-reporting success while doing nothing.
+The check **now runs on Android.** It did not before: the model id is the same
+on both platforms, but only iOS bundles it — the plugin's Android descriptor
+carries a `downloadUrl`, so the ~11 MB `OpenNSFW2.tflite` has to be fetched
+once, and nothing fetched it. Every Android scan threw `ModelNotFound`, scored
+nothing, and the fail-open branch allowed the upload.
 
-`ImageSafety` scores images against `opennsfw2_coreml`, which is bundled as
-`ios/Assets/OpenNSFW2.mlmodelc` inside the plugin's pod — an **iOS-only**
-artefact. The plugin's Android side is a TensorFlow Lite engine that loads
-`<model>.tflite` from the host app's assets or a runtime download, and neither
-exists here: `nsfw_detect`'s `android/src/main/assets/` is empty, `pubspec.yaml`
-declares no `.tflite`, and nothing calls `NsfwDetector.instance.models`.
+`ImageSafety.ensureModelReady()` now downloads it once and is awaited before
+any image is scored. `ImageSafety.warmUp()` starts the fetch from
+`ImageSourceSheet.show` — the one choke point every picker goes through — so it
+overlaps with the user choosing a photo instead of being paid when they press
+Post.
 
-So on Android every scan fails, `scored` is zero, and the upload is allowed by
-the fail-open branch. Which is the same shape as the TensorFlow Lite bug that
-shipped for a full release — every check threw, every check was allowed, and
-from outside it was indistinguishable from a model that was working.
+### What is left to decide
 
-It is no longer silent: `image_check_skipped` fires with
-`reason=android_no_model` on every Android upload. Watch that count.
+By default the download comes from a **third-party GitHub release**:
 
-Two ways out, neither free:
+    github.com/nexas105/flutter_nsfw_scaner/releases/.../OpenNSFW2.tflite.zip
 
-1. Download OpenNSFW2 (~11 MB) on first run on Android via
-   `NsfwDetector.instance.models`, and decide what posting does while it is
-   absent — block, or allow and rely on reports.
-2. Ship the `.tflite` as an app asset: ~11 MB added to the Android download for
-   a file iOS will never read.
+Two problems with leaning on that for a moderation feature, neither urgent:
 
-Doing nothing is also a choice, and a defensible one while Android is not
-released — but it should be a choice rather than a surprise.
+1. **It is not ours.** If that repo is renamed, the release deleted, or the
+   asset swapped, Android moderation stops working — silently, in the
+   fail-open direction.
+2. **It is not verified.** The plugin supports pinning a SHA-256 and its own
+   source comment says to pin "any URL the integrator does not fully control" —
+   but the built-in OpenNSFW2 descriptor leaves it null, so the bytes are
+   trusted as they arrive.
+
+Both are fixed the same way. The archive is ~11 MB and never changes, so it is
+a one-time upload to a bucket you already have:
+
+```sh
+flutter build appbundle \
+  --dart-define=NSFW_MODEL_URL=https://<project>.supabase.co/storage/v1/object/public/models/OpenNSFW2.tflite.zip
+```
+
+`ModerationConfig` validates it — an https URL with a host, or it is ignored
+and the default is used, rather than silently turning the check off.
+
+### What still fails open
+
+A first post on a phone with no connection, or a download past the 45-second
+timeout, still ends in an allowed upload. That direction is unchanged and
+deliberate: fail-closed would mean one bad network moment turns "post a photo"
+into a feature that does not work.
+
+What changed is that it is now rare and loud instead of universal and silent.
+Watch two counts on Android:
+
+- `image_check_skipped` with `reason=model_unavailable` — an upload went
+  through unchecked
+- `moderation_model_failed` — why the model was missing (`timeout` or `error`)
+
+If either is anything but near-zero, Android moderation is not working.
+`moderation_model_ready` carries how long the fetch took, which is the number
+that says whether the warm-up needs to move earlier than the picker.
 
 ## 5. Calibrate the nudity threshold, now that there is data to do it with
 
@@ -158,6 +186,7 @@ No action needed; listed so nobody re-checks them by hand.
 | `translation_keys_test.dart` | a `.tr()` key with no entry, or an entry nothing uses |
 | `accessibility_test.dart` | a new icon-only control with no label |
 | `moderation_error_test.dart` | the model score reappearing in a refusal |
+| `image_safety_test.dart` | the model id drifting from the one the plugin registers, or the fetch timeout dropping below a usable one |
 | `analytics_events_test.dart` | an event name Firebase would silently drop, or a parameter carrying user content |
 | `meal_repository_test.dart` | a meal logged against the wrong day in a non-UTC timezone |
 | `post_repository_test.dart` | keyset paging turning back into an offset |

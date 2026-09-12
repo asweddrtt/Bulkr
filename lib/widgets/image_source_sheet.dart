@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../core/image_safety.dart';
 import 'sheet_action_row.dart';
 
 /// Asks whether the photo is being taken now or already exists.
@@ -23,6 +24,16 @@ class ImageSourceSheet extends StatelessWidget {
     BuildContext context, {
     bool canRemove = false,
   }) {
+    // Every route to a picked image passes through this sheet — the composer,
+    // the meal editor, and the avatar on the profile — which makes it the one
+    // place a warm-up cannot be forgotten by whoever adds the fourth.
+    //
+    // On Android the nudity model is an ~11 MB download on first use. Starting
+    // it here means the fetch overlaps with the user choosing and cropping a
+    // photo instead of being paid at the moment they press Post. No-op on iOS,
+    // where the model is bundled, and after the first time on Android.
+    ImageSafety.warmUp();
+
     return showModalBottomSheet<ImageSourceChoice>(
       context: context,
       backgroundColor: Colors.transparent,

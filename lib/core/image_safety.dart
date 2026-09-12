@@ -6,6 +6,7 @@ import 'package:image/image.dart' as img;
 import 'package:nsfw_detect/nsfw_detect.dart';
 
 import 'analytics_events.dart';
+import 'config/moderation_config.dart';
 import 'telemetry.dart';
 
 /// Thrown when a picked image looks explicit and was not uploaded.
@@ -62,37 +63,47 @@ class _Variant {
 /// ML, frameworks that ship with the OS and link at build time, so there is no
 /// symbol to look up and nothing to fail to find.
 ///
-/// ## This does not currently run on Android
+/// ## How Android runs the same check
 ///
-/// Worth saying plainly, because everything above is about iOS and reads as
-/// though it were about both platforms.
+/// Worth spelling out, because the section above is about iOS and reads as
+/// though it covered both — which is how Android ended up not running this
+/// check at all for its entire existence.
 ///
-/// The default model is `opennsfw2_coreml`, and it *is* bundled — as
-/// `ios/Assets/OpenNSFW2.mlmodelc`, inside the plugin's own pod. That is an
-/// iOS-only artefact. The plugin's Android side is a TensorFlow Lite engine
-/// which loads `<model>.tflite` from either the *host app's* asset bundle or a
-/// runtime download it manages itself, and `nsfw_detect` ships neither: its
-/// `android/src/main/assets/` is empty, Bulkr declares no `.tflite` in
-/// `pubspec.yaml`, and nothing here calls `NsfwDetector.instance.models` to
-/// fetch one.
+/// The model id is the same on both platforms: `opennsfw2_coreml`. The name is
+/// misleading — it identifies *the model*, not a format — and the plugin
+/// registers a different engine against it per platform. On iOS that is Core
+/// ML reading `OpenNSFW2.mlmodelc`, bundled inside the pod. On Android it is
+/// TensorFlow Lite reading `OpenNSFW2.tflite`, which is **not** bundled: the
+/// plugin's Android descriptor carries a `downloadUrl` instead, so
+/// `requiresDownload` is true and the file has to be fetched once.
 ///
-/// So on Android the load throws `ModelNotFound`, [_score] returns null for
-/// every rendering, `scored` is zero, and [refuseIfExplicit] allows the upload.
-/// That is the fail-open branch behaving exactly as designed — and it is also
-/// precisely the shape of the TensorFlow Lite bug above, where every check
-/// threw, every check was then allowed, and from the outside it was
-/// indistinguishable from a model that was working.
+/// Nothing used to fetch it. So on Android the load threw `ModelNotFound`,
+/// [_score] returned null for every rendering, `scored` was zero, and
+/// [refuseIfExplicit] allowed the upload — the fail-open branch behaving
+/// exactly as designed, and indistinguishable from outside from a model that
+/// was working. Which is precisely the shape of the TensorFlow Lite bug above.
 ///
-/// Two honest ways out, neither free:
+/// [ensureModelReady] is the fix: it downloads the model once, caches the
+/// in-flight fetch so concurrent posts share it, and is awaited by
+/// [refuseIfExplicit] before anything is scored. [warmUp] starts it when a
+/// photo is picked, so the download overlaps with the user writing their post
+/// and has usually finished before they press Post.
 ///
-///   1. Call `NsfwDetector.instance.models` to download OpenNSFW2 (~11 MB) on
-///      first run on Android, and decide what posting does while it is absent.
-///   2. Ship the `.tflite` as an app asset, which adds ~11 MB to the Android
-///      download for a file iOS will never read.
+/// ## What still fails open, and why it is not silent
 ///
-/// Until one of them is done, `AnalyticsEvent.imageCheckDidNotRun` fires on
-/// every Android upload and says so out loud. That is the whole point of it:
-/// the previous version of this failure was invisible for a full release.
+/// A first post on a phone with no connection, or a download that times out,
+/// still ends in an allowed upload. That direction is deliberate and unchanged
+/// — fail-closed would mean one bad network moment turns "post a photo" into a
+/// feature that does not work.
+///
+/// What has changed is that it is now loud and rare rather than quiet and
+/// universal: `AnalyticsEvent.imageCheckDidNotRun` fires with
+/// `reason=model_unavailable`, and `moderation_model_failed` carries whether it
+/// was a timeout or an error. If those counts are not near zero, Android
+/// moderation is not working and the dashboard says so.
+///
+/// See [ModerationConfig] for why the download URL is worth pointing at
+/// something you control.
 abstract final class ImageSafety {
   /// The score above which an image is refused.
   ///
@@ -121,6 +132,113 @@ abstract final class ImageSafety {
   /// be shown to the person it was refused to, who cannot act on it and reads
   /// `(scored 0.812, threshold 0.75)` as the app malfunctioning.
   static const bool showScoreInRefusal = false;
+
+  /// The model both platforms score against.
+  ///
+  /// Passed explicitly to every scan rather than left to the plugin's default,
+  /// which happens to be this same id. The id reads as iOS-only — it is
+  /// literally `opennsfw2_coreml` — but it is the identifier for *the model*,
+  /// not for a format: the plugin registers a Core ML engine against it on
+  /// iOS and a TensorFlow Lite engine against it on Android. Naming it here
+  /// is what stops the next reader concluding, as this file previously did,
+  /// that Android has no model to run.
+  static const String modelId = ModelIds.openNsfw2;
+
+  /// Whether the model must be fetched before the first scan.
+  ///
+  /// True on Android only. See [ensureModelReady].
+  static bool get modelNeedsFetching {
+    if (kIsWeb) return false;
+    return Platform.isAndroid;
+  }
+
+  /// How long a scan will wait for the model to arrive.
+  ///
+  /// Generous, because it is only ever paid once per install and the
+  /// alternative is a check that does not run. Short enough that somebody on a
+  /// dead connection is not held at a spinner indefinitely — past this the
+  /// upload proceeds unchecked, and says so.
+  static const Duration fetchTimeout = Duration(seconds: 45);
+
+  /// The in-flight or completed fetch, so concurrent callers share one
+  /// download rather than starting four.
+  ///
+  /// Cleared on failure: a phone that was offline when it first tried to post
+  /// must be able to try again, and caching `false` forever would turn one bad
+  /// moment into a permanently disabled check.
+  static Future<bool>? _fetch;
+
+  /// Makes the model available, and answers whether it is.
+  ///
+  /// Idempotent and safe to call from anywhere — the composer calls it when a
+  /// photo is picked so the download overlaps with the user typing, and
+  /// [refuseIfExplicit] calls it again as the backstop.
+  ///
+  /// Never throws. A model that cannot be fetched is a check that does not
+  /// run; it is not a reason the app cannot post.
+  static Future<bool> ensureModelReady() {
+    if (!modelNeedsFetching) return Future<bool>.value(true);
+    return _fetch ??= _fetchModel();
+  }
+
+  static Future<bool> _fetchModel() async {
+    final Stopwatch elapsed = Stopwatch()..start();
+
+    try {
+      // A mirror we control, when one is configured. Set before `ensureReady`
+      // because the plugin persists it and reads it when resolving the
+      // descriptor's download URL — see [ModerationConfig] for why the
+      // default is worth replacing.
+      if (ModerationConfig.hasMirror) {
+        await NsfwDetector.instance
+            .setModelUrl(modelId, ModerationConfig.modelUrl);
+      }
+
+      // Downloads if missing, then loads it into the interpreter. Returns
+      // once it is genuinely usable rather than once the bytes have landed.
+      await NsfwDetector.instance.models
+          .ensureReady(modelId)
+          .timeout(fetchTimeout);
+
+      debugPrint(
+        'Bulkr: nudity model ready after ${elapsed.elapsedMilliseconds}ms.',
+      );
+      unawaited(Telemetry.send(AnalyticsEvent.moderationModelReady(
+        milliseconds: elapsed.elapsedMilliseconds,
+        mirrored: ModerationConfig.hasMirror,
+      )));
+      return true;
+    } catch (error, stackTrace) {
+      // Cleared so the next attempt actually retries.
+      _fetch = null;
+
+      debugPrint('Bulkr: nudity model could not be fetched — $error');
+      unawaited(Telemetry.send(AnalyticsEvent.moderationModelFailed(
+        kind: error is TimeoutException ? 'timeout' : 'error',
+        milliseconds: elapsed.elapsedMilliseconds,
+      )));
+      // Recorded rather than only counted: this is the one failure that turns
+      // moderation off, and the exception says whether it was the network,
+      // the URL, or the archive.
+      unawaited(Telemetry.recordError(error, stackTrace,
+          reason: 'fetching the nudity model'));
+      return false;
+    }
+  }
+
+  /// Starts the fetch without waiting for it.
+  ///
+  /// For the moment a photo is picked: the download and the user composing
+  /// their post then happen at the same time, so by the time they hit Post the
+  /// model is usually already there and the check costs nothing visible.
+  static void warmUp() {
+    if (!modelNeedsFetching) return;
+    unawaited(ensureModelReady());
+  }
+
+  /// Forgets the cached fetch. For tests.
+  @visibleForTesting
+  static void resetModelForTest() => _fetch = null;
 
   /// The edge length the model actually sees.
   ///
@@ -176,6 +294,22 @@ abstract final class ImageSafety {
   /// rather than implying the image was fine.
   static Future<void> refuseIfExplicit(Uint8List bytes) async {
     if (bytes.isEmpty) return;
+
+    // Android fetches the model on first use. Awaited here rather than only
+    // warmed up at pick time, because the warm-up is an optimisation and this
+    // is the guarantee: without it, the very first photo on a fresh install
+    // would always go up unchecked — which is exactly what was happening to
+    // every photo on every Android install.
+    if (!await ensureModelReady()) {
+      debugPrint(
+        'Bulkr: nudity model unavailable, so the upload was allowed without '
+        'a check.',
+      );
+      unawaited(Telemetry.send(AnalyticsEvent.imageCheckDidNotRun(
+        reason: 'model_unavailable',
+      )));
+      return;
+    }
 
     final List<_Variant> variants = await _prepare(bytes);
 
@@ -261,6 +395,10 @@ abstract final class ImageSafety {
     try {
       result = await NsfwDetector.instance.scanBytes(
         variant.bytes,
+        // Named rather than defaulted: the plugin's default happens to be the
+        // same id today, and a silent change to it would turn this check into
+        // a different model's opinion without anything here saying so.
+        modelId: modelId,
         confidenceThreshold: threshold,
       );
     } catch (error) {
