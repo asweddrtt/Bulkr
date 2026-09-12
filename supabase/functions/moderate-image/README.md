@@ -175,6 +175,27 @@ The app records three things (never the image, never a URL):
 `image_check_skipped` should be near zero. Anything else means the function is
 down, undeployed, or the key is wrong, and uploads are passing unmoderated.
 
+## Reading the logs
+
+`supabase functions logs moderate-image`, while posting a photo from the app.
+Deploying is not the same as working, and because the client fails open a
+broken setup looks exactly like a working one from the app's side — the photo
+uploads either way. So the log is the only place the difference shows.
+
+| What the log says | What it means |
+|---|---|
+| `{"verdict":"allow",...}` | working |
+| `{"verdict":"refuse","reason":"Exposed Male Genitalia",...}` | working, and correctly |
+| `REKOGNITION_ACCESS_KEY_ID / ... are not set` | `supabase secrets set` did not take, or the names are misspelled |
+| `UnrecognizedClientException` / `InvalidSignatureException` | the key or secret is wrong — a truncated paste does this |
+| `AccessDeniedException ... rekognition:DetectModerationLabels` | the key is real but the IAM policy is missing or did not attach |
+| `Could not resolve endpoint` / region errors | `REKOGNITION_REGION` is not a region Rekognition serves |
+| nothing at all | the app is not reaching the function — check it is a build from this branch |
+
+The last row is the one to check first. An old build has no
+`ModerationService` in it, so it will never call this and the log will stay
+silent no matter how correct the deploy was.
+
 ## Known limit
 
 This is called *by the client*, so a patched client can skip it. The AWS key is
