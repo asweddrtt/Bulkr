@@ -59,9 +59,19 @@ Named `REKOGNITION_*` rather than `AWS_*` deliberately — the platform reserves
 some prefixes, and these are read explicitly rather than picked up by the SDK's
 default credential chain, so there is no ambiguity about where they came from.
 
-**Region matters for more than latency.** It is where user photos are
-processed, which is a data-residency question if you have EU users. Pick
-deliberately.
+**Match the region to the Supabase project, not to your users.** This is the
+part that surprises people. The round trip is *edge function → Rekognition*,
+so what costs milliseconds is the distance between wherever Supabase runs this
+function and wherever Rekognition answers. The user's phone is not in that hop
+at all — it already paid its latency getting to Supabase.
+
+The project's region is in the Supabase dashboard under Project Settings →
+General. Pick the AWS region closest to it; `us-east-1` is the safe default and
+is the region the pricing above is quoted in.
+
+Region is also **where user photos are processed**, which is a data-residency
+question if you have EU users, and a sentence the privacy policy has to carry
+either way.
 
 ### 3. Deploy
 
