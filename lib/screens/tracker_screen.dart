@@ -5,8 +5,11 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../core/config/ads_config.dart';
+import '../core/plan_limits.dart';
+import '../core/plan_limit_error.dart';
 import '../core/dispose_after.dart';
 import '../cubit/meals/meals_cubit.dart';
+import '../cubit/entitlement/entitlement_cubit.dart';
 import '../cubit/profile/profile_cubit.dart';
 import '../cubit/tracker/tracker_cubit.dart';
 import '../data/ads_service.dart';
@@ -16,6 +19,7 @@ import '../models/meal.dart';
 import '../models/meal_slot.dart';
 import '../styles/app_color.dart';
 import '../widgets/bulkr_nav_bar.dart';
+import '../widgets/plan_limit_notice.dart';
 import '../widgets/animations/count_up.dart';
 import '../widgets/animations/entrance.dart';
 import '../widgets/animations/press_scale.dart';
@@ -454,9 +458,35 @@ class _DayStrip extends StatelessWidget {
     final TrackerCubit cubit = context.read<TrackerCubit>();
     final bool isToday = state.isToday;
 
+    // How far back this account may look.
+    //
+    // This limit is gated here and nowhere else, unlike the meal library —
+    // and `supabase/premium_limits.sql` says why: restricting reads of
+    // `daily_logs` would also restrict them for `logging_streak()`, which runs
+    // as the caller, so every free account's streak would silently cap at
+    // seven days. A patched client reading its own history costs nothing and
+    // harms nobody, so a display gate is the honest trade.
+    final PlanLimits limits =
+        PlanLimits.of(context.watch<EntitlementCubit>().state.entitlement);
+
+    final DateTime previous = state.day.subtract(const Duration(days: 1));
+    final bool previousIsLocked = !limits.includesDay(previous);
+
     return Row(
       children: [
-        _Arrow(icon: Icons.chevron_left, onTap: cubit.previousDay),
+        // Still tappable when it is locked. A dead arrow teaches nothing; a
+        // tap that explains what is behind it is the only version of this
+        // that is any use.
+        _Arrow(
+          icon: previousIsLocked ? Icons.lock_outline : Icons.chevron_left,
+          onTap: previousIsLocked
+              ? () => PlanLimitNotice.show(
+                    context,
+                    PlanLimit.historyDays,
+                    source: 'tracker_history',
+                  )
+              : cubit.previousDay,
+        ),
         Expanded(
           child: Column(
             children: [

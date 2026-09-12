@@ -128,6 +128,14 @@ has them at 28 and 29.
 it before that file leaves the old definition in place, and the restore then
 appears to work and changes nothing.
 
+A third, `premium_limits.sql`, is where the free tier's caps are enforced. It
+needs `premium.sql` first, and without it free and premium differ only in ads.
+
+Once they are applied, prove the cap actually bites — the verify block at the
+bottom of `premium_limits.sql` is two statements — and then prove that
+granting premium lifts it. A limit that does not bite and a limit that cannot
+be lifted are both silent, and they look identical from the app.
+
 Without `premium.sql` nobody is premium — which the app treats as an answer
 rather than an error, so it will not complain. The symptom is that no
 subscription ever takes effect.
@@ -224,6 +232,8 @@ No action needed; listed so nobody re-checks them by hand.
 | `ad_policy_test.dart` | an interstitial becoming reachable on day one, twice in four minutes, five times a day, or inside an earned ad-free window — and a non-release build ever requesting a real ad unit |
 | `privacy_manifest_test.dart` | the manifest claiming not to track while the ad SDK is a dependency, or either platform carrying the other's AdMob app ID |
 | `streak_state_test.dart` | the restore offer appearing next to a running streak, or for a one-day run |
+| `plan_limit_error_test.dart` | a full free tier being reported as a permission error, or a limit with no sentence and no way out of it |
+| `trial_offer_test.dart` | a store period the parser does not understand being shown as "0 days free" |
 | `meal_repository_test.dart` | a meal logged against the wrong day in a non-UTC timezone |
 | `post_repository_test.dart` | keyset paging turning back into an offset |
 | `plan_limits_test.dart` | the free tier's numbers in the app and in `premium.sql` drifting apart, or a write policy appearing on `subscriptions` |

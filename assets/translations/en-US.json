@@ -673,5 +673,9 @@
   "account_premium": "Bulkr Premium",
   "account_premium_helper": "No ads, no limits",
   "account_premium_active": "Active",
-  "a11y_close": "Close"
+  "a11y_close": "Close",
+  "limit_saved_meals": "Free accounts keep {count} meals. Premium keeps as many as you like.",
+  "limit_active_challenges": "Free accounts run one challenge at a time. Premium runs as many as you want.",
+  "limit_history_days": "Free accounts go back {days} days. Premium goes back to the beginning.",
+  "limit_upgrade": "See Premium"
 }

@@ -14,6 +14,7 @@ class MealEditorState extends Equatable {
     this.savedWithoutIngredients = false,
     this.errorKey,
     this.errorDetail,
+    this.planLimit,
   });
 
   final MealDraft draft;
@@ -56,6 +57,13 @@ class MealEditorState extends Equatable {
   final String? errorKey;
   final String? errorDetail;
 
+  /// Which free-tier ceiling the save ran into, when that is what failed.
+  ///
+  /// Kept beside the message rather than derived from it: the screen offers an
+  /// upgrade here, and deciding whether to do that by matching on the text of
+  /// a sentence would stop working the first time somebody rewords it.
+  final PlanLimit? planLimit;
+
   bool get isSaving => status == MealEditorStatus.saving;
 
   /// Something has been changed and not saved.
@@ -92,6 +100,7 @@ class MealEditorState extends Equatable {
     bool? savedWithoutIngredients,
     String? errorKey,
     String? errorDetail,
+    PlanLimit? planLimit,
     bool clearError = false,
   }) {
     return MealEditorState(
@@ -106,6 +115,7 @@ class MealEditorState extends Equatable {
           savedWithoutIngredients ?? this.savedWithoutIngredients,
       errorKey: clearError ? null : (errorKey ?? this.errorKey),
       errorDetail: clearError ? null : (errorDetail ?? this.errorDetail),
+      planLimit: clearError ? null : (planLimit ?? this.planLimit),
     );
   }
 
@@ -121,5 +131,6 @@ class MealEditorState extends Equatable {
         savedWithoutIngredients,
         errorKey,
         errorDetail,
+        planLimit,
       ];
 }

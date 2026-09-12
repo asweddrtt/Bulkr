@@ -206,16 +206,22 @@ spent later on a win-back than at launch, when there is nobody to win back.
   and `verify-purchase`, which asks the store itself and writes
   `subscriptions` with the service key. **The app never writes that table** —
   see the header of `supabase/premium.sql`.
+- **The limits** — `premium_limits.sql`. The meal library and the challenge
+  cap are enforced by triggers raising their own SQLSTATE, so the app can say
+  "you have reached the 20 meals a free account keeps" rather than "you do not
+  have permission". The history window is gated in the app only, and the
+  header of that file says why: restricting reads of `daily_logs` would also
+  cap every free account's streak at seven days, which is a worse bug than the
+  thing it prevents.
 
 ## What is not built yet
 
 Still to come:
 
-1. **Enforcement**: the `free_*()` functions exist and no policy calls them
-   yet, so today free and premium differ only in ads. Each limit is one
-   `and (public.is_premium(auth.uid()) or <count> < ...)` added to a policy
-   that already exists — and each needs the screen that hits it to offer the
-   upgrade rather than show a 42501.
+1. **The upgrade prompt at every wall.** The meal library and the tracker's
+   history both offer it; joining a second challenge currently just says why
+   it failed. The sentence is right either way — `plan_limit_error.dart`
+   supplies it — but a limit with a button beats a limit with an explanation.
 2. **The two products in App Store Connect and Play Console.** Everything
    else about buying is built; this is what it needs to exist. Ids, prices and
    the trial are in the table at the top of this file. Until they exist, the
