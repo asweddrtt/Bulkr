@@ -210,6 +210,25 @@ Supabase shows a "check your SMTP provider" notice for personal email hosts.
 It is advice, not an error: Gmail is not built for bulk sending and they would
 rather you used a dedicated provider. At this volume it works.
 
+### Site URL must not stay `http://localhost:3000`
+
+The Redirect URLs allow-list carries `com.alimahmoud.bulkr://login-callback`,
+which is what the app asks for and what matters most. But the **Site URL** just
+above it is Supabase's default, and the dashboard describes exactly when it is
+used: when a redirect is not specified, when the one specified is not in the
+allow list, and as `{{ .SiteURL }}` in the email templates.
+
+Every call the app makes passes a redirect explicitly — `signUp`,
+`resetPasswordForEmail` and `resend` all send
+`SupabaseConfig.oauthRedirectUrl` — so the first two cases should not arise.
+The third is the trap: any email template referencing `{{ .SiteURL }}` puts
+`http://localhost:3000` in a message on somebody's phone, where it opens
+nothing at all. Nothing errors. The email arrives looking correct.
+
+**Set Site URL to `com.alimahmoud.bulkr://login-callback` too.** There is no
+website, so there is nothing else it could usefully point at, and it makes the
+fallback land in the app instead of on a dead port.
+
 Two settings that must also be right, both of which already are for OAuth:
 
 - **Confirm email** stays on. The app expects sign-up to produce no session and
