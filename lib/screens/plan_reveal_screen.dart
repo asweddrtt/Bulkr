@@ -1,10 +1,14 @@
 import 'package:easy_localization/easy_localization.dart';
+import 'package:flutter/foundation.dart';
+import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../data/purchase_service.dart';
+import '../cubit/entitlement/entitlement_cubit.dart';
 import '../cubit/onboarding/onboarding_cubit.dart';
 import '../go_router/app_routes.dart';
 import '../models/nutrition_plan.dart';
@@ -15,6 +19,8 @@ import '../widgets/animations/motion.dart';
 import '../widgets/animations/press_scale.dart';
 import '../widgets/macro_bar.dart';
 import '../widgets/onboarding_progress_dots.dart';
+
+import 'upgrade_screen.dart';
 
 /// Step 5 — the reveal.
 ///
@@ -163,7 +169,58 @@ class PlanRevealScreen extends StatelessWidget {
   Future<void> _commit(BuildContext context) async {
     final router = GoRouter.of(context);
     final succeeded = await context.read<OnboardingCubit>().submit();
-    if (succeeded) router.go(AppRoutes.home);
+    if (!succeeded || !context.mounted) return;
+
+    await _offerPremium(context);
+    router.go(AppRoutes.home);
+  }
+
+  /// The upgrade screen, once — right after the plan lands.
+  ///
+  /// This is the moment the app is worth the most it will ever be worth to
+  /// somebody: they have just answered five screens of questions and been
+  /// handed a number that is theirs. Asking here converts better than asking
+  /// anywhere else, and it asks *once* — there is no second onboarding.
+  ///
+  /// Dismissible, and it has to be. A paywall somebody cannot get past is a
+  /// guideline problem and a one-star review, and the free tier is meant to be
+  /// genuinely usable — see `docs/PREMIUM.md`. Closing it lands them on the
+  /// home screen exactly as before.
+  ///
+  /// ## When it is skipped
+  ///
+  /// When there is nothing to sell. In a release build with no products live
+  /// in App Store Connect yet, the paywall would say the store is unreachable
+  /// — which is true, and is a miserable first thing to show somebody who has
+  /// just finished signing up. So the products are asked for first and the
+  /// screen is skipped when the answer is empty.
+  ///
+  /// Debug builds show it regardless, because that is where it gets looked at
+  /// and the paywall draws stand-in prices there anyway.
+  ///
+  /// Also skipped for an account that is already premium — a restored
+  /// subscription on a reinstall — since selling somebody what they own is how
+  /// you get asked whether they are being charged twice.
+  static Future<void> _offerPremium(BuildContext context) async {
+    if (context.read<EntitlementCubit>().state.isPremium) return;
+
+    if (!kDebugMode) {
+      final PurchaseService purchases = context.read<PurchaseService>();
+
+      // Bounded, because this sits between the last tap of onboarding and the
+      // home screen: a store that is thinking about it must not hold somebody
+      // on a spinner at the end of sign-up.
+      final List<ProductDetails> products = await purchases
+          .products()
+          .timeout(
+            const Duration(seconds: 4),
+            onTimeout: () => const <ProductDetails>[],
+          );
+
+      if (products.isEmpty || !context.mounted) return;
+    }
+
+    await UpgradeScreen.open(context, source: 'onboarding');
   }
 
   /// Translated keys are our own; anything else came from Postgres and is

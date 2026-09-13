@@ -245,6 +245,15 @@ spent later on a win-back than at launch, when there is nobody to win back.
 
 Still to come:
 
+1. **Where the paywall is offered.** Once at the end of onboarding, right
+   after the plan reveal — the moment the app is worth the most it will ever
+   be worth to somebody, having just handed them a number that is theirs. Once
+   from the account sheet. And at each wall a free account runs into.
+
+   The onboarding one is dismissible and skips itself when there is nothing to
+   sell, so a release build with no live products never shows a new user "the
+   store isn't reachable" as the first thing after signing up.
+
 1. **The upgrade prompt at every wall.** The meal library and the tracker's
    history both offer it; joining a second challenge currently just says why
    it failed. The sentence is right either way — `plan_limit_error.dart`
