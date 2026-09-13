@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:equatable/equatable.dart';
 
 import '../core/calorie_engine.dart';
@@ -29,6 +30,11 @@ class UserProfile extends Equatable {
     required this.fatTargetG,
     required this.onboardingCompleted,
     this.targetsAreCustom = false,
+    this.restDayCalorieTarget,
+    this.restDayProteinG,
+    this.restDayCarbsG,
+    this.restDayFatG,
+    this.trainingDays = const <int>[],
     this.waterTargetMl,
   });
 
@@ -56,6 +62,67 @@ class UserProfile extends Equatable {
   /// the normal state and the safe reading of a row written before the column
   /// existed.
   final bool targetsAreCustom;
+
+  /// What to eat on a day without training. Null when the feature is off,
+  /// which is the normal state.
+  ///
+  /// The four columns above stay the **training day** targets rather than
+  /// becoming an average of the two — so an account that never turns this on
+  /// is untouched, and one that turns it off falls back to exactly what it
+  /// had.
+  final int? restDayCalorieTarget;
+  final int? restDayProteinG;
+  final int? restDayCarbsG;
+  final int? restDayFatG;
+
+  /// Which weekdays are training days, as ISO numbers: Monday 1 through
+  /// Sunday 7, which is what `DateTime.weekday` returns, so nothing converts.
+  ///
+  /// Empty means the feature is off and every day uses the original targets.
+  final List<int> trainingDays;
+
+  /// Whether this account has two sets of numbers rather than one.
+  ///
+  /// Needs both halves: days marked as training, and a rest-day calorie target
+  /// to use on the others. Either alone is a half-configured state that would
+  /// silently apply zero as a goal.
+  bool get hasDayTypes =>
+      trainingDays.isNotEmpty && (restDayCalorieTarget ?? 0) > 0;
+
+  /// Whether [day] is one the user lifts on.
+  ///
+  /// True when the feature is off, because then every day uses the training
+  /// numbers — which are simply "the targets".
+  bool isTrainingDay(DateTime day) =>
+      !hasDayTypes || trainingDays.contains(day.weekday);
+
+  /// The four targets that apply on [day].
+  ///
+  /// Every screen asks this rather than reading the columns, so adding day
+  /// types did not require each of them to learn what a day type is.
+  DayTargets targetsFor(DateTime day) {
+    if (isTrainingDay(day)) {
+      return DayTargets(
+        calories: dailyCalorieTarget,
+        proteinG: proteinTargetG,
+        carbsG: carbsTargetG,
+        fatG: fatTargetG,
+        isTraining: true,
+      );
+    }
+
+    // Each macro falls back to its training-day value rather than to zero: a
+    // rest day configured with calories but no protein is a half-filled form,
+    // and a protein goal of zero would read as "met" the moment anything was
+    // logged.
+    return DayTargets(
+      calories: restDayCalorieTarget ?? dailyCalorieTarget,
+      proteinG: restDayProteinG ?? proteinTargetG,
+      carbsG: restDayCarbsG ?? carbsTargetG,
+      fatG: restDayFatG ?? fatTargetG,
+      isTraining: false,
+    );
+  }
 
   /// A water goal the user set by hand, or null to derive one from bodyweight.
   ///
@@ -99,6 +166,11 @@ class UserProfile extends Equatable {
       fatTargetG: _parseInt(map['fat_target_g']) ?? 0,
       onboardingCompleted: map['onboarding_completed'] == true,
       targetsAreCustom: map['targets_are_custom'] == true,
+      restDayCalorieTarget: _parseInt(map['rest_day_calorie_target']),
+      restDayProteinG: _parseInt(map['rest_day_protein_g']),
+      restDayCarbsG: _parseInt(map['rest_day_carbs_g']),
+      restDayFatG: _parseInt(map['rest_day_fat_g']),
+      trainingDays: _parseDays(map['training_days']),
       waterTargetMl: _parseInt(map['water_target_ml']),
     );
   }
@@ -110,6 +182,24 @@ class UserProfile extends Equatable {
     if (value is num) return value.toDouble();
     if (value is String) return double.tryParse(value);
     return null;
+  }
+
+  /// `training_days` as Postgres hands it over.
+  ///
+  /// PostgREST returns an `int[]` as a JSON list, but a row written before the
+  /// column existed answers null, and a hand-edited one could hold anything —
+  /// so values outside 1-7 are dropped rather than trusted. A stray 0 would
+  /// silently mean "never a training day".
+  static List<int> _parseDays(Object? value) {
+    if (value is! List) return const <int>[];
+
+    final List<int> days = <int>[
+      for (final Object? entry in value)
+        if (_parseInt(entry) case final int day when day >= 1 && day <= 7) day,
+    ];
+
+    days.sort();
+    return days;
   }
 
   static int? _parseInt(Object? value) {
@@ -174,5 +264,35 @@ class UserProfile extends Equatable {
         onboardingCompleted,
         waterTargetMl,
         targetsAreCustom,
+        restDayCalorieTarget,
+        restDayProteinG,
+        restDayCarbsG,
+        restDayFatG,
+        trainingDays,
       ];
+}
+
+/// The targets that apply on one particular day.
+///
+/// A value rather than four loose ints, because "which day's targets are
+/// these" is exactly the question that gets lost when they are passed around
+/// separately.
+@immutable
+class DayTargets {
+  const DayTargets({
+    required this.calories,
+    required this.proteinG,
+    required this.carbsG,
+    required this.fatG,
+    required this.isTraining,
+  });
+
+  final int calories;
+  final int proteinG;
+  final int carbsG;
+  final int fatG;
+
+  /// Whether this is a training day. Always true for an account with one set
+  /// of numbers, where the distinction does not exist.
+  final bool isTraining;
 }

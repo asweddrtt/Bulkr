@@ -720,5 +720,21 @@
   "targets_recalc_body": "Recalculating works out new numbers from your weight and pace. The ones you set will be replaced.",
   "targets_recalc_confirm": "Recalculate",
   "targets_recalc_keep": "Keep mine",
-  "limit_custom_targets": "Setting your own calories and macros is a Premium feature."
+  "limit_custom_targets": "Setting your own calories and macros is a Premium feature.",
+  "limit_day_targets": "Training and rest day targets are a Premium feature.",
+  "targets_training_heading": "Training days",
+  "targets_rest_heading": "Rest days",
+  "targets_day_types": "Eat differently on rest days",
+  "targets_day_types_helper": "Pick the days you train. The rest get their own numbers.",
+  "targets_pick_days": "Days you train",
+  "targets_need_a_day": "Pick at least one training day.",
+  "day_mon": "M",
+  "day_tue": "T",
+  "day_wed": "W",
+  "day_thu": "T",
+  "day_fri": "F",
+  "day_sat": "S",
+  "day_sun": "S",
+  "tracker_training_day": "Training day",
+  "tracker_rest_day": "Rest day"
 }

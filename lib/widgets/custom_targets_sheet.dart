@@ -16,12 +16,30 @@ class CustomTargets {
     required this.proteinG,
     required this.carbsG,
     required this.fatG,
+    this.trainingDays = const <int>[],
+    this.restCalories,
+    this.restProteinG,
+    this.restCarbsG,
+    this.restFatG,
   });
 
+  /// The training-day numbers, and — when day types are off — simply the
+  /// numbers.
   final int calories;
   final int proteinG;
   final int carbsG;
   final int fatG;
+
+  /// ISO weekdays the user trains on, or empty when they eat the same every
+  /// day. See `supabase/day_targets.sql`.
+  final List<int> trainingDays;
+
+  final int? restCalories;
+  final int? restProteinG;
+  final int? restCarbsG;
+  final int? restFatG;
+
+  bool get hasDayTypes => trainingDays.isNotEmpty && (restCalories ?? 0) > 0;
 
   /// What the macros actually add up to. Protein and carbs are 4 kcal a gram,
   /// fat 9.
@@ -80,6 +98,15 @@ class _CustomTargetsSheetState extends State<CustomTargetsSheet> {
   late final TextEditingController _carbs;
   late final TextEditingController _fat;
 
+  late final TextEditingController _restCalories;
+  late final TextEditingController _restProtein;
+  late final TextEditingController _restCarbs;
+  late final TextEditingController _restFat;
+
+  /// ISO weekdays, Monday 1 through Sunday 7.
+  late Set<int> _trainingDays;
+  late bool _dayTypesOn;
+
   @override
   void initState() {
     super.initState();
@@ -91,14 +118,45 @@ class _CustomTargetsSheetState extends State<CustomTargetsSheet> {
     _protein = TextEditingController(text: '${widget.profile.proteinTargetG}');
     _carbs = TextEditingController(text: '${widget.profile.carbsTargetG}');
     _fat = TextEditingController(text: '${widget.profile.fatTargetG}');
+
+    _dayTypesOn = widget.profile.hasDayTypes;
+    _trainingDays = <int>{...widget.profile.trainingDays};
+
+    // Seeded from the training numbers rather than left blank when the feature
+    // is being switched on for the first time. Somebody turning this on wants
+    // to lower a couple of figures, not retype four — and a blank form reads
+    // as "you must know what you are doing" on the one screen where most
+    // people do not yet.
+    _restCalories = TextEditingController(
+      text:
+          '${widget.profile.restDayCalorieTarget ?? widget.profile.dailyCalorieTarget}',
+    );
+    _restProtein = TextEditingController(
+      text:
+          '${widget.profile.restDayProteinG ?? widget.profile.proteinTargetG}',
+    );
+    _restCarbs = TextEditingController(
+      text: '${widget.profile.restDayCarbsG ?? widget.profile.carbsTargetG}',
+    );
+    _restFat = TextEditingController(
+      text: '${widget.profile.restDayFatG ?? widget.profile.fatTargetG}',
+    );
   }
 
   @override
   void dispose() {
-    _calories.dispose();
-    _protein.dispose();
-    _carbs.dispose();
-    _fat.dispose();
+    for (final TextEditingController controller in <TextEditingController>[
+      _calories,
+      _protein,
+      _carbs,
+      _fat,
+      _restCalories,
+      _restProtein,
+      _restCarbs,
+      _restFat,
+    ]) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
@@ -110,14 +168,35 @@ class _CustomTargetsSheetState extends State<CustomTargetsSheet> {
     proteinG: _value(_protein),
     carbsG: _value(_carbs),
     fatG: _value(_fat),
+    trainingDays: _dayTypesOn
+        ? (_trainingDays.toList()..sort())
+        : const <int>[],
+    restCalories: _dayTypesOn ? _value(_restCalories) : null,
+    restProteinG: _dayTypesOn ? _value(_restProtein) : null,
+    restCarbsG: _dayTypesOn ? _value(_restCarbs) : null,
+    restFatG: _dayTypesOn ? _value(_restFat) : null,
   );
 
   bool get _isUsable {
     final CustomTargets targets = _current;
-    return targets.calories > 0 &&
+
+    final bool trainingIsUsable =
+        targets.calories > 0 &&
         targets.proteinG > 0 &&
         targets.carbsG > 0 &&
         targets.fatG > 0;
+
+    if (!_dayTypesOn) return trainingIsUsable;
+
+    // A rest day with no training days is every day, and a rest day with no
+    // calories is a goal of zero. Both are half-filled forms rather than
+    // choices, so the button waits.
+    return trainingIsUsable &&
+        _trainingDays.isNotEmpty &&
+        (targets.restCalories ?? 0) > 0 &&
+        (targets.restProteinG ?? 0) > 0 &&
+        (targets.restCarbsG ?? 0) > 0 &&
+        (targets.restFatG ?? 0) > 0;
   }
 
   @override
@@ -128,51 +207,80 @@ class _CustomTargetsSheetState extends State<CustomTargetsSheet> {
     return SheetShell(
       title: 'targets_title'.tr(),
       children: <Widget>[
-        Text(
-          'targets_body'.tr(),
-          style: GoogleFonts.inter(
-            color: Colors.white54,
-            fontSize: 11.sp,
-            height: 1.5,
+        // Scrollable, because turning day types on doubles the form and a
+        // bottom sheet on a small phone runs out of room well before the save
+        // button.
+        ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.55,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  'targets_body'.tr(),
+                  style: GoogleFonts.inter(
+                    color: Colors.white54,
+                    fontSize: 11.sp,
+                    height: 1.5,
+                  ),
+                ),
+                SizedBox(height: 16.h),
+                if (_dayTypesOn) ...<Widget>[
+                  _Heading(label: 'targets_training_heading'.tr()),
+                  SizedBox(height: 8.h),
+                ],
+                _MacroFields(
+                  calories: _calories,
+                  protein: _protein,
+                  carbs: _carbs,
+                  fat: _fat,
+                  onChanged: _refresh,
+                ),
+                SizedBox(height: 14.h),
+                // Shown, never enforced. See the note on this class.
+                _Reconciliation(targets: targets, difference: difference),
+                SizedBox(height: 16.h),
+                _DayTypeToggle(
+                  value: _dayTypesOn,
+                  onChanged: (bool on) => setState(() => _dayTypesOn = on),
+                ),
+                if (_dayTypesOn) ...<Widget>[
+                  SizedBox(height: 14.h),
+                  _WeekdayPicker(
+                    selected: _trainingDays,
+                    onToggle: (int day) => setState(() {
+                      _trainingDays.contains(day)
+                          ? _trainingDays.remove(day)
+                          : _trainingDays.add(day);
+                    }),
+                  ),
+                  if (_trainingDays.isEmpty) ...<Widget>[
+                    SizedBox(height: 6.h),
+                    Text(
+                      'targets_need_a_day'.tr(),
+                      style: GoogleFonts.inter(
+                        color: const Color(0xFFFF9E3D),
+                        fontSize: 10.sp,
+                      ),
+                    ),
+                  ],
+                  SizedBox(height: 16.h),
+                  _Heading(label: 'targets_rest_heading'.tr()),
+                  SizedBox(height: 8.h),
+                  _MacroFields(
+                    calories: _restCalories,
+                    protein: _restProtein,
+                    carbs: _restCarbs,
+                    fat: _restFat,
+                    onChanged: _refresh,
+                  ),
+                ],
+              ],
+            ),
           ),
         ),
-        SizedBox(height: 16.h),
-        _Field(
-          label: 'targets_calories'.tr(),
-          controller: _calories,
-          onChanged: _refresh,
-        ),
-        SizedBox(height: 10.h),
-        Row(
-          children: <Widget>[
-            Expanded(
-              child: _Field(
-                label: 'targets_protein'.tr(),
-                controller: _protein,
-                onChanged: _refresh,
-              ),
-            ),
-            SizedBox(width: 8.w),
-            Expanded(
-              child: _Field(
-                label: 'targets_carbs'.tr(),
-                controller: _carbs,
-                onChanged: _refresh,
-              ),
-            ),
-            SizedBox(width: 8.w),
-            Expanded(
-              child: _Field(
-                label: 'targets_fat'.tr(),
-                controller: _fat,
-                onChanged: _refresh,
-              ),
-            ),
-          ],
-        ),
-        SizedBox(height: 14.h),
-        // Shown, never enforced. See the note on this class.
-        _Reconciliation(targets: targets, difference: difference),
         SizedBox(height: 16.h),
         SizedBox(
           width: double.infinity,
@@ -295,6 +403,202 @@ class _Field extends StatelessWidget {
           borderSide: const BorderSide(color: AppColors.primaryNeon),
         ),
       ),
+    );
+  }
+}
+
+/// A section label, so the two sets of fields are unmistakably two sets.
+class _Heading extends StatelessWidget {
+  const _Heading({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      label.toUpperCase(),
+      style: GoogleFonts.anton(
+        color: Colors.white,
+        fontSize: 12.sp,
+        letterSpacing: 1.2,
+      ),
+    );
+  }
+}
+
+/// The four number fields, used once for training days and once for rest.
+class _MacroFields extends StatelessWidget {
+  const _MacroFields({
+    required this.calories,
+    required this.protein,
+    required this.carbs,
+    required this.fat,
+    required this.onChanged,
+  });
+
+  final TextEditingController calories;
+  final TextEditingController protein;
+  final TextEditingController carbs;
+  final TextEditingController fat;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: <Widget>[
+        _Field(
+          label: 'targets_calories'.tr(),
+          controller: calories,
+          onChanged: onChanged,
+        ),
+        SizedBox(height: 10.h),
+        Row(
+          children: <Widget>[
+            Expanded(
+              child: _Field(
+                label: 'targets_protein'.tr(),
+                controller: protein,
+                onChanged: onChanged,
+              ),
+            ),
+            SizedBox(width: 8.w),
+            Expanded(
+              child: _Field(
+                label: 'targets_carbs'.tr(),
+                controller: carbs,
+                onChanged: onChanged,
+              ),
+            ),
+            SizedBox(width: 8.w),
+            Expanded(
+              child: _Field(
+                label: 'targets_fat'.tr(),
+                controller: fat,
+                onChanged: onChanged,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _DayTypeToggle extends StatelessWidget {
+  const _DayTypeToggle({required this.value, required this.onChanged});
+
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: <Widget>[
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                'targets_day_types'.tr(),
+                style: GoogleFonts.inter(
+                  color: Colors.white,
+                  fontSize: 12.sp,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              SizedBox(height: 2.h),
+              Text(
+                'targets_day_types_helper'.tr(),
+                style: GoogleFonts.inter(
+                  color: Colors.white38,
+                  fontSize: 10.sp,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Switch(
+          value: value,
+          onChanged: onChanged,
+          activeThumbColor: Colors.black,
+          activeTrackColor: AppColors.primaryNeon,
+        ),
+      ],
+    );
+  }
+}
+
+/// Monday to Sunday, as seven toggles.
+///
+/// Weekdays rather than "3 days a week": which days matter, because the
+/// targets are applied by the calendar and a user who lifts Tuesday and
+/// Thursday needs those exact days, not a count.
+class _WeekdayPicker extends StatelessWidget {
+  const _WeekdayPicker({required this.selected, required this.onToggle});
+
+  final Set<int> selected;
+  final ValueChanged<int> onToggle;
+
+  /// ISO order — Monday first, matching `DateTime.weekday`.
+  static const List<String> _keys = <String>[
+    'day_mon',
+    'day_tue',
+    'day_wed',
+    'day_thu',
+    'day_fri',
+    'day_sat',
+    'day_sun',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(
+          'targets_pick_days'.tr(),
+          style: GoogleFonts.inter(color: Colors.white54, fontSize: 10.sp),
+        ),
+        SizedBox(height: 8.h),
+        Row(
+          children: <Widget>[
+            for (int day = 1; day <= 7; day++) ...<Widget>[
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => onToggle(day),
+                  behavior: HitTestBehavior.opaque,
+                  child: Container(
+                    height: 38.h,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: selected.contains(day)
+                          ? AppColors.primaryNeon.withValues(alpha: 0.18)
+                          : const Color(0xFF1C1C1C),
+                      borderRadius: BorderRadius.circular(8.r),
+                      border: Border.all(
+                        color: selected.contains(day)
+                            ? AppColors.primaryNeon
+                            : AppColors.darkBorder,
+                      ),
+                    ),
+                    child: Text(
+                      _keys[day - 1].tr(),
+                      style: GoogleFonts.inter(
+                        color: selected.contains(day)
+                            ? AppColors.primaryNeon
+                            : Colors.white54,
+                        fontSize: 11.sp,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              if (day < 7) SizedBox(width: 4.w),
+            ],
+          ],
+        ),
+      ],
     );
   }
 }

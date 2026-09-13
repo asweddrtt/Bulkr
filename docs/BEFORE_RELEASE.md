@@ -128,6 +128,11 @@ appears to work and changes nothing.
 A third, `premium_limits.sql`, is where the free tier's caps are enforced. It
 needs `premium.sql` first, and without it free and premium differ only in ads.
 
+Then `custom_targets.sql` and `day_targets.sql`, in that order — both add
+columns to `users` and both gate a premium feature on the same SQLSTATE.
+Without them the two targets features are simply refused by a column that does
+not exist.
+
 Once they are applied, prove the cap actually bites — the verify block at the
 bottom of `premium_limits.sql` is two statements — and then prove that
 granting premium lifts it. A limit that does not bite and a limit that cannot
@@ -275,6 +280,7 @@ No action needed; listed so nobody re-checks them by hand.
 | `trial_offer_test.dart` | a store period the parser does not understand being shown as "0 days free" |
 | `store_links_test.dart` | the Play package drifting from `applicationId`, which turns the cancel link into a page that does not name the subscription |
 | `premium_plan_test.dart` | Play's per-offer entries drawing the same plan twice, one of them priced at nothing |
+| `day_targets_test.dart` | a rest day's numbers applying on a training day, a zero-based weekday shifting the whole week, or a half-filled form applying a goal of zero |
 | `meal_repository_test.dart` | a meal logged against the wrong day in a non-UTC timezone |
 | `post_repository_test.dart` | keyset paging turning back into an offset |
 | `plan_limits_test.dart` | the free tier's numbers in the app and in `premium.sql` drifting apart, or a write policy appearing on `subscriptions` |

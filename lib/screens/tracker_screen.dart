@@ -123,6 +123,13 @@ class _TrackerView extends StatelessWidget {
             _DayStrip(state: state),
             // Between the date and the ring on purpose: it is about the days
             // around this one, not about this one's calories.
+            // Which kind of day this is, for an account that has two. Sits
+            // above the ring because it explains the number in it — a target
+            // that drops by 600 on a Wednesday is alarming without it.
+            if (state.isTrainingDay != null) ...[
+              SizedBox(height: 12.h),
+              _DayTypeRow(isTraining: state.isTrainingDay!),
+            ],
             if (state.hasStreak) ...[
               SizedBox(height: 12.h),
               _StreakRow(streak: state.streak),
@@ -175,6 +182,52 @@ class _TrackerView extends StatelessWidget {
           ],
           step: const Duration(milliseconds: 55),
         ),
+      ),
+    );
+  }
+}
+
+/// Training day or rest day, for an account that eats differently on each.
+///
+/// Absent entirely when there is one set of targets, which is most accounts —
+/// a label saying "training day" to somebody who has never told the app what a
+/// training day is would be noise.
+class _DayTypeRow extends StatelessWidget {
+  const _DayTypeRow({required this.isTraining});
+
+  final bool isTraining;
+
+  @override
+  Widget build(BuildContext context) {
+    final Color tint = isTraining ? AppColors.primaryNeon : Colors.white38;
+
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 8.h),
+      decoration: BoxDecoration(
+        color: _cardColor,
+        borderRadius: BorderRadius.circular(12.r),
+        border: Border.all(color: AppColors.darkBorder),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isTraining ? Icons.fitness_center : Icons.bedtime_outlined,
+            color: tint,
+            size: 16.sp,
+          ),
+          SizedBox(width: 10.w),
+          Text(
+            (isTraining ? 'tracker_training_day' : 'tracker_rest_day')
+                .tr()
+                .toUpperCase(),
+            style: GoogleFonts.inter(
+              color: tint,
+              fontSize: 10.sp,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.8,
+            ),
+          ),
+        ],
       ),
     );
   }

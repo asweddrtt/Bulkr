@@ -236,6 +236,18 @@ class DashboardScreen extends StatelessWidget {
       fatG: targets.fatG,
     );
 
+    // Second write, and second on purpose: the four training-day numbers are
+    // the ones every account has, and they must land even if the day-type
+    // write is refused. Passing an empty list turns day types off, which is
+    // what the sheet's switch being off means.
+    await cubit.setDayTargets(
+      trainingDays: targets.trainingDays,
+      restCalories: targets.restCalories,
+      restProteinG: targets.restProteinG,
+      restCarbsG: targets.restCarbsG,
+      restFatG: targets.restFatG,
+    );
+
     // Said out loud. The sheet closes either way, and four numbers changing
     // behind it on a card the user may not be looking at is not confirmation
     // that anything happened.

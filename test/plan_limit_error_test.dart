@@ -109,6 +109,7 @@ void main() {
         'limit_active_challenges',
         'limit_history_days',
         'limit_custom_targets',
+        'limit_day_targets',
       ]) {
         expect(
           '${translations[key]}'.toLowerCase(),

@@ -498,6 +498,38 @@ class UserRepository {
         .eq('id', userId);
   }
 
+  /// Turns training and rest days on, or off.
+  ///
+  /// Passing an empty [trainingDays] turns the feature off and nulls the
+  /// rest-day columns, which is what makes the original four targets apply to
+  /// every day again — the same numbers the account had before, untouched.
+  ///
+  /// Premium only, enforced by a trigger rather than here. See
+  /// `supabase/day_targets.sql`.
+  Future<void> setDayTargets({
+    required List<int> trainingDays,
+    int? restCalories,
+    int? restProteinG,
+    int? restCarbsG,
+    int? restFatG,
+  }) async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) return;
+
+    final bool on = trainingDays.isNotEmpty && (restCalories ?? 0) > 0;
+
+    await _client
+        .from('users')
+        .update({
+          'training_days': on ? (trainingDays.toSet().toList()..sort()) : null,
+          'rest_day_calorie_target': on ? restCalories : null,
+          'rest_day_protein_g': on ? restProteinG : null,
+          'rest_day_carbs_g': on ? restCarbsG : null,
+          'rest_day_fat_g': on ? restFatG : null,
+        })
+        .eq('id', userId);
+  }
+
   /// Stores numbers the user chose themselves.
   ///
   /// Premium only, and enforced in the database rather than here — a trigger

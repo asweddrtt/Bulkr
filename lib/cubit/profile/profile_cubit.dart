@@ -232,6 +232,26 @@ class ProfileCubit extends Cubit<ProfileState> {
     return _write(() => _userRepository.applyPlan(plan: plan));
   }
 
+  /// Training and rest days, or off when [trainingDays] is empty. Premium
+  /// only, like [setCustomTargets], and refused the same way.
+  Future<void> setDayTargets({
+    required List<int> trainingDays,
+    int? restCalories,
+    int? restProteinG,
+    int? restCarbsG,
+    int? restFatG,
+  }) {
+    return _write(
+      () => _userRepository.setDayTargets(
+        trainingDays: trainingDays,
+        restCalories: restCalories,
+        restProteinG: restProteinG,
+        restCarbsG: restCarbsG,
+        restFatG: restFatG,
+      ),
+    );
+  }
+
   /// Targets the user typed in themselves. Premium only — the database says
   /// so, and `_write` surfaces the refusal like any other failure.
   Future<void> setCustomTargets({

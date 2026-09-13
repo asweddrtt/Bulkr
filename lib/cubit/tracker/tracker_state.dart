@@ -184,20 +184,38 @@ class TrackerState extends Equatable {
   /// either infinity or a full ring on the first bite — both worse than the
   /// screen admitting it has no target.
   int? get calorieTarget {
-    final int? target = profile?.dailyCalorieTarget;
+    final int? target = dayTargets?.calories;
     return (target == null || target <= 0) ? null : target;
   }
 
   bool get hasTarget => calorieTarget != null;
 
+  /// The targets for the day being shown, which is not always today's.
+  ///
+  /// Asked of the profile rather than read off it, because an account with
+  /// training and rest days has two sets and which one applies depends on the
+  /// weekday — see [UserProfile.targetsFor]. Everything below goes through
+  /// this, so scrolling back to last Sunday shows what the goal was *that*
+  /// day rather than what it is now.
+  DayTargets? get dayTargets => profile?.targetsFor(day);
+
+  /// Whether the day on screen is one the user lifts on. Null when this
+  /// account has one set of targets and the distinction does not exist.
+  bool? get isTrainingDay =>
+      profile?.hasDayTypes == true ? profile?.isTrainingDay(day) : null;
+
   /// Macro targets in grams, as a [Macros] so the same arithmetic works on
   /// both sides of the comparison.
-  Macros get macroTargets => Macros(
-        calories: (profile?.dailyCalorieTarget ?? 0).toDouble(),
-        proteinG: (profile?.proteinTargetG ?? 0).toDouble(),
-        carbsG: (profile?.carbsTargetG ?? 0).toDouble(),
-        fatG: (profile?.fatTargetG ?? 0).toDouble(),
-      );
+  Macros get macroTargets {
+    final DayTargets? targets = dayTargets;
+
+    return Macros(
+      calories: (targets?.calories ?? 0).toDouble(),
+      proteinG: (targets?.proteinG ?? 0).toDouble(),
+      carbsG: (targets?.carbsG ?? 0).toDouble(),
+      fatG: (targets?.fatG ?? 0).toDouble(),
+    );
+  }
 
   /// Calories still to eat. Negative once the target is passed, and
   /// deliberately not clamped — "budget spent" and "480 over" are different

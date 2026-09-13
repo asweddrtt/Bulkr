@@ -12,6 +12,7 @@ accumulate. **$6.99/month or $39.99/year**, yearly shown first.
 | Active challenges | 1 | unlimited |
 | Insights, trends, projections | all of them | all of them |
 | Your own calories and macro split | computed plan | set them yourself |
+| Training vs rest day targets | one set of numbers | two, applied by weekday |
 | Ads | banner + interstitial | none |
 
 Store products, to be created in App Store Connect and Play Console:
@@ -227,6 +228,11 @@ spent later on a win-back than at launch, when there is nobody to win back.
   macros add up to and how far that is from the calorie target, and blocks
   nothing: a split 60 kcal out is fine, and forcing somebody to fiddle until
   it is exact is how a feature stops being used.
+- **Training and rest days** — a second set of targets and the weekdays that
+  use the first, applied automatically by the day the tracker is showing. The
+  original four columns stay the *training* numbers rather than becoming an
+  average, so an account that never turns this on is untouched and one that
+  turns it off falls back to exactly what it had.
 - **The limits** — `premium_limits.sql`. The meal library and the challenge
   cap are enforced by triggers raising their own SQLSTATE, so the app can say
   "you have reached the 5 meals a free account keeps" rather than "you do not

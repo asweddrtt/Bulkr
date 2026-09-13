@@ -40,7 +40,11 @@ enum PlanLimit {
   /// a ceiling free runs into — but it arrives through the same SQLSTATE and
   /// needs the same sentence with the same way out, which is what this enum
   /// is for.
-  customTargets('custom_targets');
+  customTargets('custom_targets'),
+
+  /// Two sets of targets, applied by weekday. Enforced by its own trigger in
+  /// `day_targets.sql`, alongside [customTargets] and for the same reason.
+  dayTargets('day_targets');
 
   const PlanLimit(this.key);
 
@@ -82,6 +86,7 @@ String planLimitMessage(PlanLimit limit) {
     ),
     PlanLimit.activeChallenges => 'limit_active_challenges'.tr(),
     PlanLimit.customTargets => 'limit_custom_targets'.tr(),
+    PlanLimit.dayTargets => 'limit_day_targets'.tr(),
     PlanLimit.historyDays => 'limit_history_days'.tr(
       namedArgs: <String, String>{'days': '${PlanLimits.free.historyDays}'},
     ),
