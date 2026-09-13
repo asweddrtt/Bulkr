@@ -144,21 +144,43 @@ class AuthCubit extends Cubit<AuthenticationState> {
 
     await _runEmailAction(
       () async {
-        final bool needsConfirmation =
-            await _authRepository.signUpWithEmail(
+        final SignUpOutcome outcome = await _authRepository.signUpWithEmail(
           email: credentials.email,
           password: credentials.password,
         );
 
-        if (!needsConfirmation || isClosed) return;
+        if (isClosed) return;
 
-        emit(state.copyWith(
-          status: AuthStatus.initial,
-          pendingProvider: AuthProviderKind.none,
-          emailNotice: 'auth_check_inbox',
-          awaitingConfirmationFor: credentials.email,
-          clearError: true,
-        ));
+        switch (outcome) {
+          // A session already. Nothing to say — onAuthStateChange is about to
+          // move the app on.
+          case SignUpOutcome.signedIn:
+            return;
+
+          case SignUpOutcome.confirmationSent:
+            emit(state.copyWith(
+              status: AuthStatus.initial,
+              pendingProvider: AuthProviderKind.none,
+              emailNotice: 'auth_check_inbox',
+              awaitingConfirmationFor: credentials.email,
+              clearError: true,
+            ));
+
+          // The dead end this used to produce: "check your inbox" to somebody
+          // whose inbox will never receive anything. Said plainly instead, and
+          // pointing at the two providers that are the usual explanation.
+          case SignUpOutcome.alreadyRegistered:
+            emit(state.copyWith(
+              status: AuthStatus.failure,
+              pendingProvider: AuthProviderKind.none,
+              errorMessage: 'auth_failed_exists'.tr(),
+              clearNotice: true,
+              // Explicitly not offered: resending a confirmation for an
+              // account that is already confirmed sends nothing, which is the
+              // same dead end wearing a button.
+              clearAwaitingConfirmation: true,
+            ));
+        }
       },
       onDone: null,
       email: credentials.email,
