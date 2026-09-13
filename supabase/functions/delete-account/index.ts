@@ -82,16 +82,36 @@ Deno.serve(async (request: Request) => {
     await removeFolder(admin, "avatars", userId);
     await removeOwnedImages(admin, userId);
 
-    // Then the auth user. `public.users.id` references `auth.users(id)` on
-    // delete cascade, and everything else hangs off `public.users` the same
-    // way — posts, comments, likes, saves, follows, meals, daily logs, water,
-    // weight, group memberships, blocks. One delete, and the row that every
-    // other row points at is gone.
+    // Then the auth user. Everything else hangs off `public.users` — posts,
+    // comments, likes, saves, follows, meals, daily logs, water, weight, group
+    // memberships, blocks — so one delete takes the row that every other row
+    // points at.
+    //
+    // That only holds while the foreign keys say `on delete cascade`, and the
+    // tables predating this repository did not. `supabase/account_deletion.sql`
+    // is what makes it true; without it this call fails for every account,
+    // including an empty one.
     const { error } = await admin.auth.admin.deleteUser(userId);
 
     if (error) {
-      console.error("delete-account: deleteUser failed", error);
-      return json({ error: "delete_failed", detail: error.message }, 500);
+      // GoTrue reports every refusal from Postgres as the same five words:
+      // "Database error deleting user". No constraint, no table. So ask the
+      // database what is actually pointing at this row before giving up —
+      // otherwise the next person debugging this starts from nothing, which
+      // is where this function spent its first few months.
+      const blockers = await describeBlockers(admin);
+
+      console.error("delete-account: deleteUser failed", error, blockers);
+
+      return json(
+        {
+          error: "delete_failed",
+          detail: blockers
+            ? `${error.message} — blocked by ${blockers}`
+            : error.message,
+        },
+        500,
+      );
     }
 
     return json({ deleted: true }, 200);
@@ -100,6 +120,39 @@ Deno.serve(async (request: Request) => {
     return json({ error: "delete_failed", detail: `${error}` }, 500);
   }
 });
+
+/// Foreign keys that would refuse a `delete from auth.users`, as one line.
+///
+/// Defined by `supabase/account_deletion.sql`. Null when that migration has
+/// not been run — which is itself the likeliest explanation for the failure,
+/// and says so rather than reporting nothing.
+async function describeBlockers(
+  admin: ReturnType<typeof createClient>,
+): Promise<string | null> {
+  try {
+    const { data, error } = await admin.rpc("account_deletion_blockers");
+
+    if (error) {
+      return "unknown (run supabase/account_deletion.sql to find out)";
+    }
+
+    const rows = (data ?? []) as Array<{
+      schema_name: string;
+      table_name: string;
+      constraint_name: string;
+    }>;
+
+    if (!rows.length) return null;
+
+    return rows
+      .map((row) =>
+        `${row.schema_name}.${row.table_name} (${row.constraint_name})`
+      )
+      .join(", ");
+  } catch (_error) {
+    return null;
+  }
+}
 
 /// Removes everything under `<userId>/` in a bucket.
 ///
