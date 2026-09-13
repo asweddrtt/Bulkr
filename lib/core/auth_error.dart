@@ -75,6 +75,19 @@ class AuthErrors {
 
     if (code == 'signup_disabled') return 'auth_failed_signup_off'.tr();
 
+    // The email layer refused to send. Supabase reports it as
+    // `unexpected_failure`, which is the code it uses for "something broke
+    // that we did not anticipate" — here it means SMTP is misconfigured, or
+    // the project is still on the built-in sender, which only delivers to the
+    // organisation's own team members and refuses everybody else.
+    //
+    // Worth its own sentence rather than the generic "something went wrong"
+    // because there *is* a way forward for the person reading it: the OAuth
+    // buttons on the same screen do not touch email at all.
+    if (code == 'unexpected_failure' && message.contains('error sending')) {
+      return 'auth_failed_email_send'.tr();
+    }
+
     // Everything else falls through to the generic mapper, which at least
     // separates offline from server from permission.
     return null;
