@@ -36,6 +36,14 @@ chooser instead of the policy.
 
 `legal_config_test.dart` fails if it — or `usp`, or `pli` — comes back.
 
+### The support address is now a real inbox
+
+`LegalConfig.supportEmail` is `bulkr898@gmail.com` — the same address Supabase
+sends auth email from, so a user replying to a confirmation reaches the same
+place. It defaulted to `support@bulkr.app` for a while, which looks more
+professional and is worse in the only way that counts: nobody owns that domain,
+so mail to it bounced. `legal_config_test.dart` fails if it comes back.
+
 ### What the policy has to mention now that it did not before
 
 - Firebase Analytics and Crashlytics
@@ -179,10 +187,28 @@ delivery or uptime SLA, and Supabase says plainly it is not for production. At
 two an hour, the third person to sign up today does not get an email and has an
 account they cannot use.
 
-Fix it once, in Project Settings → Authentication → SMTP Settings. Any provider
-that speaks SMTP works; Resend's free tier is 3,000 a month. Then raise the auth
-limits in Authentication → Rate Limits, where the default with custom SMTP is 30
-new users an hour.
+**This is now configured**, against Gmail's own SMTP:
+
+| | |
+|---|---|
+| Host | `smtp.gmail.com` |
+| Sender | `bulkr898@gmail.com` |
+| Auth | a Google **app password**, not the account password |
+| Supabase email rate limit | raised to 500/hour |
+
+Worth knowing which ceiling actually binds: **Gmail's, not Supabase's.** A
+consumer Google account sends on the order of 500 messages a *day*, so the
+500/hour set in Supabase is a ceiling that will never be reached — the real
+allowance is roughly 500 daily. Ample for launch, and the thing to watch if
+sign-ups ever spike.
+
+Moving off Gmail later means a provider that verifies a sender address rather
+than a domain — SMTP2GO's free tier does 1,000 a month — or a domain and
+Resend. Neither is needed now.
+
+Supabase shows a "check your SMTP provider" notice for personal email hosts.
+It is advice, not an error: Gmail is not built for bulk sending and they would
+rather you used a dedicated provider. At this volume it works.
 
 Two settings that must also be right, both of which already are for OAuth:
 
@@ -194,8 +220,16 @@ Two settings that must also be right, both of which already are for OAuth:
   rather than a browser tab saying "you may now close this window".
 
 `AuthErrors.isEmailRateLimited` gives the rate limit its own sentence rather
-than a generic failure, so if this is skipped the symptom at least names
+than a generic failure, so if this is ever misconfigured the symptom names
 itself.
+
+### Still to verify on a device
+
+Configuration is not delivery. Sign up with a real address from a debug build
+and confirm three things: the email arrives, the link opens the *app* rather
+than a browser tab, and the account can then sign in. The middle one is the
+part most likely to be wrong, and it fails silently — a redirect URL that is
+not in the allow-list produces a link that looks fine and goes nowhere useful.
 
 ## 2c. The App Store Connect chicken-and-egg, and how to get the screenshot
 

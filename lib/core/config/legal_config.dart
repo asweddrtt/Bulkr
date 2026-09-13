@@ -63,9 +63,21 @@ class LegalConfig {
 
   /// The support address App Store guideline 1.2 asks a user-generated-content
   /// app for, alongside the reporting and blocking the app already has.
+  ///
+  /// A Gmail address, and deliberately so. This previously defaulted to
+  /// `support@bulkr.app` — a domain nobody owns — which reads as more
+  /// professional and is worse in the only way that matters: mail sent to it
+  /// bounces into nothing. An address on a free provider that a person
+  /// actually reads is a working contact method; a branded one that does not
+  /// exist is a guideline 1.2 failure dressed up as polish.
+  ///
+  /// It is also the address Supabase sends auth email *from* — see
+  /// `docs/BEFORE_RELEASE.md` — so a user replying to a confirmation email
+  /// reaches the same inbox as one using this. That is worth keeping true if
+  /// either ever changes.
   static const String supportEmail = String.fromEnvironment(
     'SUPPORT_EMAIL',
-    defaultValue: 'support@bulkr.app',
+    defaultValue: 'bulkr898@gmail.com',
   );
 
   static bool get hasPrivacyPolicy => _isUsable(privacyPolicyUrl);

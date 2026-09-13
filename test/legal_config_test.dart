@@ -70,11 +70,28 @@ void main() {
     });
   });
 
-  test('the support address is a real address', () {
+  group('the support address', () {
     // Guideline 1.2 asks a user-generated-content app for a contact method,
-    // alongside the reporting and blocking Bulkr already has.
-    expect(LegalConfig.supportEmail, contains('@'));
-    expect(LegalConfig.supportEmail, isNot(contains(' ')));
+    // alongside the reporting and blocking Bulkr already has. The only thing
+    // that makes it a contact method is somebody receiving the mail.
+    test('is shaped like an address', () {
+      expect(LegalConfig.supportEmail, contains('@'));
+      expect(LegalConfig.supportEmail, isNot(contains(' ')));
+      expect(LegalConfig.supportEmail.split('@').last, contains('.'));
+    });
+
+    test('is not the domain nobody owns', () {
+      // It defaulted to `support@bulkr.app` for a while, which looks more
+      // professional than a Gmail address and is worse in the one way that
+      // counts: mail to it goes nowhere. If a branded address comes back, the
+      // domain has to exist and the mailbox has to be read.
+      expect(
+        LegalConfig.supportEmail,
+        isNot(contains('bulkr.app')),
+        reason: 'that domain is not registered, so this is not a contact '
+            'method — it is a bounce',
+      );
+    });
   });
 }
 
