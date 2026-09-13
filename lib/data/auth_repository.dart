@@ -17,6 +17,35 @@ class SignInCancelled implements Exception {
   String toString() => 'Sign-in was cancelled by the user';
 }
 
+/// What happened when an account was asked for.
+enum SignUpOutcome {
+  /// A new account, and an email on its way.
+  confirmationSent,
+
+  /// Signed in straight away. Only when email confirmation is off, which it
+  /// is not — kept so the code does not assume a setting it does not control.
+  signedIn,
+
+  /// That address already has an account.
+  ///
+  /// Supabase answers this with a **200 and no email**, deliberately: a
+  /// sign-up endpoint that said "already registered" would be a way to
+  /// discover who has an account, one guess at a time. The log line reads
+  /// `user_repeated_signup`.
+  ///
+  /// Which leaves the app a choice, because the obfuscation is not free — it
+  /// produces a screen saying "check your inbox" to somebody whose inbox will
+  /// never receive anything, and the most common cause is the least suspicious
+  /// person imaginable: someone who signed in with Google months ago and has
+  /// forgotten.
+  ///
+  /// So this is surfaced. It costs nothing in security terms, because the
+  /// signal is already in the response Supabase sends this client — an empty
+  /// `identities` list — and anyone enumerating addresses is reading that, not
+  /// our wording. The dead end only ever fooled real users.
+  alreadyRegistered,
+}
+
 /// Screen 1's only job: get a Supabase Auth session.
 ///
 /// Per the onboarding brief this deliberately does *not* create the public
@@ -184,23 +213,12 @@ class AuthRepository {
 
   /// Creates an account and asks Supabase to send the confirmation email.
   ///
-  /// Returns whether a confirmation is still outstanding. With email
-  /// confirmation on — which it is — `signUp` returns a user but **no
-  /// session**, and the account cannot be used until the link is tapped. The
-  /// screen needs to know which of those happened to say the right thing.
+  /// Which of the three things happened — see [SignUpOutcome].
   ///
   /// [emailRedirectTo] is the same custom scheme the OAuth callback uses, so
   /// the link opens the app rather than a browser page saying "you may now
   /// close this tab". `supabase_flutter` is already listening for it.
-  ///
-  /// ## On an address that already has an account
-  ///
-  /// Supabase deliberately does not always say so — depending on project
-  /// settings it answers as though the sign-up worked, to stop this endpoint
-  /// being used to discover which addresses are registered. So a `true` here
-  /// means "we have asked for an email to be sent", not "a new account
-  /// exists", and the screen's wording has to survive both.
-  Future<bool> signUpWithEmail({
+  Future<SignUpOutcome> signUpWithEmail({
     required String email,
     required String password,
   }) async {
@@ -210,8 +228,28 @@ class AuthRepository {
       emailRedirectTo: SupabaseConfig.oauthRedirectUrl,
     );
 
-    return response.session == null;
+    if (isAlreadyRegistered(response.user?.identities)) {
+      return SignUpOutcome.alreadyRegistered;
+    }
+
+    return response.session == null
+        ? SignUpOutcome.confirmationSent
+        : SignUpOutcome.signedIn;
   }
+
+  /// Whether a sign-up response describes an address that already has an
+  /// account.
+  ///
+  /// The tell is an **empty** identities list. A genuinely new account comes
+  /// back with one identity — the email provider — and the obfuscated
+  /// response for an existing address comes back with none. Null means an
+  /// older server that did not send the field at all, which is not evidence
+  /// either way and is read as a normal sign-up.
+  ///
+  /// Its own function so the rule can be tested without a live project, since
+  /// it is the sort of thing that changes quietly between releases.
+  static bool isAlreadyRegistered(List<UserIdentity>? identities) =>
+      identities != null && identities.isEmpty;
 
   Future<void> signInWithEmail({
     required String email,
