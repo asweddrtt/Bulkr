@@ -229,6 +229,29 @@ nothing at all. Nothing errors. The email arrives looking correct.
 website, so there is nothing else it could usefully point at, and it makes the
 fallback land in the app instead of on a dead port.
 
+### Only two email templates matter
+
+Authentication → Emails → Templates lists six. The app uses two:
+
+| Template | Used by |
+|---|---|
+| **Confirm sign up** | `signUp` |
+| **Reset password** | `resetPasswordForEmail`, `resend` |
+
+Invite user, Magic link or OTP, Change email address and Reauthentication are
+flows Bulkr does not have. Whatever is in them cannot reach a user.
+
+In those two, the link should be `{{ .ConfirmationURL }}` — the stock default,
+which Supabase builds from the redirect the app passed. A hand-built link using
+`{{ .SiteURL }}` is the trap described above.
+
+One failure worth recognising rather than debugging: a link that reports itself
+**already used or expired** on the first tap is usually a mail client or a
+corporate scanner having prefetched it. The token is single-use, so whoever
+fetches it first spends it. Requesting a fresh email is the workaround; moving
+to OTP codes instead of links is the fix, and is only worth doing if it turns
+out to be common.
+
 Two settings that must also be right, both of which already are for OAuth:
 
 - **Confirm email** stays on. The app expects sign-up to produce no session and
