@@ -41,7 +41,7 @@ import 'go_router/router_config.dart';
 import 'screens/boot_screen.dart';
 import 'screens/startup_failure_screen.dart';
 import 'styles/app_color.dart';
-
+import 'package:provider/provider.dart';
 /// How long any one startup step may take before it is treated as hung.
 ///
 /// A step that throws reports itself. A step that simply never returns is the
@@ -255,7 +255,7 @@ class _BulkrAppState extends State<BulkrApp> {
         RepositoryProvider.value(value: _entitlementRepository),
         // Read by every banner and by every screen that finishes something.
         // See lib/core/ad_moment.dart for why the call sites are one line.
-        RepositoryProvider.value(value: _adsService),
+        ChangeNotifierProvider.value(value: _adsService),
         // Read by the upgrade screen, which builds its own cubit over it.
         RepositoryProvider.value(value: _purchaseService),
         // The blocked-people screen reads this directly — one query and one

@@ -20,7 +20,7 @@ pluginManagement {
 plugins {
     id("dev.flutter.flutter-plugin-loader") version "1.0.0"
     id("com.android.application") version "8.9.1" apply false
-    id("org.jetbrains.kotlin.android") version "2.1.0" apply false
+    id("org.jetbrains.kotlin.android") version "2.3.0" apply false
     // Reads android/app/google-services.json and turns it into the resources
     // Firebase looks for at startup. Declared here and applied in app/, which
     // is the shape this project's other plugins already use.
