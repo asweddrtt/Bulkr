@@ -27,6 +27,7 @@ void main() {
         'auth_failed_credentials',
         'auth_failed_unconfirmed',
         'auth_failed_exists',
+        'auth_failed_email_send',
         'auth_failed_weak',
         'auth_failed_email_limit',
         'auth_failed_too_many',
@@ -86,6 +87,42 @@ void main() {
         isFalse,
       );
       expect(AuthErrors.refusal(failure('over_request_rate_limit')), isNotNull);
+    });
+  });
+
+  group('an email that could not be sent', () {
+    test('is separated from a generic server error', () {
+      // The 500 Supabase returns when SMTP refuses. Its code is
+      // `unexpected_failure`, which on its own would fall through to
+      // "something went wrong on our end" — true, and no help to somebody who
+      // could sign in with Apple or Google on the same screen.
+      expect(
+        AuthErrors.refusal(
+          failure('unexpected_failure', 'Error sending confirmation email'),
+        ),
+        isNotNull,
+      );
+    });
+
+    test('covers the other emails the same layer sends', () {
+      // Recovery and magic-link failures word it differently but all start
+      // "Error sending", which is what the match keys on.
+      expect(
+        AuthErrors.refusal(
+          failure('unexpected_failure', 'Error sending recovery email'),
+        ),
+        isNotNull,
+      );
+    });
+
+    test('an unexpected_failure with another cause is not claimed', () {
+      // `unexpected_failure` is Supabase's catch-all. Reading every one of
+      // them as an email problem would tell somebody to try Apple sign-in
+      // over a failure that has nothing to do with email.
+      expect(
+        AuthErrors.refusal(failure('unexpected_failure', 'Database error')),
+        isNull,
+      );
     });
   });
 

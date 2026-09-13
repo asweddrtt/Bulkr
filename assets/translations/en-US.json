@@ -763,6 +763,7 @@
   "auth_password_mismatch": "Those two passwords don't match.",
   "auth_failed_credentials": "That email and password don't match.",
   "auth_failed_unconfirmed": "Confirm your email address first \u2014 check your inbox.",
+  "auth_failed_email_send": "We couldn't send the confirmation email. Try again shortly, or continue with Apple or Google instead.",
   "auth_failed_exists": "That address already has an account. Try signing in — with Apple or Google too, if that's how you made it.",
   "auth_failed_weak": "That password is too easy to guess. Try a longer one.",
   "auth_failed_email_limit": "Too many emails just now. Try again in a few minutes.",
