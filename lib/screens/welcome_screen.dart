@@ -16,6 +16,8 @@ import '../styles/app_color.dart';
 import '../widgets/animations/entrance.dart';
 import '../widgets/welcome_button.dart';
 
+import 'email_auth_screen.dart';
+
 /// Step 1 — identity.
 ///
 /// Kept deliberately frictionless: two OAuth buttons, no password field, no
@@ -135,6 +137,21 @@ class WelcomeScreen extends StatelessWidget {
                           isBusy:
                               state.pendingProvider == AuthProviderKind.google,
                           onPressed: busy ? null : cubit.signInWithGoogle,
+                        ),
+                        SizedBox(height: 16.h),
+                        // Third rather than first, deliberately. The two above
+                        // are one tap and no typing; putting email level with
+                        // them invites people into the slowest route by
+                        // accident. It is here for those who want it — no
+                        // Apple ID, no Google account, or simply a preference.
+                        PrimaryIconButton(
+                          label: 'continue_email'.tr(),
+                          icon: Icons.alternate_email,
+                          isBusy: state.pendingProvider ==
+                              AuthProviderKind.email,
+                          onPressed: busy
+                              ? null
+                              : () => EmailAuthScreen.open(context),
                         ),
                       ],
                     );

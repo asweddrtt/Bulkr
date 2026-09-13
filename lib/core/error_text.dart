@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'auth_error.dart';
 import 'moderation_error.dart';
 import 'plan_limit_error.dart';
 
@@ -139,6 +140,18 @@ DescribedFailure describeFailure(Object error) {
       technical: '$error',
       code: blockedTermSqlState,
       refusal: blocked,
+    );
+  }
+
+  // Before the generic Postgres and Auth handling below: a wrong password is
+  // an answer to give, not a server error to report.
+  final String? authRefusal = AuthErrors.refusal(error);
+  if (authRefusal != null) {
+    return DescribedFailure(
+      kind: FailureKind.refused,
+      technical: '$error',
+      code: error is AuthException ? error.code : null,
+      refusal: authRefusal,
     );
   }
 

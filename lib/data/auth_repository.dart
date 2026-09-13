@@ -180,6 +180,80 @@ class AuthRepository {
     if (!launched) throw const SignInCancelled();
   }
 
+  // --- Email and password -------------------------------------------------
+
+  /// Creates an account and asks Supabase to send the confirmation email.
+  ///
+  /// Returns whether a confirmation is still outstanding. With email
+  /// confirmation on — which it is — `signUp` returns a user but **no
+  /// session**, and the account cannot be used until the link is tapped. The
+  /// screen needs to know which of those happened to say the right thing.
+  ///
+  /// [emailRedirectTo] is the same custom scheme the OAuth callback uses, so
+  /// the link opens the app rather than a browser page saying "you may now
+  /// close this tab". `supabase_flutter` is already listening for it.
+  ///
+  /// ## On an address that already has an account
+  ///
+  /// Supabase deliberately does not always say so — depending on project
+  /// settings it answers as though the sign-up worked, to stop this endpoint
+  /// being used to discover which addresses are registered. So a `true` here
+  /// means "we have asked for an email to be sent", not "a new account
+  /// exists", and the screen's wording has to survive both.
+  Future<bool> signUpWithEmail({
+    required String email,
+    required String password,
+  }) async {
+    final AuthResponse response = await _client.auth.signUp(
+      email: email,
+      password: password,
+      emailRedirectTo: SupabaseConfig.oauthRedirectUrl,
+    );
+
+    return response.session == null;
+  }
+
+  Future<void> signInWithEmail({
+    required String email,
+    required String password,
+  }) async {
+    await _client.auth.signInWithPassword(email: email, password: password);
+  }
+
+  /// Sends the "set a new password" email.
+  ///
+  /// Never reports whether the address had an account, and Supabase does not
+  /// either — the screen says "if that address has an account" for the same
+  /// reason the sign-in failure does not name which half was wrong.
+  Future<void> sendPasswordReset(String email) async {
+    await _client.auth.resetPasswordForEmail(
+      email,
+      redirectTo: SupabaseConfig.oauthRedirectUrl,
+    );
+  }
+
+  /// Sends the confirmation email again.
+  ///
+  /// The common case is not a lost email — it is an address typed wrong, or an
+  /// email sitting in spam an hour after somebody gave up. Either way the
+  /// button is cheap and the alternative is an account they cannot use.
+  Future<void> resendConfirmation(String email) async {
+    await _client.auth.resend(
+      type: OtpType.signup,
+      email: email,
+      emailRedirectTo: SupabaseConfig.oauthRedirectUrl,
+    );
+  }
+
+  /// Sets a new password for the signed-in user.
+  ///
+  /// Called after a recovery link has been followed, at which point there is a
+  /// real session — which is what makes this a normal update rather than
+  /// anything special.
+  Future<void> updatePassword(String password) async {
+    await _client.auth.updateUser(UserAttributes(password: password));
+  }
+
   Future<void> signOut() => _client.auth.signOut();
 
   /// Best-effort display name from the provider's metadata.

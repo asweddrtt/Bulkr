@@ -168,6 +168,35 @@ What to check on the first TestFlight build, in this order:
 Then watch `ad_failed` in analytics. Code 3 is "no fill" and is normal for a
 new unit; anything else in volume is a misconfigured unit.
 
+## 1b. Custom SMTP — email sign-in does not work without it
+
+Email and password sign-in is built. It sends three kinds of email: the
+confirmation on sign-up, the "set a new password" link, and a resend. All three
+go through whatever SMTP the Supabase project is configured with.
+
+**The built-in one allows two emails per hour.** It is best-effort, has no
+delivery or uptime SLA, and Supabase says plainly it is not for production. At
+two an hour, the third person to sign up today does not get an email and has an
+account they cannot use.
+
+Fix it once, in Project Settings → Authentication → SMTP Settings. Any provider
+that speaks SMTP works; Resend's free tier is 3,000 a month. Then raise the auth
+limits in Authentication → Rate Limits, where the default with custom SMTP is 30
+new users an hour.
+
+Two settings that must also be right, both of which already are for OAuth:
+
+- **Confirm email** stays on. The app expects sign-up to produce no session and
+  says "check your inbox"; turning it off would make that message a lie.
+- `com.alimahmoud.bulkr://login-callback` stays in the **Redirect URLs**
+  allow-list. Confirmation and reset links use the same custom scheme the Apple
+  and Google callbacks already use, which is what makes them open the app
+  rather than a browser tab saying "you may now close this window".
+
+`AuthErrors.isEmailRateLimited` gives the rate limit its own sentence rather
+than a generic failure, so if this is skipped the symptom at least names
+itself.
+
 ## 2c. The App Store Connect chicken-and-egg, and how to get the screenshot
 
 **"The store isn't reachable right now" is the paywall telling the truth.**
@@ -281,6 +310,8 @@ No action needed; listed so nobody re-checks them by hand.
 | `store_links_test.dart` | the Play package drifting from `applicationId`, which turns the cancel link into a page that does not name the subscription |
 | `premium_plan_test.dart` | Play's per-offer entries drawing the same plan twice, one of them priced at nothing |
 | `day_targets_test.dart` | a rest day's numbers applying on a training day, a zero-based weekday shifting the whole week, or a half-filled form applying a goal of zero |
+| `email_credentials_test.dart` | an address reaching Supabase with the keyboard's capitalisation, or a password being trimmed so it can never be typed again |
+| `auth_error_test.dart` | a sign-in failure naming which half was wrong, which turns the form into a way of discovering who is registered |
 | `meal_repository_test.dart` | a meal logged against the wrong day in a non-UTC timezone |
 | `post_repository_test.dart` | keyset paging turning back into an offset |
 | `plan_limits_test.dart` | the free tier's numbers in the app and in `premium.sql` drifting apart, or a write policy appearing on `subscriptions` |
