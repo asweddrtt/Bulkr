@@ -304,4 +304,39 @@ void main() {
       expect(sql, contains('challenge_clock_sweep()'));
     });
   });
+
+  group('every kind has push copy', () {
+    // The bug this exists for: `notifications_send_push` fires on insert for
+    // every row of every kind, and the sentence it sends is a CASE in
+    // `push_payload` with an `else 'New activity'`. A kind added without a
+    // branch does not fail, does not warn, and does not look wrong anywhere in
+    // the schema — it just arrives on somebody's lock screen saying nothing.
+    // All five challenge kinds shipped that way for exactly one commit.
+    late final String schema = Directory('supabase')
+        .listSync()
+        .whereType<File>()
+        .where((File f) => f.path.endsWith('.sql'))
+        .map((File f) => f.readAsStringSync())
+        .join('\n');
+
+    test('no kind falls through to "New activity"', () {
+      for (final NotificationKind kind in NotificationKind.values) {
+        // Whitespace-tolerant: the original four branches are column-aligned
+        // with two spaces before `then`, and a literal match would report them
+        // as missing.
+        expect(
+          RegExp("when\\s+'${kind.dbValue}'\\s+then").hasMatch(schema),
+          isTrue,
+          reason: '${kind.name} has no branch in push_payload, so it would '
+              'push as the generic fallback',
+        );
+      }
+    });
+
+    test('the fallback still exists for a kind written by a newer server', () {
+      // It is the right answer for a row this schema has never heard of. It is
+      // only wrong as the answer for a kind we shipped ourselves.
+      expect(schema, contains("else 'New activity'"));
+    });
+  });
 }

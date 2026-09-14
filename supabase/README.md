@@ -92,8 +92,11 @@ Run them in the SQL editor (Dashboard → SQL Editor → New query):
 | 36 | `account_deletion.sql` | makes the foreign keys into `users` cascade, so deletion works |
 
 `challenge_notifications.sql` must come after `challenge_metrics.sql` (it
-leans on the metric CHECK that file widens) and after `maintenance_cron.sql`,
-which is what creates the `pg_cron` extension its daily sweep is scheduled on.
+leans on the metric CHECK that file widens), after `maintenance_cron.sql`,
+which creates the `pg_cron` extension its daily sweep is scheduled on, and
+after `push_devices.sql`, because it replaces `push_payload` to give the five
+challenge kinds real push copy — without that they arrive on a phone as "New
+activity", which is a notification nobody can act on.
 
 `account_deletion.sql` is last because it repairs foreign keys created by all
 the others — running it earlier fixes only the tables that exist at that point,

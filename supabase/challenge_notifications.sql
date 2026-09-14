@@ -1,7 +1,11 @@
 -- Telling people what is happening in their challenges.
 --
 -- Prerequisites: `notifications.sql`, `feed_challenges.sql`,
--- `challenge_metrics.sql`, `maintenance_cron.sql` (for pg_cron). Re-runnable.
+-- `challenge_metrics.sql`, `maintenance_cron.sql` (for pg_cron), and
+-- `push_devices.sql` — section 8 replaces `push_payload`, which reads
+-- `device_tokens`, and Postgres parses a SQL function's body at creation time,
+-- so a missing table here is an error rather than a surprise later.
+-- Re-runnable.
 --
 -- Run this in the Supabase SQL editor (Dashboard -> SQL Editor -> New query).
 --
@@ -378,7 +382,83 @@ revoke execute on function public.notification_feed(integer) from public;
 grant execute on function public.notification_feed(integer) to authenticated;
 
 -- ---------------------------------------------------------------------------
--- 8. Reload the API's schema cache
+-- 8. The push copy has to know about them too
+-- ---------------------------------------------------------------------------
+-- `notifications_send_push` fires on insert into `notifications` — every row,
+-- every kind — and the sentence it pushes is built by `push_payload`, which is
+-- a CASE over four kinds with an `else 'New activity'`.
+--
+-- So without this, all five of the kinds above arrive on a phone as "New
+-- activity". That is worse than not pushing at all: it is a notification that
+-- cannot be acted on, does not say what happened, and teaches people to swipe
+-- Bulkr away. And the daily sweep would send up to three of them per
+-- challenge.
+--
+-- Replaced here rather than in `push_devices.sql` so that this file is
+-- self-contained: running it adds the kinds, the triggers, the schedule, and
+-- the words. A kind added without its copy is the failure mode this is
+-- guarding, and splitting the two across files is how that happens.
+--
+-- The challenge's title is joined in, because a push is read out of context.
+-- "One day left in Winter Bulk" is actionable on a lock screen; "one day left
+-- in your challenge" makes somebody open the app to find out which.
+
+create or replace function public.push_payload(p_notification uuid)
+returns table (
+  token text,
+  platform text,
+  title text,
+  body text
+)
+language sql
+security definer
+set search_path = public
+as $$
+  select
+    d.token,
+    d.platform,
+    'Bulkr' as title,
+    case n.kind
+      when 'follow'  then coalesce(a.display_name, a.username, 'Someone')
+                          || ' followed you'
+      when 'like'    then coalesce(a.display_name, a.username, 'Someone')
+                          || ' liked your post'
+      when 'comment' then coalesce(a.display_name, a.username, 'Someone')
+                          || ' commented on your post'
+      when 'reply'   then coalesce(a.display_name, a.username, 'Someone')
+                          || ' replied to you'
+      when 'challenge_joined' then
+        coalesce(a.display_name, a.username, 'Someone')
+        || ' joined ' || coalesce(ch.title, 'your challenge')
+      when 'challenge_starting' then
+        coalesce(ch.title, 'Your challenge') || ' starts tomorrow'
+      when 'challenge_ending' then
+        'One day left in ' || coalesce(ch.title, 'your challenge')
+      when 'challenge_ended' then
+        coalesce(ch.title, 'Your challenge') || ' has finished'
+      when 'challenge_passed' then
+        coalesce(a.display_name, a.username, 'Someone')
+        || ' just went past you in ' || coalesce(ch.title, 'a challenge')
+      else 'New activity'
+    end as body
+  from public.notifications n
+  join public.device_tokens d on d.user_id = n.user_id
+  left join public.users a on a.id = n.actor_id
+  left join public.challenges ch on ch.post_id = n.post_id
+  where n.id = p_notification
+    -- Not if they have already seen it in the app. The webhook fires on
+    -- insert, so this is only ever true when somebody was looking at the
+    -- screen as it arrived — but that is exactly the case where a buzzing
+    -- phone is most annoying.
+    and n.read_at is null;
+$$;
+
+revoke execute on function public.push_payload(uuid) from public;
+revoke execute on function public.push_payload(uuid) from authenticated;
+grant execute on function public.push_payload(uuid) to service_role;
+
+-- ---------------------------------------------------------------------------
+-- 9. Reload the API's schema cache
 -- ---------------------------------------------------------------------------
 notify pgrst, 'reload schema';
 
@@ -399,3 +479,12 @@ notify pgrst, 'reload schema';
 --
 --   select kind, actor_id, post_id from public.notifications
 --    where user_id = auth.uid() and kind = 'challenge_joined';
+--
+-- And that every kind pushes a real sentence rather than "New activity". For
+-- any notification id:
+--
+--   select body from public.push_payload('<notification uuid>');
+--
+-- Empty means the recipient has no device token registered, or has already
+-- read it — both correct. "New activity" means a kind reached the table that
+-- the copy above does not know about.
