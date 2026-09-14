@@ -1,5 +1,7 @@
 import 'package:bulkr/cubit/profile/profile_cubit.dart';
+import 'package:bulkr/data/challenge_repository.dart';
 import 'package:bulkr/data/user_repository.dart';
+import 'package:bulkr/models/challenge.dart';
 import 'package:bulkr/models/activity_level.dart';
 import 'package:bulkr/models/gender.dart';
 import 'package:bulkr/models/unit_system.dart';
@@ -37,6 +39,24 @@ class _FakeUserRepository extends UserRepository {
   @override
   Future<List<WeightEntry>> fetchWeightHistory({int limit = 90}) async =>
       history;
+}
+
+/// An account in no challenges, which is the normal case and the one every
+/// expectation below assumes. `challenge_standing_card_test.dart` covers what
+/// the card does when there is something to show.
+class _EmptyChallengeRepository extends ChallengeRepository {
+  _EmptyChallengeRepository()
+      : super(
+          client: SupabaseClient(
+            'https://example.supabase.co',
+            'test-key',
+            authOptions: const AuthClientOptions(autoRefreshToken: false),
+          ),
+        );
+
+  @override
+  Future<List<MyChallengeStanding>> fetchMyStandings() async =>
+      const <MyChallengeStanding>[];
 }
 
 /// Letters and digits only, upper case: lets a test match "current_weight"
@@ -113,9 +133,17 @@ void main() {
               data: MediaQuery.of(context).copyWith(disableAnimations: true),
               child: child!,
             ),
-            home: BlocProvider.value(
-              value: cubit,
-              child: const DashboardScreen(),
+            // The challenge card reads its repository out of the tree.
+            // Without one the card caught a ProviderNotFoundException, logged
+            // forty lines and drew nothing — so this screen test was quietly
+            // rendering one widget fewer than it claimed to. An empty list is
+            // the normal case and is what every expectation below assumes.
+            home: RepositoryProvider<ChallengeRepository>.value(
+              value: _EmptyChallengeRepository(),
+              child: BlocProvider.value(
+                value: cubit,
+                child: const DashboardScreen(),
+              ),
             ),
           ),
         ),

@@ -129,6 +129,12 @@ void main() {
         ),
       );
 
+      // Settled first. A floating snackbar slides in behind an IgnorePointer,
+      // so a tap on the frame after `show` lands on a widget that is on
+      // screen, at the right offset, and not yet accepting pointers — which
+      // fails as a miss rather than as anything that names the cause.
+      await tester.pumpAndSettle();
+
       await tester.tap(find.text('UNDO'));
       expect(tapped, isTrue);
     });

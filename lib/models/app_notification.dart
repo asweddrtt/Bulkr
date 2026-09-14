@@ -37,6 +37,29 @@ enum NotificationKind {
   /// unused rather than needing a second code path.
   final String messageKey;
 
+  /// Whether somebody did this.
+  ///
+  /// False for the three challenge deadlines: a date arriving is not a person,
+  /// those rows carry a null `actor_id`, and their sentences do not mention
+  /// `{name}` because there would be nothing to put there. Everything else is
+  /// one account doing something to another.
+  ///
+  /// `translation_keys_test.dart` reads this in both directions — a sentence
+  /// with an actor must name them, and one without must not pretend to.
+  bool get namesAnActor => switch (this) {
+        NotificationKind.challengeStarting ||
+        NotificationKind.challengeEnding ||
+        NotificationKind.challengeEnded =>
+          false,
+        NotificationKind.follow ||
+        NotificationKind.like ||
+        NotificationKind.comment ||
+        NotificationKind.reply ||
+        NotificationKind.challengeJoined ||
+        NotificationKind.challengePassed =>
+          true,
+      };
+
   /// Whether this is about a post rather than about a person.
   ///
   /// Decides where a tap goes. Every challenge notification is addressed by

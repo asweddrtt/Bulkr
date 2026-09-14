@@ -59,10 +59,17 @@ void main() {
         isTrue,
         reason: '"${kind.messageKey}" is not in en-US.json',
       );
+      // Both directions. A sentence about something somebody did has to name
+      // them — that was the original assertion. But not every notification has
+      // a somebody: a challenge ending is a date arriving, those rows carry a
+      // null actor, and a `{name}` in that sentence would be filled with
+      // "Someone" and read as an accusation.
       expect(
-        '${translations[kind.messageKey]}',
-        contains('{name}'),
-        reason: 'every one of these sentences names who did it',
+        '${translations[kind.messageKey]}'.contains('{name}'),
+        kind.namesAnActor,
+        reason: kind.namesAnActor
+            ? '${kind.name} is something somebody did, so it has to say who'
+            : '${kind.name} has no actor, so {name} has nothing to fill it',
       );
     }
   });
