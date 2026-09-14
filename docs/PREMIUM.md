@@ -289,10 +289,12 @@ Still to come:
    store isn't reachable" as the first thing after signing up.
 
 1. **The upgrade prompt at every wall.** Done — every wall now opens
-   `PremiumSheet`, including the ones that previously only said why something
-   failed. What is left is the walls that have no client-side warning before
-   the server refuses: joining a second challenge is still discovered by
-   trying it, the way saving a sixth meal used to be.
+   `PremiumSheet`, including joining a second challenge, which was the last
+   one still arriving as "couldn't do that" over a SQLSTATE. What is left is
+   the walls with no client-side warning *before* the server refuses: the
+   challenge cap is still discovered by tapping Join, the way saving a sixth
+   meal used to be, and the fix is the same shape — read the count, stop at
+   the button.
 2. **The two products in App Store Connect and Play Console.** Everything
    else about buying is built; this is what it needs to exist. Ids, prices and
    the trial are in the table at the top of this file. Until they exist, the

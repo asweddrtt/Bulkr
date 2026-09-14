@@ -164,13 +164,14 @@ class ChallengeRepository {
     }
   }
 
-  /// A challenge's standings, most gained first.
+  /// A challenge's standings, best first.
   ///
   /// Read through the `challenge_leaderboard` function rather than from the
   /// tables, and it has to be: `challenge_participants` is readable only by
-  /// its own participant, because the row carries a start weight. The function
-  /// runs as its owner and returns deltas — how much each person has gained,
-  /// never what anyone weighs.
+  /// its own participant, because the row carries a start weight, and
+  /// `daily_logs` is readable only by its owner. The function runs as its
+  /// owner and returns *scores* — how much each person has gained or how many
+  /// days they logged, never a weight and never a meal.
   ///
   /// So this is not a convenience wrapper. It is the only way the leaderboard
   /// exists at all.
@@ -185,6 +186,27 @@ class ChallengeRepository {
     return rows
         .whereType<Map<String, dynamic>>()
         .map((row) => ChallengeStanding.fromRow(row, currentUserId: userId))
+        .toList(growable: false);
+  }
+
+  /// The challenges running right now, with this user's place in each.
+  ///
+  /// One round trip for the dashboard card, including the person directly
+  /// above — see [MyChallengeStanding]. Active only: a finished challenge
+  /// belongs on the challenges screen, and one that has not started has no
+  /// standings to show.
+  ///
+  /// Empty is the normal answer. Most accounts are in nothing most of the
+  /// time, and the card draws nothing rather than an empty state — a home
+  /// screen that advertises a feature you are not using on every visit is a
+  /// home screen with an advert on it.
+  Future<List<MyChallengeStanding>> fetchMyStandings() async {
+    final List<dynamic> rows =
+        await _client.rpc('my_challenge_standings') as List<dynamic>;
+
+    return rows
+        .whereType<Map<String, dynamic>>()
+        .map(MyChallengeStanding.fromRow)
         .toList(growable: false);
   }
 

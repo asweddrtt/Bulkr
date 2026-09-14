@@ -1,18 +1,61 @@
 import 'package:equatable/equatable.dart';
 
-/// What happened, and who did it.
+/// What happened, and — for most of them — who did it.
 enum NotificationKind {
   follow('follow', 'notification_follow'),
   like('like', 'notification_like'),
   comment('comment', 'notification_comment'),
-  reply('reply', 'notification_reply');
+  reply('reply', 'notification_reply'),
+
+  /// Somebody joined a challenge you created.
+  challengeJoined('challenge_joined', 'notification_challenge_joined'),
+
+  /// One you are in starts within the day.
+  challengeStarting('challenge_starting', 'notification_challenge_starting'),
+
+  /// One you are in has a day left. The last day is the last one on which
+  /// opening the app still changes the result, which is why it is the only
+  /// deadline worth a notification.
+  challengeEnding('challenge_ending', 'notification_challenge_ending'),
+
+  /// One you were in has finished.
+  challengeEnded('challenge_ended', 'notification_challenge_ended'),
+
+  /// Somebody went past you on a leaderboard. The one that makes a
+  /// leaderboard a leaderboard: being third is a fact, being told you *were*
+  /// second is an event.
+  challengePassed('challenge_passed', 'notification_challenge_passed');
 
   const NotificationKind(this.dbValue, this.messageKey);
 
   final String dbValue;
 
   /// The sentence this reads as, with `{name}` filled in.
+  ///
+  /// Three of the challenge kinds have no actor — a deadline is not a person —
+  /// so their sentences simply do not mention `{name}`, and the argument goes
+  /// unused rather than needing a second code path.
   final String messageKey;
+
+  /// Whether this is about a post rather than about a person.
+  ///
+  /// Decides where a tap goes. Every challenge notification is addressed by
+  /// the challenge's announcement post — `challenges.post_id` is unique and
+  /// the row cascades from it, so the post *is* the challenge's address, and
+  /// it is where the leaderboard is reachable from.
+  bool get opensPost => switch (this) {
+        NotificationKind.challengeJoined ||
+        NotificationKind.challengeStarting ||
+        NotificationKind.challengeEnding ||
+        NotificationKind.challengeEnded ||
+        NotificationKind.challengePassed =>
+          true,
+        NotificationKind.follow ||
+        NotificationKind.like ||
+        NotificationKind.comment ||
+        NotificationKind.reply =>
+          false,
+      };
 
   /// Null for a kind this build does not know about — a row written by a newer
   /// version, or by a trigger added after this shipped. The list skips those

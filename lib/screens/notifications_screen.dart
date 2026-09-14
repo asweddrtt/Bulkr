@@ -11,6 +11,7 @@ import '../styles/app_color.dart';
 import '../widgets/animations/press_scale.dart';
 import '../widgets/person_row.dart';
 import 'author_profile_screen.dart';
+import 'post_screen.dart';
 import '../widgets/bulkr_snack_bar.dart';
 
 /// Follows, likes and comments.
@@ -233,14 +234,16 @@ class _NotificationTile extends StatelessWidget {
       enabled: notification.hasActor,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        // Every kind of notification is about a person, and a person is the
-        // one destination all four have in common. A like and a comment are
-        // also about a post, but there is no screen that opens one post on its
-        // own — the feed is a list — so sending someone to a dead end would be
-        // worse than sending them to the profile they can act on.
-        onTap: notification.hasActor
-            ? () => AuthorProfileScreen.open(context, notification.actorId!)
-            : null,
+        // A challenge notification is about the challenge, and the challenge's
+        // address is its announcement post — which is also the only place its
+        // leaderboard is reachable from, so "your challenge is ending" landing
+        // on the joiner's profile would be the one destination that cannot
+        // answer it. Everything else is about a person.
+        //
+        // Three of the challenge kinds have no actor at all, and before this
+        // those rows would have had no tap target: a notification you cannot
+        // open is a notification that may as well not have been sent.
+        onTap: _destination(context, notification),
         child: Container(
           // Unread is carried by a wash behind the row rather than by a dot:
           // the list is read by scanning, and a tinted block is visible without
@@ -322,6 +325,22 @@ class _NotificationTile extends StatelessWidget {
     );
   }
 
+  /// Where tapping this row goes, or null when there is nowhere to send them.
+  static VoidCallback? _destination(
+    BuildContext context,
+    AppNotification notification,
+  ) {
+    final String? postId = notification.postId;
+    if (notification.kind.opensPost && postId != null) {
+      return () => PostScreen.open(context, postId, source: 'notification');
+    }
+
+    final String? actorId = notification.actorId;
+    if (actorId == null) return null;
+
+    return () => AuthorProfileScreen.open(context, actorId);
+  }
+
   static IconData _iconFor(NotificationKind kind) {
     switch (kind) {
       case NotificationKind.follow:
@@ -332,6 +351,16 @@ class _NotificationTile extends StatelessWidget {
         return Icons.mode_comment_rounded;
       case NotificationKind.reply:
         return Icons.reply_rounded;
+      case NotificationKind.challengeJoined:
+        return Icons.group_add_rounded;
+      case NotificationKind.challengeStarting:
+        return Icons.flag_rounded;
+      case NotificationKind.challengeEnding:
+        return Icons.hourglass_bottom_rounded;
+      case NotificationKind.challengeEnded:
+        return Icons.emoji_events_rounded;
+      case NotificationKind.challengePassed:
+        return Icons.trending_up_rounded;
     }
   }
 }

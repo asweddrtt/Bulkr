@@ -438,12 +438,45 @@ class _ChallengeFieldsState extends State<_ChallengeFields> {
                 letterSpacing: 1,
               ),
             ),
-            SizedBox(height: 6.h),
+            SizedBox(height: 8.h),
+            // What it measures, chosen first: it changes what the goal field
+            // is asking for and what the length chips mean, so picking it
+            // after typing a number would mean the number quietly changing
+            // units under somebody.
+            Row(
+              children: [
+                for (final ChallengeMetric metric in ChallengeMetric.values)
+                  Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.only(right: 6.w),
+                      child: _MetricChip(
+                        metric: metric,
+                        isSelected: challenge.metric == metric,
+                        onTap: () {
+                          if (challenge.metric == metric) return;
+                          // The goal is cleared with the metric. "5" means
+                          // five kilograms or five days depending on a chip
+                          // above it, and carrying the number across is how
+                          // somebody sets a five-day goal by accident.
+                          _goal.clear();
+                          _update(
+                            (draft) => draft.copyWith(
+                              metric: metric,
+                              clearGoal: true,
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            SizedBox(height: 10.h),
             Text(
               // Says what the leaderboard measures before anyone commits to
               // running one. A challenge whose metric is a surprise is a
               // challenge people leave.
-              'challenge_setup_explainer'.tr(),
+              challenge.metric.blurbKey.tr(),
               style: GoogleFonts.inter(
                 color: AppColors.textGray,
                 fontSize: 11.sp,
@@ -461,11 +494,11 @@ class _ChallengeFieldsState extends State<_ChallengeFields> {
             SizedBox(height: 8.h),
             _ChallengeField(
               controller: _goal,
-              hint: 'challenge_goal_hint'.tr(),
+              hint: challenge.metric.goalHintKey.tr(),
               maxLength: 5,
               isNumeric: true,
               suffix: challenge.canSubmit || _goal.text.isNotEmpty
-                  ? ChallengeMetric.weightGain.unitKey.tr()
+                  ? challenge.metric.unitKey.tr()
                   : null,
               onChanged: (value) => _update(
                 (draft) => draft.copyWith(
@@ -504,10 +537,74 @@ class _ChallengeFieldsState extends State<_ChallengeFields> {
                   ),
               ],
             ),
+            if (challenge.metric.isCount &&
+                (challenge.goalAmount ?? 0) > challenge.days) ...[
+              SizedBox(height: 8.h),
+              Text(
+                // Reachable by shortening the length after typing the goal,
+                // which is the order people actually do it in. The Post button
+                // is already disabled; without this it is disabled for no
+                // stated reason.
+                'challenge_goal_too_long'.tr(
+                  namedArgs: {'days': '${challenge.days}'},
+                ),
+                style: GoogleFonts.inter(
+                  color: const Color(0xFFFF6B6B),
+                  fontSize: 11.sp,
+                  height: 1.4,
+                ),
+              ),
+            ],
             SizedBox(height: 18.h),
           ],
         );
       },
+    );
+  }
+}
+
+/// One of the things a challenge can measure.
+class _MetricChip extends StatelessWidget {
+  const _MetricChip({
+    required this.metric,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  final ChallengeMetric metric;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return PressScale(
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          padding: EdgeInsets.symmetric(vertical: 9.h),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: isSelected
+                ? AppColors.primaryNeon.withValues(alpha: 0.14)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(8.r),
+            border: Border.all(
+              color: isSelected ? AppColors.primaryNeon : AppColors.darkBorder,
+            ),
+          ),
+          child: Text(
+            metric.nameKey.tr(),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.inter(
+              color: isSelected ? AppColors.primaryNeon : AppColors.textGray,
+              fontSize: 11.sp,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

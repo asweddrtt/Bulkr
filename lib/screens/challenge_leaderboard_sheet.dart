@@ -120,7 +120,7 @@ class _ChallengeLeaderboardSheetState extends State<ChallengeLeaderboardSheet> {
                     standing: standings[index],
                     rank: index + 1,
                     goal: widget.challenge.goalAmount,
-                    unitKey: widget.challenge.metric.unitKey,
+                    metric: widget.challenge.metric,
                   ),
                 );
               },
@@ -220,13 +220,18 @@ class _StandingRow extends StatelessWidget {
     required this.standing,
     required this.rank,
     required this.goal,
-    required this.unitKey,
+    required this.metric,
   });
 
   final ChallengeStanding standing;
   final int rank;
   final double goal;
-  final String unitKey;
+
+  /// The whole row, rather than just its unit key: how a score is written and
+  /// whether a sign belongs in front of it are both properties of the metric,
+  /// and passing only the unit meant kilograms' rules were applied to
+  /// everything.
+  final ChallengeMetric metric;
 
   @override
   Widget build(BuildContext context) {
@@ -293,10 +298,10 @@ class _StandingRow extends StatelessWidget {
             // "No data" rather than a zero. A participant who has never
             // weighed in has not gained nothing — nothing is known, and
             // printing 0.0 would rank them above everyone who has lost weight.
-            standing.hasData && standing.gainedKg != null
+            standing.hasData && standing.score != null
                 ? 'challenge_gained'.tr(namedArgs: {
-                    'amount': _formatGain(standing.gainedKg!),
-                    'unit': unitKey.tr(),
+                    'amount': _format(standing.score!),
+                    'unit': metric.unitKey.tr(),
                   })
                 : 'challenge_no_data'.tr(),
             style: GoogleFonts.inter(
@@ -310,10 +315,15 @@ class _StandingRow extends StatelessWidget {
     );
   }
 
-  /// Signed, so a loss reads as a loss rather than as a smaller gain.
-  static String _formatGain(double amount) {
-    final String sign = amount > 0 ? '+' : '';
-    if (amount == amount.roundToDouble()) return '$sign${amount.round()}';
-    return '$sign${amount.toStringAsFixed(1)}';
+  /// Signed for a measurement, bare for a count.
+  ///
+  /// A weight can go down, so the sign is load-bearing: without it a loss
+  /// reads as a smaller gain. Days logged cannot go down, so "+12 days" would
+  /// be signing a number that has no other direction to go in.
+  String _format(double amount) {
+    final String written = metric.format(amount);
+    if (metric.isCount) return written;
+
+    return amount > 0 ? '+$written' : written;
   }
 }

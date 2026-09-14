@@ -14,6 +14,7 @@ import '../models/user_profile.dart';
 import '../models/weight_entry.dart';
 import '../styles/app_color.dart';
 import '../widgets/bulkr_snack_bar.dart';
+import '../widgets/challenge_standing_card.dart';
 import '../widgets/bulkr_image.dart';
 import '../widgets/bulkr_nav_bar.dart';
 import '../widgets/animations/entrance.dart';
@@ -362,6 +363,17 @@ class _ProfileView extends StatelessWidget {
                 BulkrNavBar.contentInset,
               ),
               children: staggered([
+                // First, and only when there is one. A challenge with four
+                // days left outranks a weight trend that moves in months —
+                // and unlike everything below it, there is something the
+                // reader can still do about it today.
+                //
+                // Fed the cubit's own stream so pull-to-refresh refreshes the
+                // standings too, without the refresh handler having to know
+                // that challenges exist. See the card.
+                ChallengeStandingCard(
+                  reloadOn: context.read<ProfileCubit>().stream,
+                ),
                 _buildWeightProgress(context),
                 SizedBox(height: 16.h),
                 _buildWeightCards(context),

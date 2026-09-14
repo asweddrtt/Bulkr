@@ -6,6 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../core/analytics_events.dart';
 import '../../core/error_text.dart';
+import '../../core/plan_limit_error.dart';
 import '../../core/telemetry.dart';
 import '../../data/challenge_repository.dart';
 import '../../data/feed_cursor.dart';
@@ -52,8 +53,10 @@ class FeedCubit extends Cubit<FeedState> {
   /// the copy appears on a screen the user is not currently looking at.
   static const String _mealSavedKey = 'post_meal_saved';
 
-  /// Confirmation that a challenge was joined, and what it starts from.
-  static const String _challengeJoinedKey = 'challenge_joined';
+  // Confirmation that a challenge was joined, and what it starts counting
+  // from — which is a different sentence per metric, so it comes off
+  // `ChallengeMetric.joinedKey` rather than being a constant here. Weight
+  // counts from today's weigh-in; days count from today.
 
   /// Loads the visible tab if it has nothing yet.
   ///
@@ -349,7 +352,7 @@ class FeedCubit extends Cubit<FeedState> {
           ),
         ),
         clearBusy: true,
-        actionMessageKey: next ? _challengeJoinedKey : null,
+        actionMessageKey: next ? challenge.metric.joinedKey : null,
       );
     } catch (error) {
       if (isClosed) return;
@@ -357,10 +360,14 @@ class FeedCubit extends Cubit<FeedState> {
       final String detail = describeError(error);
       debugPrint('Bulkr: challenge join failed — $detail');
 
+      // A free account's second challenge is refused by a trigger in
+      // `premium_limits.sql`. That is not a fault, it is the tier, and it gets
+      // the sentence and the way out rather than "couldn't do that".
       emit(state.copyWith(
         clearBusy: true,
         actionErrorKey: _actionFailedKey,
         actionErrorDetail: detail,
+        planLimit: planLimitReached(error),
       ));
     }
   }

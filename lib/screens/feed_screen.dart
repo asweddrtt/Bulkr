@@ -13,9 +13,11 @@ import '../core/post_link.dart';
 import '../models/post.dart';
 import '../styles/app_color.dart';
 import '../widgets/bulkr_nav_bar.dart';
+import '../core/plan_limit_error.dart';
 import '../widgets/ad_free_offer.dart';
 import '../widgets/bulkr_snack_bar.dart';
 import '../widgets/feed_banner_ad.dart';
+import '../widgets/plan_limit_notice.dart';
 import '../widgets/animations/motion.dart';
 import '../widgets/animations/press_scale.dart';
 import '../widgets/post_actions_sheet.dart';
@@ -48,10 +50,7 @@ class FeedScreen extends StatelessWidget {
           listenWhen: (previous, current) =>
               current.actionErrorKey != null &&
               previous.actionErrorKey != current.actionErrorKey,
-          listener: (context, state) => _showNotice(
-            context,
-            state.actionErrorDetail ?? state.actionErrorKey!.tr(),
-          ),
+          listener: (context, state) => _showFailure(context, state),
         ),
         // Kept separate from the failure listener rather than folded in behind
         // a flag: confusing the two means telling someone a failure went
@@ -60,8 +59,11 @@ class FeedScreen extends StatelessWidget {
           listenWhen: (previous, current) =>
               current.actionMessageKey != null &&
               previous.actionMessageKey != current.actionMessageKey,
-          listener: (context, state) =>
-              _showNotice(context, state.actionMessageKey!.tr()),
+          listener: (context, state) => _showNotice(
+            context,
+            state.actionMessageKey!.tr(),
+            tone: SnackTone.success,
+          ),
         ),
       ],
       child: Scaffold(
@@ -100,8 +102,33 @@ class FeedScreen extends StatelessWidget {
     );
   }
 
-  static void _showNotice(BuildContext context, String message) {
-    BulkrSnackBar.show(context, message);
+  /// A failed write, or a wall.
+  ///
+  /// A full free tier is not a failure in the sense the generic sentence
+  /// means: it has its own message and its own way out, so it gets both rather
+  /// than "couldn't do that" over a SQLSTATE nobody can act on. Joining a
+  /// second challenge was the last wall in the app still arriving that way.
+  static void _showFailure(BuildContext context, FeedState state) {
+    final PlanLimit? limit = state.planLimit;
+    if (limit != null) {
+      PlanLimitNotice.show(context, limit, source: 'challenge_join');
+      context.read<FeedCubit>().clearNotice();
+      return;
+    }
+
+    _showNotice(
+      context,
+      state.actionErrorDetail ?? state.actionErrorKey!.tr(),
+      tone: SnackTone.danger,
+    );
+  }
+
+  static void _showNotice(
+    BuildContext context,
+    String message, {
+    SnackTone tone = SnackTone.neutral,
+  }) {
+    BulkrSnackBar.show(context, message, tone: tone);
     context.read<FeedCubit>().clearNotice();
   }
 }

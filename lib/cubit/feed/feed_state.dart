@@ -114,6 +114,7 @@ class FeedState extends Equatable {
     this.discover = const FeedSlice(),
     this.busyPostId,
     this.actionErrorKey,
+    this.planLimit,
     this.actionErrorDetail,
     this.actionMessageKey,
   });
@@ -146,6 +147,14 @@ class FeedState extends Equatable {
   /// without every failure needing its own string.
   final String? actionErrorKey;
   final String? actionErrorDetail;
+
+  /// Set when the failure was a plan limit rather than a fault.
+  ///
+  /// Joining a second challenge on a free account is refused by a trigger, and
+  /// until this existed it arrived as "couldn't do that" with a SQLSTATE
+  /// nobody can act on. It is a sentence with an obvious next step, and it
+  /// gets the sheet the rest of the app's walls get.
+  final PlanLimit? planLimit;
 
   /// A write that succeeded and is worth saying so, for the same snack bar.
   ///
@@ -181,6 +190,7 @@ class FeedState extends Equatable {
     String? busyPostId,
     bool clearBusy = false,
     String? actionErrorKey,
+    PlanLimit? planLimit,
     String? actionErrorDetail,
     String? actionMessageKey,
     bool clearActionError = false,
@@ -193,6 +203,7 @@ class FeedState extends Equatable {
       busyPostId: clearBusy ? null : (busyPostId ?? this.busyPostId),
       actionErrorKey:
           clearActionError ? null : (actionErrorKey ?? this.actionErrorKey),
+      planLimit: clearActionError ? null : (planLimit ?? this.planLimit),
       actionErrorDetail: clearActionError
           ? null
           : (actionErrorDetail ?? this.actionErrorDetail),
@@ -210,6 +221,7 @@ class FeedState extends Equatable {
         discover,
         busyPostId,
         actionErrorKey,
+        planLimit,
         actionErrorDetail,
         actionMessageKey,
       ];
