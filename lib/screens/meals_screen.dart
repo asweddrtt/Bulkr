@@ -4,15 +4,20 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../core/plan_limit_error.dart';
+import '../core/plan_limits.dart';
+import '../cubit/entitlement/entitlement_cubit.dart';
 import '../cubit/meals/meals_cubit.dart';
 import '../models/meal.dart';
 import '../models/meal_slot.dart';
 import '../styles/app_color.dart';
 import '../widgets/bulkr_nav_bar.dart';
+import '../widgets/bulkr_snack_bar.dart';
 import '../widgets/animations/entrance.dart';
 import '../widgets/animations/press_scale.dart';
 import '../widgets/meal_actions_sheet.dart';
 import '../widgets/meal_card.dart';
+import '../widgets/premium_sheet.dart';
 import '../widgets/slot_picker_sheet.dart';
 import 'meal_editor_screen.dart';
 
@@ -78,17 +83,11 @@ class MealsScreen extends StatelessWidget {
   }
 
   static void _showError(BuildContext context, MealsState state) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          backgroundColor: const Color(0xFF2A2A2A),
-          content: Text(
-            state.actionErrorDetail ?? state.actionErrorKey!.tr(),
-            style: GoogleFonts.inter(color: Colors.white, fontSize: 12.sp),
-          ),
-        ),
-      );
+    BulkrSnackBar.show(
+      context,
+      state.actionErrorDetail ?? state.actionErrorKey!.tr(),
+      tone: SnackTone.danger,
+    );
     context.read<MealsCubit>().clearActionError();
   }
 }
@@ -117,27 +116,162 @@ class _MealsHeader extends StatelessWidget {
                   ),
                 ),
               ),
-              BlocBuilder<MealsCubit, MealsState>(
-                buildWhen: (previous, current) =>
-                    previous.library.length != current.library.length,
-                builder: (context, state) => Text(
-                  'meals_count'.tr(namedArgs: {'count': '${state.library.length}'}),
-                  style: GoogleFonts.inter(
-                    fontSize: 11.sp,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textGray,
-                    letterSpacing: 1,
-                  ),
-                ),
-              ),
+              const _LibraryCount(),
             ],
           ),
+          const _LibraryAllowance(),
           SizedBox(height: 14.h),
           const _MealsSearchField(),
           SizedBox(height: 12.h),
           const _MealsTabs(),
         ],
       ),
+    );
+  }
+}
+
+/// How big the library is, and — on a free account — how big it may get.
+///
+/// "12 total" is a fact about a library nobody is running out of. "4 / 5" is
+/// the same fact for somebody who is, and it is the version that stops the
+/// cap being a surprise at the moment they tap Create. Premium keeps the plain
+/// count: a ceiling of infinity is not a number worth drawing.
+class _LibraryCount extends StatelessWidget {
+  const _LibraryCount();
+
+  @override
+  Widget build(BuildContext context) {
+    final int? cap = context.watch<EntitlementCubit>().state.limits.savedMeals;
+
+    return BlocBuilder<MealsCubit, MealsState>(
+      buildWhen: (MealsState previous, MealsState current) =>
+          previous.library.length != current.library.length,
+      builder: (BuildContext context, MealsState state) {
+        final int used = state.library.length;
+        final bool full = cap != null && used >= cap;
+
+        return Text(
+          cap == null
+              ? 'meals_count'.tr(namedArgs: <String, String>{'count': '$used'})
+              : 'meals_count_capped'.tr(
+                  namedArgs: <String, String>{'count': '$used', 'cap': '$cap'},
+                ),
+          style: GoogleFonts.inter(
+            fontSize: 11.sp,
+            fontWeight: FontWeight.w600,
+            // Red at the cap, because by then it is not a count any more — it
+            // is the reason the next Create is going to stop.
+            color: full ? const Color(0xFFFF6B6B) : AppColors.textGray,
+            letterSpacing: 1,
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// The one line that says what free gets, on the screen the number applies to.
+///
+/// Free accounts kept hitting the meal cap at the moment they tried to exceed
+/// it and not before, which makes a limit read as a fault: the app took four
+/// meals without complaint and refused the fifth. So the allowance is stated
+/// while there is still room in it, and it turns into the way out once there
+/// is not.
+///
+/// Drawn for free accounts only, and never while a search is filtering the
+/// list — a bar about the whole library under a list that is showing three of
+/// it is answering a question nobody asked.
+class _LibraryAllowance extends StatelessWidget {
+  const _LibraryAllowance();
+
+  @override
+  Widget build(BuildContext context) {
+    final int? cap = context.watch<EntitlementCubit>().state.limits.savedMeals;
+    if (cap == null) return const SizedBox.shrink();
+
+    return BlocBuilder<MealsCubit, MealsState>(
+      buildWhen: (MealsState previous, MealsState current) =>
+          previous.library.length != current.library.length ||
+          previous.status != current.status ||
+          previous.isSearching != current.isSearching,
+      builder: (BuildContext context, MealsState state) {
+        if (state.status != MealsStatus.ready || state.isSearching) {
+          return const SizedBox.shrink();
+        }
+
+        final int used = state.library.length;
+        final int left = PlanLimits.remaining(cap, used) ?? 0;
+        final bool full = left == 0;
+
+        return Padding(
+          padding: EdgeInsets.only(top: 12.h),
+          child: PressScale(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => PremiumSheet.show(
+                context,
+                limit: PlanLimit.savedMeals,
+                source: 'meals_allowance',
+              ),
+              child: Container(
+                padding: EdgeInsets.symmetric(
+                  horizontal: 12.w,
+                  vertical: 10.h,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF16190A),
+                  borderRadius: BorderRadius.circular(12.r),
+                  border: Border.all(
+                    color: AppColors.primaryNeon.withValues(
+                      alpha: full ? 0.45 : 0.20,
+                    ),
+                  ),
+                ),
+                child: Row(
+                  children: <Widget>[
+                    Icon(
+                      Icons.workspace_premium_rounded,
+                      color: AppColors.primaryNeon,
+                      size: 16.sp,
+                    ),
+                    SizedBox(width: 10.w),
+                    Expanded(
+                      child: Text(
+                        full
+                            ? 'meals_allowance_full'.tr(
+                                namedArgs: <String, String>{'cap': '$cap'},
+                              )
+                            : 'meals_allowance_left'.tr(
+                                namedArgs: <String, String>{
+                                  'left': '$left',
+                                  'cap': '$cap',
+                                },
+                              ),
+                        style: GoogleFonts.inter(
+                          color: Colors.white,
+                          fontSize: 11.sp,
+                          height: 1.35,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: 8.w),
+                    Text(
+                      'limit_upgrade'.tr().toUpperCase(),
+                      style: GoogleFonts.inter(
+                        color: AppColors.primaryNeon,
+                        fontSize: 9.sp,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -348,24 +482,13 @@ class _MealsList extends StatelessWidget {
 
     final bool nowLogged = updated.isLoggedToday;
 
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          backgroundColor:
-              nowLogged ? AppColors.primaryNeon : const Color(0xFF2A2A2A),
-          duration: const Duration(seconds: 2),
-          content: Text(
-            (nowLogged ? 'meal_added_today' : 'meal_removed_today')
-                .tr(namedArgs: {'meal': meal.title}),
-            style: GoogleFonts.inter(
-              color: nowLogged ? Colors.black : Colors.white,
-              fontSize: 12.sp,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
-      );
+    BulkrSnackBar.showOn(
+      messenger,
+      (nowLogged ? 'meal_added_today' : 'meal_removed_today')
+          .tr(namedArgs: {'meal': meal.title}),
+      tone: nowLogged ? SnackTone.success : SnackTone.neutral,
+      duration: const Duration(seconds: 2),
+    );
   }
 
   /// Overflow menu, then — for a meal the user wrote — a confirmation, because
@@ -393,21 +516,12 @@ class _MealsList extends StatelessWidget {
     // an accidental tap is obvious rather than just a list that got shorter.
     if (cubit.state.actionErrorKey != null) return;
 
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          backgroundColor: const Color(0xFF2A2A2A),
-          duration: const Duration(seconds: 2),
-          content: Text(
-            (action == MealAction.delete
-                    ? 'meal_deleted'
-                    : 'meal_removed')
-                .tr(namedArgs: {'meal': meal.title}),
-            style: GoogleFonts.inter(color: Colors.white, fontSize: 12.sp),
-          ),
-        ),
-      );
+    BulkrSnackBar.showOn(
+      messenger,
+      (action == MealAction.delete ? 'meal_deleted' : 'meal_removed')
+          .tr(namedArgs: {'meal': meal.title}),
+      duration: const Duration(seconds: 2),
+    );
   }
 
   /// Three different empties, because they call for three different things:
@@ -563,8 +677,35 @@ class _CreateMealButton extends StatelessWidget {
     );
   }
 
-  Future<void> _openEditor(BuildContext context) =>
-      _openMealEditor(context, context.read<MealsCubit>());
+  /// Opens the editor, unless the library is already full.
+  ///
+  /// Stopped here rather than at the save, even though the database stops it
+  /// there too. Letting somebody build a meal — name it, add six ingredients,
+  /// weigh each one — and refusing it at the last tap is the most expensive
+  /// possible place to enforce a cap: the work is done and it is thrown away.
+  /// The trigger in `supabase/premium_limits.sql` stays as the real ceiling,
+  /// because this check is on somebody else's phone; this one exists so that
+  /// nobody reaches it.
+  ///
+  /// Editing an existing meal is deliberately not gated — see the trigger,
+  /// which is on insert only. Somebody who filled a library on premium and
+  /// lapsed can still fix a typo.
+  Future<void> _openEditor(BuildContext context) async {
+    final EntitlementState entitlement = context.read<EntitlementCubit>().state;
+    final int used = context.read<MealsCubit>().state.library.length;
+
+    if (!entitlement.limits.canSaveAnotherMeal(used)) {
+      await PremiumSheet.show(
+        context,
+        limit: PlanLimit.savedMeals,
+        source: 'meals_create',
+      );
+      return;
+    }
+
+    if (!context.mounted) return;
+    await _openMealEditor(context, context.read<MealsCubit>());
+  }
 }
 class _MealsSwipeView extends StatefulWidget {
   final MealsState state;

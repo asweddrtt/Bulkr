@@ -13,6 +13,8 @@ import '../core/post_link.dart';
 import '../models/post.dart';
 import '../styles/app_color.dart';
 import '../widgets/bulkr_nav_bar.dart';
+import '../widgets/ad_free_offer.dart';
+import '../widgets/bulkr_snack_bar.dart';
 import '../widgets/feed_banner_ad.dart';
 import '../widgets/animations/motion.dart';
 import '../widgets/animations/press_scale.dart';
@@ -99,17 +101,7 @@ class FeedScreen extends StatelessWidget {
   }
 
   static void _showNotice(BuildContext context, String message) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          backgroundColor: const Color(0xFF2A2A2A),
-          content: Text(
-            message,
-            style: GoogleFonts.inter(color: Colors.white, fontSize: 12.sp),
-          ),
-        ),
-      );
+    BulkrSnackBar.show(context, message);
     context.read<FeedCubit>().clearNotice();
   }
 }
@@ -585,11 +577,28 @@ class _FeedListState extends State<_FeedList> {
           isJoiningChallenge: busyPostId == post.id,
         );
 
-        if (!FeedBannerAd.followsPost(index)) return card;
+        // Above the first card rather than in the header, which is pinned:
+        // an offer that never scrolls away stops being an offer and starts
+        // being a banner of our own. Here it is the first thing on the feed
+        // and then it is gone, and it comes back whenever somebody returns to
+        // the top — which is also when they have just been shown ads.
+        //
+        // Prepended to the first card rather than given a slot of its own so
+        // that `index` stays "post at index" and the banner arithmetic below
+        // keeps pointing at the right posts.
+        final bool opensTheFeed = index == 0;
+        final bool carriesAd = FeedBannerAd.followsPost(index);
+
+        if (!opensTheFeed && !carriesAd) return card;
 
         return Column(
           mainAxisSize: MainAxisSize.min,
-          children: <Widget>[card, const FeedBannerAd()],
+          children: <Widget>[
+            if (opensTheFeed)
+              AdFreeOffer(padding: EdgeInsets.only(bottom: 12.h)),
+            card,
+            if (carriesAd) const FeedBannerAd(),
+          ],
         );
       },
     );
@@ -713,25 +722,15 @@ class _FeedListState extends State<_FeedList> {
       case PostAction.hideFromFeed:
         await cubit.hidePost(post);
 
-        messenger
-          ..hideCurrentSnackBar()
-          ..showSnackBar(
-            SnackBar(
-              backgroundColor: const Color(0xFF2A2A2A),
-              duration: const Duration(seconds: 4),
-              content: Text(
-                'post_hidden_notice'.tr(),
-                style: GoogleFonts.inter(color: Colors.white, fontSize: 12.sp),
-              ),
-              // Hiding is quiet and reversible, so the undo belongs on the
-              // notice rather than in a settings screen someone has to find.
-              action: SnackBarAction(
-                label: 'undo'.tr().toUpperCase(),
-                textColor: AppColors.primaryNeon,
-                onPressed: () => cubit.unhidePost(post),
-              ),
-            ),
-          );
+        // Hiding is quiet and reversible, so the undo belongs on the notice
+        // rather than in a settings screen someone has to find.
+        BulkrSnackBar.showOn(
+          messenger,
+          'post_hidden_notice'.tr(),
+          duration: const Duration(seconds: 4),
+          actionLabel: 'undo'.tr().toUpperCase(),
+          onAction: () => cubit.unhidePost(post),
+        );
 
       case PostAction.blockAuthor:
         if (!context.mounted) return;
@@ -748,17 +747,7 @@ class _FeedListState extends State<_FeedList> {
           ClipboardData(text: PostLink.shareText(post)),
         );
 
-        messenger
-          ..hideCurrentSnackBar()
-          ..showSnackBar(
-            SnackBar(
-              backgroundColor: const Color(0xFF2A2A2A),
-              content: Text(
-                'post_share_copied'.tr(),
-                style: GoogleFonts.inter(color: Colors.white, fontSize: 12.sp),
-              ),
-            ),
-          );
+        BulkrSnackBar.showOn(messenger, 'post_share_copied'.tr());
     }
   }
 }

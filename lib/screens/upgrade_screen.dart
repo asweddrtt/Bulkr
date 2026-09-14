@@ -18,6 +18,7 @@ import '../cubit/purchase/purchase_cubit.dart';
 import '../data/purchase_service.dart';
 import '../models/premium_plan.dart';
 import '../styles/app_color.dart';
+import '../widgets/bulkr_snack_bar.dart';
 import '../widgets/animations/press_scale.dart';
 
 /// Where somebody buys premium.
@@ -78,9 +79,12 @@ class UpgradeScreen extends StatelessWidget {
         await context.read<EntitlementCubit>().refresh();
         if (!context.mounted) return;
 
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(_notice('premium_welcome'.tr()));
+        BulkrSnackBar.show(
+          context,
+          'premium_welcome'.tr(),
+          tone: SnackTone.success,
+          clearsNavBar: false,
+        );
 
         Navigator.of(context).pop();
       },
@@ -118,12 +122,17 @@ class UpgradeScreen extends StatelessWidget {
     );
   }
 
-  static SnackBar _notice(String message) => SnackBar(
-    backgroundColor: const Color(0xFF2A2A2A),
-    content: Text(
-      message,
-      style: GoogleFonts.inter(color: Colors.white, fontSize: 12.sp),
-    ),
+  /// The paywall is a full-screen route pushed over everything, so nothing of
+  /// the shell — its navigation bar included — is under these.
+  static void _notify(
+    ScaffoldMessengerState messenger,
+    String message, {
+    SnackTone tone = SnackTone.neutral,
+  }) => BulkrSnackBar.showOn(
+    messenger,
+    message,
+    tone: tone,
+    clearsNavBar: false,
   );
 }
 
@@ -209,6 +218,11 @@ class _Benefits extends StatelessWidget {
           subtitle: 'premium_benefit_meals_sub'.tr(
             namedArgs: <String, String>{'count': '${free.savedMeals}'},
           ),
+        ),
+        _BenefitRow(
+          icon: Icons.qr_code_scanner,
+          title: 'premium_benefit_scan'.tr(),
+          subtitle: 'premium_benefit_scan_sub'.tr(),
         ),
         _BenefitRow(
           icon: Icons.history,
@@ -478,18 +492,17 @@ class _Footer extends StatelessWidget {
         // telling-off for not spending money.
         if (failure == PurchaseFailure.cancelled) return;
 
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(
-            UpgradeScreen._notice(switch (failure) {
-              PurchaseFailure.storeRefused => 'premium_failed_refused'.tr(),
-              PurchaseFailure.notVerified => 'premium_failed_unverified'.tr(),
-              PurchaseFailure.alreadyClaimed => 'premium_failed_claimed'.tr(),
-              PurchaseFailure.nothingToRestore =>
-                'premium_nothing_restored'.tr(),
-              PurchaseFailure.cancelled => '',
-            }),
-          );
+        UpgradeScreen._notify(
+          ScaffoldMessenger.of(context),
+          switch (failure) {
+            PurchaseFailure.storeRefused => 'premium_failed_refused'.tr(),
+            PurchaseFailure.notVerified => 'premium_failed_unverified'.tr(),
+            PurchaseFailure.alreadyClaimed => 'premium_failed_claimed'.tr(),
+            PurchaseFailure.nothingToRestore => 'premium_nothing_restored'.tr(),
+            PurchaseFailure.cancelled => '',
+          },
+          tone: SnackTone.danger,
+        );
       },
       builder: (BuildContext context, PurchaseState state) {
         final TrialOffer? trial = state.trial;
@@ -688,8 +701,10 @@ class _LegalLink extends StatelessWidget {
 
     if (opened) return;
 
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(UpgradeScreen._notice('policy_unavailable'.tr()));
+    UpgradeScreen._notify(
+      messenger,
+      'policy_unavailable'.tr(),
+      tone: SnackTone.danger,
+    );
   }
 }

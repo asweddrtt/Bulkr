@@ -17,6 +17,7 @@ import '../widgets/animations/entrance.dart';
 import '../widgets/welcome_button.dart';
 
 import 'email_auth_screen.dart';
+import '../widgets/bulkr_snack_bar.dart';
 
 /// Step 1 — identity.
 ///
@@ -49,17 +50,11 @@ class WelcomeScreen extends StatelessWidget {
         }
 
         if (state.status == AuthStatus.failure && state.errorMessage != null) {
-          ScaffoldMessenger.of(context)
-            ..hideCurrentSnackBar()
-            ..showSnackBar(
-              SnackBar(
-                backgroundColor: const Color(0xFF2A2A2A),
-                content: Text(
-                  _friendlyError(state.errorMessage!),
-                  style: GoogleFonts.inter(color: Colors.white, fontSize: 13.sp),
-                ),
-              ),
-            );
+          BulkrSnackBar.show(
+            context,
+            _friendlyError(state.errorMessage!),
+            tone: SnackTone.danger,
+          );
         }
       },
       child: Scaffold(
@@ -258,16 +253,10 @@ class _AgreementFooter extends StatelessWidget {
     // A device with no browser is close to impossible, but silently doing
     // nothing is the failure this whole widget exists to remove — so if it
     // cannot be opened, say so rather than repeat the original bug.
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          backgroundColor: const Color(0xFF2A2A2A),
-          content: Text(
-            'policy_unavailable'.tr(),
-            style: GoogleFonts.inter(color: Colors.white, fontSize: 13.sp),
-          ),
-        ),
-      );
+    BulkrSnackBar.showOn(
+      messenger,
+      'policy_unavailable'.tr(),
+      tone: SnackTone.danger,
+    );
   }
 }

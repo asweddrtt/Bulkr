@@ -35,6 +35,15 @@ void main() {
       );
     });
 
+    test('the two the database never raises still have keys', () {
+      // `barcode_scan` and `ads` are gated in the app, not by a trigger — see
+      // the enum. Nothing sends these hints, but the sentences behind them are
+      // shown by the same sheet as the rest, so they are held to the same
+      // assertions below.
+      expect(PlanLimit.barcodeScan.key, 'barcode_scan');
+      expect(PlanLimit.ads.key, 'ads');
+    });
+
     test('tolerates the hint being padded', () {
       expect(planLimitReached(limit('  saved_meals ')), PlanLimit.savedMeals);
     });
@@ -110,6 +119,8 @@ void main() {
         'limit_history_days',
         'limit_custom_targets',
         'limit_day_targets',
+        'limit_barcode_scan',
+        'limit_ads',
       ]) {
         expect(
           '${translations[key]}'.toLowerCase(),

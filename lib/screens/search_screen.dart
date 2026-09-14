@@ -17,6 +17,7 @@ import '../widgets/person_row.dart';
 import 'author_profile_screen.dart';
 import 'group_screen.dart';
 import 'groups_screen.dart';
+import '../widgets/bulkr_snack_bar.dart';
 
 /// One field, both kinds of thing.
 ///
@@ -66,17 +67,11 @@ class SearchScreen extends StatelessWidget {
           current.actionErrorKey != null &&
           previous.actionErrorKey != current.actionErrorKey,
       listener: (context, state) {
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(
-            SnackBar(
-              backgroundColor: const Color(0xFF2A2A2A),
-              content: Text(
-                state.actionErrorDetail ?? state.actionErrorKey!.tr(),
-                style: GoogleFonts.inter(color: Colors.white, fontSize: 12.sp),
-              ),
-            ),
-          );
+        BulkrSnackBar.show(
+          context,
+          state.actionErrorDetail ?? state.actionErrorKey!.tr(),
+          tone: SnackTone.danger,
+        );
         context.read<SearchCubit>().clearNotice();
       },
       child: Scaffold(

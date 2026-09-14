@@ -44,7 +44,25 @@ enum PlanLimit {
 
   /// Two sets of targets, applied by weekday. Enforced by its own trigger in
   /// `day_targets.sql`, alongside [customTargets] and for the same reason.
-  dayTargets('day_targets');
+  dayTargets('day_targets'),
+
+  /// Reading a barcode off a packet instead of searching by name.
+  ///
+  /// Like [customTargets], a capability rather than a ceiling, and the only
+  /// one in this enum with nothing behind it in the database. There is nothing
+  /// to enforce there: a scan is a read against an edge function, and the
+  /// account is stopped at the button rather than at a row it was about to
+  /// write. See [PlanLimits.scansBarcodes].
+  barcodeScan('barcode_scan'),
+
+  /// Ads.
+  ///
+  /// The odd one out: nothing is ever refused because of it, so nothing ever
+  /// *raises* it. It is here because the offer to remove ads is made in the
+  /// same shape as every other wall — the same sheet, the same button — and
+  /// giving it a member means that sheet needs no special case for the one
+  /// pitch that is not a refusal.
+  ads('ads');
 
   const PlanLimit(this.key);
 
@@ -86,6 +104,8 @@ String planLimitMessage(PlanLimit limit) {
     ),
     PlanLimit.activeChallenges => 'limit_active_challenges'.tr(),
     PlanLimit.customTargets => 'limit_custom_targets'.tr(),
+    PlanLimit.barcodeScan => 'limit_barcode_scan'.tr(),
+    PlanLimit.ads => 'limit_ads'.tr(),
     PlanLimit.dayTargets => 'limit_day_targets'.tr(),
     PlanLimit.historyDays => 'limit_history_days'.tr(
       namedArgs: <String, String>{'days': '${PlanLimits.free.historyDays}'},

@@ -29,6 +29,8 @@ import '../styles/app_color.dart';
 import '../widgets/delete_account_sheet.dart';
 import '../widgets/bulkr_nav_bar.dart';
 import '../widgets/account_sheet.dart';
+import '../widgets/ad_free_offer.dart';
+import '../widgets/bulkr_snack_bar.dart';
 import '../widgets/animations/press_scale.dart';
 import '../widgets/edit_profile_sheet.dart';
 import '../widgets/image_source_sheet.dart';
@@ -470,55 +472,13 @@ class _Header extends StatelessWidget {
               ? SubscriptionScreen.open(context)
               : UpgradeScreen.open(context, source: 'settings'),
       adFreeRemaining: ads.adFreeRemaining,
+      // The same trade the feed offers, from the other end of the app. One
+      // implementation, in `AdFreeOffer`, so the two cannot drift into
+      // granting different things.
       onRemoveAds: canOfferAdFree
-          ? () => _watchForAdFreeDay(ads, messenger)
+          ? () => AdFreeOffer.watch(ads, messenger)
           : null,
     );
-  }
-
-  /// Watch a video, lose the ads for a day.
-  ///
-  /// The reward is granted only when AdMob says the video was actually
-  /// finished, and it is granted *before* anything else can fail — an app that
-  /// takes thirty seconds of somebody's attention and then does not deliver
-  /// has taught them never to accept an offer again, which is worth more than
-  /// the ad earned.
-  ///
-  /// Nothing is said when they close it early. That was a choice, not an
-  /// error, and a message about it would read as a telling-off.
-  static Future<void> _watchForAdFreeDay(
-    AdsService ads,
-    ScaffoldMessengerState messenger,
-  ) async {
-    final bool earned = await ads.showRewarded(placement: 'remove_ads_24h');
-
-    if (!earned) {
-      // Only when nothing could be shown at all. `showRewarded` cannot tell
-      // "closed it early" from "never loaded", so this errs towards the
-      // explanation that is actionable.
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(
-          backgroundColor: const Color(0xFF2A2A2A),
-          content: Text(
-            'ads_reward_unavailable'.tr(),
-            style: GoogleFonts.inter(color: Colors.white, fontSize: 12.sp),
-          ),
-        ));
-      return;
-    }
-
-    await ads.grantAdFree();
-
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(
-        backgroundColor: const Color(0xFF2A2A2A),
-        content: Text(
-          'ads_removed_notice'.tr(),
-          style: GoogleFonts.inter(color: Colors.white, fontSize: 12.sp),
-        ),
-      ));
   }
 
   /// Starts a group and drops the user into it.
@@ -566,21 +526,12 @@ class _Header extends StatelessWidget {
       // Deliberately not signed out on failure: the account still exists, and
       // dropping the session would leave someone unable to try again without
       // signing back in to an account they were told was deleted.
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(
-            backgroundColor: const Color(0xFF2A2A2A),
-            duration: const Duration(seconds: 6),
-            content: Text(
-              [
-                'account_delete_failed'.tr(),
-                '$error',
-              ].join('\n'),
-              style: GoogleFonts.inter(color: Colors.white, fontSize: 12.sp),
-            ),
-          ),
-        );
+      BulkrSnackBar.showOn(
+        messenger,
+        <String>['account_delete_failed'.tr(), '$error'].join('\n'),
+        tone: SnackTone.danger,
+        duration: const Duration(seconds: 6),
+      );
     }
   }
 
@@ -764,17 +715,7 @@ class _EditableAvatarState extends State<_EditableAvatar> {
     } catch (error) {
       debugPrint('Bulkr: avatar write failed — $error');
 
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(
-            backgroundColor: const Color(0xFF2A2A2A),
-            content: Text(
-              '$error',
-              style: GoogleFonts.inter(color: Colors.white, fontSize: 12.sp),
-            ),
-          ),
-        );
+      BulkrSnackBar.showOn(messenger, '$error', tone: SnackTone.danger);
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -837,19 +778,8 @@ class _Stat extends StatelessWidget {
   }
 }
 
-void _notify(BuildContext context, String message) {
-  ScaffoldMessenger.of(context)
-    ..hideCurrentSnackBar()
-    ..showSnackBar(
-      SnackBar(
-        backgroundColor: const Color(0xFF2A2A2A),
-        content: Text(
-          message,
-          style: GoogleFonts.inter(color: Colors.white, fontSize: 12.sp),
-        ),
-      ),
-    );
-}
+void _notify(BuildContext context, String message) =>
+    BulkrSnackBar.show(context, message);
 
 Future<void> _openComments(BuildContext context, Post post) async {
   final AuthorCubit cubit = context.read<AuthorCubit>();

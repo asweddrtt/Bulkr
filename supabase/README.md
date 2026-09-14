@@ -86,7 +86,8 @@ Run them in the SQL editor (Dashboard → SQL Editor → New query):
 | 30 | `premium_limits.sql` | where the free tier's caps are enforced |
 | 31 | `custom_targets.sql` | `users.targets_are_custom`, premium-only |
 | 32 | `day_targets.sql` | rest-day targets and which weekdays are training days |
-| 33 | `account_deletion.sql` | makes the foreign keys into `users` cascade, so deletion works |
+| 33 | `grant_premium.sql` | `grant_premium()` / `revoke_premium()`, for comping an account by hand |
+| 34 | `account_deletion.sql` | makes the foreign keys into `users` cascade, so deletion works |
 
 `account_deletion.sql` is last because it repairs foreign keys created by all
 the others — running it earlier fixes only the tables that exist at that point,

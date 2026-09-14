@@ -21,6 +21,7 @@ import '../widgets/report_sheet.dart';
 import 'author_profile_screen.dart';
 import 'post_comments_sheet.dart';
 import 'post_composer_screen.dart';
+import '../widgets/bulkr_snack_bar.dart';
 
 /// One group, and what has been posted in it.
 class GroupScreen extends StatelessWidget {
@@ -58,17 +59,11 @@ class GroupScreen extends StatelessWidget {
           current.actionErrorKey != null &&
           previous.actionErrorKey != current.actionErrorKey,
       listener: (context, state) {
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(
-            SnackBar(
-              backgroundColor: const Color(0xFF2A2A2A),
-              content: Text(
-                state.actionErrorDetail ?? state.actionErrorKey!.tr(),
-                style: GoogleFonts.inter(color: Colors.white, fontSize: 12.sp),
-              ),
-            ),
-          );
+        BulkrSnackBar.show(
+          context,
+          state.actionErrorDetail ?? state.actionErrorKey!.tr(),
+          tone: SnackTone.danger,
+        );
         context.read<GroupCubit>().clearNotice();
       },
       child: Scaffold(
@@ -293,17 +288,10 @@ Future<void> _showActions(BuildContext context, Post post) async {
     case PostAction.share:
       await Clipboard.setData(ClipboardData(text: PostLink.shareText(post)));
 
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(
-            backgroundColor: const Color(0xFF2A2A2A),
-            content: Text(
-              'post_share_copied'.tr(),
-              style: GoogleFonts.inter(color: Colors.white, fontSize: 12.sp),
-            ),
-          ),
-        );
+      BulkrSnackBar.showOn(
+        messenger,
+        'post_share_copied'.tr(),
+      );
   }
 }
 

@@ -29,6 +29,26 @@ void main() {
       expect(PlanLimits.premium.showsAds, isFalse);
     });
 
+    test('scanning is premium, and searching by name is not', () {
+      // The one capability premium adds rather than a ceiling it removes. The
+      // assertion that matters is the second half: nothing here stops a free
+      // account finding the same food by typing its name, which is the line
+      // PlanLimits does not cross.
+      expect(PlanLimits.free.scansBarcodes, isFalse);
+      expect(PlanLimits.premium.scansBarcodes, isTrue);
+    });
+
+    test('a lapsed subscription loses the scanner with everything else', () {
+      // `scansBarcodes` is read off the limits rather than off the tier, so it
+      // expires the same way the caps come back.
+      final Entitlement lapsed = Entitlement(
+        tier: Tier.premium,
+        expiresAt: DateTime.now().subtract(const Duration(days: 1)),
+      );
+
+      expect(PlanLimits.of(lapsed).scansBarcodes, isFalse);
+    });
+
     test('an expired premium is charged free\'s limits', () {
       // The row still says premium; the date says otherwise. Reading the tier
       // alone would give a lapsed subscriber an unlimited library until some

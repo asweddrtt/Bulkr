@@ -22,6 +22,7 @@ import '../models/meal_ingredient.dart';
 import '../styles/app_color.dart';
 import '../widgets/sheet_action_row.dart';
 import '../widgets/bulkr_image.dart';
+import '../widgets/bulkr_snack_bar.dart';
 import '../widgets/visibility_picker.dart';
 import '../widgets/animations/press_scale.dart';
 import '../widgets/barcode_scanner_sheet.dart';
@@ -125,21 +126,11 @@ class _MealEditorView extends StatelessWidget {
           // Shown before the pop, but it outlives this screen: the messenger
           // belongs to the app, not to the route being closed.
           if (state.savedWithoutIngredients) {
-            ScaffoldMessenger.of(context)
-              ..hideCurrentSnackBar()
-              ..showSnackBar(
-                SnackBar(
-                  backgroundColor: const Color(0xFF2A2A2A),
-                  duration: const Duration(seconds: 6),
-                  content: Text(
-                    'meal_saved_without_ingredients'.tr(),
-                    style: GoogleFonts.inter(
-                      color: Colors.white,
-                      fontSize: 12.sp,
-                    ),
-                  ),
-                ),
-              );
+            BulkrSnackBar.show(
+              context,
+              'meal_saved_without_ingredients'.tr(),
+              duration: const Duration(seconds: 6),
+            );
           }
 
           // A saved meal is a seam: the thing they came to do is done. What
@@ -161,19 +152,12 @@ class _MealEditorView extends StatelessWidget {
             return;
           }
 
-          ScaffoldMessenger.of(context)
-            ..hideCurrentSnackBar()
-            ..showSnackBar(
-              SnackBar(
-                backgroundColor: const Color(0xFF2A2A2A),
-                duration: const Duration(seconds: 5),
-                content: Text(
-                  state.errorDetail ?? state.errorKey!.tr(),
-                  style:
-                      GoogleFonts.inter(color: Colors.white, fontSize: 12.sp),
-                ),
-              ),
-            );
+          BulkrSnackBar.show(
+            context,
+            state.errorDetail ?? state.errorKey!.tr(),
+            tone: SnackTone.danger,
+            duration: const Duration(seconds: 5),
+          );
           context.read<MealEditorCubit>().dismissError();
         }
       },
@@ -678,6 +662,11 @@ class _AddIngredientButton extends StatelessWidget {
           child: _IngredientAction(
             icon: Icons.qr_code_scanner_rounded,
             label: 'meal_scan_barcode'.tr(),
+            // Drawn locked rather than hidden. A free account that cannot see
+            // the scanner never learns there is one, and premium's job here is
+            // to be discoverable before it is bought — the tap still does
+            // something, it just opens the offer instead of the camera.
+            locked: !BarcodeScannerSheet.isUnlocked(context),
             onTap: () => _scanBarcode(context),
           ),
         ),
@@ -723,25 +712,16 @@ Future<void> _scanBarcode(BuildContext context) async {
 
   final FoodItem? food = await cubit.addScannedBarcode(barcode);
 
-  messenger
-    ..hideCurrentSnackBar()
-    ..showSnackBar(
-      SnackBar(
-        backgroundColor:
-            food == null ? const Color(0xFF2A2A2A) : AppColors.primaryNeon,
-        duration: const Duration(seconds: 3),
-        content: Text(
-          food == null
-              ? 'barcode_not_found'.tr(namedArgs: {'barcode': barcode})
-              : 'barcode_added'.tr(namedArgs: {'food': food.name}),
-          style: GoogleFonts.inter(
-            color: food == null ? Colors.white : Colors.black,
-            fontSize: 12.sp,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
-    );
+  BulkrSnackBar.showOn(
+    messenger,
+    food == null
+        ? 'barcode_not_found'.tr(namedArgs: {'barcode': barcode})
+        : 'barcode_added'.tr(namedArgs: {'food': food.name}),
+    tone: food == null ? SnackTone.danger : SnackTone.success,
+    duration: const Duration(seconds: 3),
+    // A pushed full-screen route: no navigation bar under it to clear.
+    clearsNavBar: false,
+  );
 }
 
 class _IngredientAction extends StatelessWidget {
@@ -749,14 +729,23 @@ class _IngredientAction extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.onTap,
+    this.locked = false,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback onTap;
 
+  /// Draws the premium mark and dims the outline. Still tappable — what the
+  /// tap opens is decided further in, by `BarcodeScannerSheet.show`.
+  final bool locked;
+
   @override
   Widget build(BuildContext context) {
+    final Color tint = locked
+        ? AppColors.primaryNeon.withValues(alpha: 0.55)
+        : AppColors.primaryNeon;
+
     return PressScale(
       child: GestureDetector(
         onTap: onTap,
@@ -766,12 +755,12 @@ class _IngredientAction extends StatelessWidget {
           alignment: Alignment.center,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(5.r),
-            border: Border.all(color: AppColors.primaryNeon, width: 1.5),
+            border: Border.all(color: tint, width: 1.5),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 16.sp, color: AppColors.primaryNeon),
+              Icon(icon, size: 16.sp, color: tint),
               SizedBox(width: 8.w),
               Flexible(
                 child: Text(
@@ -780,11 +769,19 @@ class _IngredientAction extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.anton(
                     fontSize: 12.sp,
-                    color: AppColors.primaryNeon,
+                    color: tint,
                     letterSpacing: 0.8,
                   ),
                 ),
               ),
+              if (locked) ...<Widget>[
+                SizedBox(width: 6.w),
+                Icon(
+                  Icons.workspace_premium_rounded,
+                  size: 13.sp,
+                  color: AppColors.primaryNeon,
+                ),
+              ],
             ],
           ),
         ),

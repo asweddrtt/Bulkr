@@ -27,6 +27,7 @@ import '../widgets/animations/press_scale.dart';
 import '../widgets/image_source_sheet.dart';
 import '../widgets/sheet_action_row.dart';
 import 'meal_editor_screen.dart';
+import '../widgets/bulkr_snack_bar.dart';
 
 /// Writing a post.
 ///
@@ -142,18 +143,11 @@ class PostComposerScreen extends StatelessWidget {
               current.errorDetail != null &&
               previous.errorDetail != current.errorDetail,
           listener: (context, state) {
-            ScaffoldMessenger.of(context)
-              ..hideCurrentSnackBar()
-              ..showSnackBar(
-                SnackBar(
-                  backgroundColor: const Color(0xFF2A2A2A),
-                  content: Text(
-                    state.errorDetail!,
-                    style:
-                        GoogleFonts.inter(color: Colors.white, fontSize: 12.sp),
-                  ),
-                ),
-              );
+            BulkrSnackBar.show(
+              context,
+              state.errorDetail!,
+              tone: SnackTone.danger,
+            );
             context.read<PostComposerCubit>().clearError();
           },
         ),

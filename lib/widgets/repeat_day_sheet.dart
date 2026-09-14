@@ -9,6 +9,7 @@ import '../models/meal_slot.dart';
 import '../styles/app_color.dart';
 import 'sheet_action_row.dart';
 import 'slot_picker_sheet.dart';
+import 'bulkr_snack_bar.dart';
 
 /// Copies a previous day onto the one being shown.
 ///
@@ -98,19 +99,15 @@ Future<void> showRepeatDaySheet(BuildContext context) async {
   final int copied = await cubit.repeatDay(from: from, slot: choice.slot);
   if (!context.mounted) return;
 
-  ScaffoldMessenger.of(context)
-    ..hideCurrentSnackBar()
-    ..showSnackBar(
-      SnackBar(
-        backgroundColor: const Color(0xFF2A2A2A),
-        content: Text(
-          copied == 0
-              ? 'repeat_day_nothing'.tr()
-              : 'repeat_day_done'.tr(namedArgs: {'count': '$copied'}),
-          style: GoogleFonts.inter(color: Colors.white, fontSize: 12.sp),
-        ),
-      ),
-    );
+  BulkrSnackBar.show(
+    context,
+    copied == 0
+        ? 'repeat_day_nothing'.tr()
+        : 'repeat_day_done'.tr(namedArgs: {'count': '$copied'}),
+    // Nothing to copy is not a failure and not a success — the day it was
+    // asked to repeat was simply empty.
+    tone: copied == 0 ? SnackTone.neutral : SnackTone.success,
+  );
 }
 
 /// What the second sheet answered: one slot, or the whole day.

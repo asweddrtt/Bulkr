@@ -11,6 +11,7 @@ import '../styles/app_color.dart';
 import '../widgets/animations/press_scale.dart';
 import '../widgets/person_row.dart';
 import 'author_profile_screen.dart';
+import '../widgets/bulkr_snack_bar.dart';
 
 /// One conversation.
 class ChatScreen extends StatelessWidget {
@@ -44,17 +45,11 @@ class ChatScreen extends StatelessWidget {
     try {
       conversationId = await chat.openDirect(personId);
     } catch (error) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(
-            backgroundColor: const Color(0xFF2A2A2A),
-            content: Text(
-              'chat_unavailable'.tr(),
-              style: GoogleFonts.inter(color: Colors.white, fontSize: 13.sp),
-            ),
-          ),
-        );
+      BulkrSnackBar.showOn(
+        messenger,
+        'chat_unavailable'.tr(),
+        tone: SnackTone.danger,
+      );
       return;
     }
 
@@ -142,20 +137,13 @@ class ChatScreen extends StatelessWidget {
             previous.actionErrorKey != current.actionErrorKey &&
             current.actionErrorKey != null,
         listener: (context, state) {
-          ScaffoldMessenger.of(context)
-            ..hideCurrentSnackBar()
-            ..showSnackBar(
-              SnackBar(
-                backgroundColor: const Color(0xFF2A2A2A),
-                content: Text(
-                  [state.actionErrorKey!.tr(), state.actionErrorDetail]
-                      .whereType<String>()
-                      .join('\n'),
-                  style:
-                      GoogleFonts.inter(color: Colors.white, fontSize: 12.sp),
-                ),
-              ),
-            );
+          BulkrSnackBar.show(
+            context,
+            [state.actionErrorKey!.tr(), state.actionErrorDetail]
+                .whereType<String>()
+                .join('\n'),
+            tone: SnackTone.danger,
+          );
           context.read<ChatCubit>().clearActionError();
         },
         child: Column(

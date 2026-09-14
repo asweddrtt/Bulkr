@@ -44,6 +44,7 @@ class PlanLimits extends Equatable {
     required this.historyDays,
     required this.activeChallenges,
     required this.showsAds,
+    required this.scansBarcodes,
   });
 
   /// What an account gets before paying.
@@ -63,6 +64,7 @@ class PlanLimits extends Equatable {
     historyDays: 7,
     activeChallenges: 1,
     showsAds: true,
+    scansBarcodes: false,
   );
 
   /// What paying buys: the same app with the ceilings taken out.
@@ -76,6 +78,7 @@ class PlanLimits extends Equatable {
     historyDays: null,
     activeChallenges: null,
     showsAds: false,
+    scansBarcodes: true,
   );
 
   /// The limits that apply to [entitlement] right now.
@@ -99,6 +102,20 @@ class PlanLimits extends Equatable {
   /// Whether ads are shown. The one limit that is a boolean, and the one most
   /// people are actually buying their way out of.
   final bool showsAds;
+
+  /// Whether the barcode scanner may be used.
+  ///
+  /// The exception to the rule stated at the top of this file, and it is worth
+  /// being honest about that: this is a capability premium adds rather than a
+  /// ceiling free runs into, so it is closer to the custom-targets gate than
+  /// to the meal cap.
+  ///
+  /// It is gated because it is the one input in the app that costs something
+  /// per use — every scan is a lookup against Open Food Facts through our own
+  /// edge function — and because it is pure convenience: the same yoghurt is
+  /// two taps away in search, which is never gated. Nobody is stopped from
+  /// logging their food, which is the line this file does not cross.
+  final bool scansBarcodes;
 
   bool get isUnlimited =>
       savedMeals == null && historyDays == null && activeChallenges == null;
@@ -159,5 +176,6 @@ class PlanLimits extends Equatable {
     historyDays,
     activeChallenges,
     showsAds,
+    scansBarcodes,
   ];
 }

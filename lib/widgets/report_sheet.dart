@@ -10,6 +10,7 @@ import '../models/post_report.dart';
 import '../styles/app_color.dart';
 import 'animations/press_scale.dart';
 import 'sheet_action_row.dart';
+import 'bulkr_snack_bar.dart';
 
 /// What the user chose to report a post for.
 class ReportChoice {
@@ -238,16 +239,9 @@ Future<void> reportPostFlow(BuildContext context, Post post) async {
     message = '$error';
   }
 
-  messenger
-    ..hideCurrentSnackBar()
-    ..showSnackBar(
-      SnackBar(
-        backgroundColor: const Color(0xFF2A2A2A),
-        duration: const Duration(seconds: 4),
-        content: Text(
-          message,
-          style: GoogleFonts.inter(color: Colors.white, fontSize: 12.sp),
-        ),
-      ),
-    );
+  BulkrSnackBar.showOn(
+    messenger,
+    message,
+    duration: const Duration(seconds: 4),
+  );
 }

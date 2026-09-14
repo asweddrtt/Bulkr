@@ -18,6 +18,7 @@ import '../models/macros.dart';
 import '../models/meal.dart';
 import '../models/meal_slot.dart';
 import '../styles/app_color.dart';
+import '../widgets/bulkr_snack_bar.dart';
 import '../widgets/bulkr_nav_bar.dart';
 import '../widgets/plan_limit_notice.dart';
 import '../widgets/animations/count_up.dart';
@@ -55,22 +56,15 @@ class TrackerScreen extends StatelessWidget {
           previous.actionErrorKey != current.actionErrorKey &&
           current.actionErrorKey != null,
       listener: (context, state) {
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(
-            SnackBar(
-              backgroundColor: const Color(0xFF2A2A2A),
-              content: Text(
-                // The Postgres detail rides along, because 42501 reads
-                // nothing like a network problem and the difference is the
-                // whole diagnosis.
-                [state.actionErrorKey!.tr(), state.actionErrorDetail]
-                    .whereType<String>()
-                    .join('\n'),
-                style: GoogleFonts.inter(color: Colors.white, fontSize: 12.sp),
-              ),
-            ),
-          );
+        // The Postgres detail rides along, because 42501 reads nothing like a
+        // network problem and the difference is the whole diagnosis.
+        BulkrSnackBar.show(
+          context,
+          [state.actionErrorKey!.tr(), state.actionErrorDetail]
+              .whereType<String>()
+              .join('\n'),
+          tone: SnackTone.danger,
+        );
         context.read<TrackerCubit>().clearActionError();
       },
       child: BlocBuilder<TrackerCubit, TrackerState>(
@@ -320,30 +314,26 @@ class _StreakRestoreRowState extends State<_StreakRestoreRow> {
       // all, which `showRewarded` cannot tell apart from the other, so it errs
       // towards the explanation somebody can act on.
       if (mounted) setState(() => _busy = false);
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(_notice('ads_reward_unavailable'.tr()));
+      BulkrSnackBar.showOn(
+        messenger,
+        'ads_reward_unavailable'.tr(),
+        tone: SnackTone.danger,
+      );
       return;
     }
 
     final bool restored = await tracker.restoreStreak();
     if (mounted) setState(() => _busy = false);
 
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(_notice(restored
+    BulkrSnackBar.showOn(
+      messenger,
+      restored
           ? 'streak_restored_notice'
               .tr(namedArgs: {'days': '${widget.days + 1}'})
-          : 'streak_restore_failed'.tr()));
+          : 'streak_restore_failed'.tr(),
+      tone: restored ? SnackTone.success : SnackTone.danger,
+    );
   }
-
-  SnackBar _notice(String message) => SnackBar(
-        backgroundColor: const Color(0xFF2A2A2A),
-        content: Text(
-          message,
-          style: GoogleFonts.inter(color: Colors.white, fontSize: 12.sp),
-        ),
-      );
 
   @override
   Widget build(BuildContext context) {
@@ -1167,17 +1157,7 @@ Future<void> _pickMeal(
   final List<Meal> library = meals.state.library;
 
   if (library.isEmpty) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          backgroundColor: const Color(0xFF2A2A2A),
-          content: Text(
-            'tracker_no_meals'.tr(),
-            style: GoogleFonts.inter(color: Colors.white, fontSize: 13.sp),
-          ),
-        ),
-      );
+    BulkrSnackBar.show(context, 'tracker_no_meals'.tr());
     return;
   }
 

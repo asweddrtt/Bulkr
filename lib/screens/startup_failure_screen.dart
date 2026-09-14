@@ -108,8 +108,15 @@ class StartupFailureScreen extends StatelessWidget {
                   onPressed: () async {
                     await Clipboard.setData(ClipboardData(text: _report));
                     if (!context.mounted) return;
+                    // Deliberately not BulkrSnackBar: this screen is what
+                    // shows when the app failed to start, so it uses nothing
+                    // of the app — no theme, no translations, no widget that
+                    // could be the thing that is broken.
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Copied')),
+                      const SnackBar(
+                        behavior: SnackBarBehavior.floating,
+                        content: Text('Copied'),
+                      ),
                     );
                   },
                   child: const Text('Copy the details'),

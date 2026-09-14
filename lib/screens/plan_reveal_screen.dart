@@ -21,6 +21,7 @@ import '../widgets/macro_bar.dart';
 import '../widgets/onboarding_progress_dots.dart';
 
 import 'upgrade_screen.dart';
+import '../widgets/bulkr_snack_bar.dart';
 
 /// Step 5 — the reveal.
 ///
@@ -43,17 +44,11 @@ class PlanRevealScreen extends StatelessWidget {
       listener: (context, state) {
         if (state.submission == SubmissionStatus.failure &&
             state.errorMessage != null) {
-          ScaffoldMessenger.of(context)
-            ..hideCurrentSnackBar()
-            ..showSnackBar(
-              SnackBar(
-                backgroundColor: const Color(0xFF2A2A2A),
-                content: Text(
-                  _friendlyError(state.errorMessage!),
-                  style: GoogleFonts.inter(color: Colors.white, fontSize: 13.sp),
-                ),
-              ),
-            );
+          BulkrSnackBar.show(
+            context,
+            _friendlyError(state.errorMessage!),
+            tone: SnackTone.danger,
+          );
         }
       },
       builder: (context, state) {

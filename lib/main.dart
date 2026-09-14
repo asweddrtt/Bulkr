@@ -364,6 +364,26 @@ class _BulkrAppState extends State<BulkrApp> {
                 onPrimary: Colors.black,
                 surface: Color(0xFF1A1A1A),
               ),
+              // The backstop, not the mechanism. Every message the app writes
+              // goes through `BulkrSnackBar`, which sets all of this itself —
+              // this is here so that a snackbar from somewhere else (a package,
+              // a `SelectableText` context menu, a call site written in a
+              // hurry) is still floating and still rounded, rather than the one
+              // square grey slab in the app.
+              snackBarTheme: SnackBarThemeData(
+                behavior: SnackBarBehavior.floating,
+                backgroundColor: const Color(0xFF1C1C1E),
+                contentTextStyle: const TextStyle(color: Colors.white),
+                actionTextColor: AppColors.primaryNeon,
+                elevation: 8,
+                insetPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  side: BorderSide(
+                    color: Colors.white.withValues(alpha: 0.10),
+                  ),
+                ),
+              ),
             ),
           );
         },

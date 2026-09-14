@@ -1,11 +1,9 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../core/plan_limit_error.dart';
-import '../screens/upgrade_screen.dart';
-import '../styles/app_color.dart';
+import 'bulkr_snack_bar.dart';
+import 'premium_sheet.dart';
 
 /// The message somebody sees when the free tier runs out, with the way out of
 /// it attached.
@@ -17,6 +15,17 @@ import '../styles/app_color.dart';
 /// The action is not a nag: it appears only when a limit was actually hit, and
 /// it is a snackbar rather than a dialog, so somebody who wants to carry on
 /// doing what they were doing can ignore it entirely.
+///
+/// ## This one, or the sheet
+///
+/// Use this when the limit arrives as a *failure* — the database refused a
+/// write that was already in flight, and the user is owed an explanation for
+/// something that has already happened. Use [PremiumSheet] directly when the
+/// app can see the wall coming and stops at the button, where a snackbar would
+/// be a strange answer to a tap that appeared to do nothing.
+///
+/// Either way the upgrade goes through the same sheet, so "how do I subscribe"
+/// has one answer wherever it is asked.
 class PlanLimitNotice {
   const PlanLimitNotice._();
 
@@ -26,25 +35,20 @@ class PlanLimitNotice {
     PlanLimit limit, {
     String source = 'limit',
   }) {
-    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
-
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          backgroundColor: const Color(0xFF2A2A2A),
-          duration: const Duration(seconds: 8),
-          content: Text(
-            planLimitMessage(limit),
-            style: GoogleFonts.inter(color: Colors.white, fontSize: 12.sp),
-          ),
-          action: SnackBarAction(
-            label: 'limit_upgrade'.tr(),
-            textColor: AppColors.primaryNeon,
-            onPressed: () => UpgradeScreen.open(context, source: source),
-          ),
-        ),
-      );
+    BulkrSnackBar.show(
+      context,
+      planLimitMessage(limit),
+      tone: SnackTone.premium,
+      duration: const Duration(seconds: 8),
+      actionLabel: 'limit_upgrade'.tr(),
+      // The snackbar outlives the widget that showed it — it belongs to the
+      // app's messenger, not to the route. A screen that has since been popped
+      // must not be asked to push a sheet.
+      onAction: () {
+        if (!context.mounted) return;
+        PremiumSheet.show(context, limit: limit, source: source);
+      },
+    );
   }
 
   /// Shows the notice if [error] was a plan limit, and answers whether it was.

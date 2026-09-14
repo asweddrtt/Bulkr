@@ -73,7 +73,7 @@ Everything Bulkr does today, and what it costs us to serve.
 | Feature | Why it stays free |
 |---|---|
 | Logging meals and food, any number, any day | The thing the app is for. Someone who cannot record dinner does not come back, and no upgrade screen wins that user back. |
-| Food search (3 tiers, barcode scanning) | Tier 2 costs an API call, but a search you cannot run is a meal you cannot log. |
+| Food search, all 3 tiers | Tier 2 costs an API call, but a search you cannot run is a meal you cannot log. |
 | The daily tracker, calorie ring, macro bars | Same. |
 | Water logging | Same. |
 | Weighing in | Same. |
@@ -96,8 +96,23 @@ ransom.
 | Challenges | rows | medium | One at a time on free is a real limit that costs nobody anything. |
 | Groups you can create | rows | low | Gating group *creation* hurts the network more than it earns. |
 | Photo uploads per post | storage + Rekognition, **real money** | medium | The only limit that is actually about cost. |
+| Barcode scanning | an edge-function lookup per scan | medium | **Reversed.** It sat in the table above until it was gated. See below. |
 | Ads | — | — | The free tier's actual price. |
 | Export (CSV) | — | — | Doesn't exist yet; a natural premium-only feature when it does. |
+
+**On barcode scanning**, because it moved and the reason it moved matters.
+It was in the never-gate table above, under "a search you cannot run is a meal
+you cannot log", and that sentence is still true — which is exactly why the
+gate is on the *scanner* and not on the search. A free account types
+"greek yoghurt", gets the same food, at the same three tiers, and logs it. What
+premium buys is not the food, it is not typing: the packet in your hand
+identifies itself.
+
+That is a narrower claim than the one the table above makes, and it is the only
+version of this gate that is defensible. If it ever starts costing free
+accounts their logging rather than their convenience — watch
+`plan_limit_reached` with `barcode_scan` against how many of those accounts log
+anything that day — it goes back.
 
 ### What must never be gated, for reasons other than kindness
 
@@ -233,6 +248,25 @@ spent later on a win-back than at launch, when there is nobody to win back.
   original four columns stay the *training* numbers rather than becoming an
   average, so an account that never turns this on is untouched and one that
   turns it off falls back to exactly what it had.
+- **Barcode scanning** — premium only, gated inside
+  `BarcodeScannerSheet.show` rather than at the two buttons that call it, so a
+  third call site cannot be added around the gate. Both buttons draw
+  themselves locked instead of hiding: a free account that never sees the
+  scanner never learns there is one.
+- **The sheet every wall opens** — `PremiumSheet`. One sheet, opened by every
+  gate, that names the wall you just hit, lists what premium includes, and ends
+  in the paywall. Dismissing it returns you to what you were doing. Every
+  opening fires `plan_limit_reached`, which is how the caps get priced.
+- **The meal allowance, before it bites** — the Meals screen shows `4 / 5`
+  and a line saying what free keeps, and the Create button opens the sheet
+  instead of the editor once the library is full. A cap enforced only at the
+  save is a cap that throws away a meal somebody has already built.
+- **Turning ads off for a day, on the feed** — `AdFreeOffer`, above the first
+  post rather than pinned in the header. It was reachable only from the
+  account sheet, three taps behind an avatar, which is the one place somebody
+  annoyed by an ad is not looking. When no rewarded ad unit exists — which is
+  every build until the units are created, see `docs/ADMOB.md` — the row is
+  still drawn and is the premium pitch instead.
 - **The limits** — `premium_limits.sql`. The meal library and the challenge
   cap are enforced by triggers raising their own SQLSTATE, so the app can say
   "you have reached the 5 meals a free account keeps" rather than "you do not
@@ -254,10 +288,11 @@ Still to come:
    sell, so a release build with no live products never shows a new user "the
    store isn't reachable" as the first thing after signing up.
 
-1. **The upgrade prompt at every wall.** The meal library and the tracker's
-   history both offer it; joining a second challenge currently just says why
-   it failed. The sentence is right either way — `plan_limit_error.dart`
-   supplies it — but a limit with a button beats a limit with an explanation.
+1. **The upgrade prompt at every wall.** Done — every wall now opens
+   `PremiumSheet`, including the ones that previously only said why something
+   failed. What is left is the walls that have no client-side warning before
+   the server refuses: joining a second challenge is still discovered by
+   trying it, the way saving a sixth meal used to be.
 2. **The two products in App Store Connect and Play Console.** Everything
    else about buying is built; this is what it needs to exist. Ids, prices and
    the trial are in the table at the top of this file. Until they exist, the

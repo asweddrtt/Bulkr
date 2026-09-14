@@ -27,6 +27,7 @@ import '../widgets/report_sheet.dart';
 import 'chat_screen.dart';
 import 'people_list_screen.dart';
 import 'post_comments_sheet.dart';
+import '../widgets/bulkr_snack_bar.dart';
 
 /// One person's profile: who they are, and everything they have posted.
 ///
@@ -76,17 +77,11 @@ class AuthorProfileScreen extends StatelessWidget {
           current.actionErrorKey != null &&
           previous.actionErrorKey != current.actionErrorKey,
       listener: (context, state) {
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(
-            SnackBar(
-              backgroundColor: const Color(0xFF2A2A2A),
-              content: Text(
-                state.actionErrorDetail ?? state.actionErrorKey!.tr(),
-                style: GoogleFonts.inter(color: Colors.white, fontSize: 12.sp),
-              ),
-            ),
-          );
+        BulkrSnackBar.show(
+          context,
+          state.actionErrorDetail ?? state.actionErrorKey!.tr(),
+          tone: SnackTone.danger,
+        );
         context.read<AuthorCubit>().clearNotice();
       },
       child: Scaffold(
@@ -309,17 +304,10 @@ Future<void> _showActions(BuildContext context, Post post) async {
     case PostAction.share:
       await Clipboard.setData(ClipboardData(text: PostLink.shareText(post)));
 
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(
-            backgroundColor: const Color(0xFF2A2A2A),
-            content: Text(
-              'post_share_copied'.tr(),
-              style: GoogleFonts.inter(color: Colors.white, fontSize: 12.sp),
-            ),
-          ),
-        );
+      BulkrSnackBar.showOn(
+        messenger,
+        'post_share_copied'.tr(),
+      );
   }
 }
 

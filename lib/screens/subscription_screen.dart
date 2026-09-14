@@ -16,6 +16,7 @@ import '../models/entitlement.dart';
 import '../styles/app_color.dart';
 import '../widgets/sheet_action_row.dart';
 import 'upgrade_screen.dart';
+import '../widgets/bulkr_snack_bar.dart';
 
 /// What this account has, and how to stop having it.
 ///
@@ -164,9 +165,12 @@ class SubscriptionScreen extends StatelessWidget {
 
     // Doing nothing here would be the original bug with extra steps: the user
     // taps Cancel and the app appears to ignore them.
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(_notice('sub_store_unavailable'.tr()));
+    BulkrSnackBar.showOn(
+      messenger,
+      'sub_store_unavailable'.tr(),
+      tone: SnackTone.danger,
+      clearsNavBar: false,
+    );
   }
 
   Future<void> _restore(BuildContext context) async {
@@ -180,24 +184,16 @@ class SubscriptionScreen extends StatelessWidget {
     // already listening to — so this only has to re-read what that wrote.
     await entitlement.refresh();
 
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        _notice(
-          entitlement.state.isPremium
-              ? 'sub_restore_done'.tr()
-              : 'premium_nothing_restored'.tr(),
-        ),
-      );
-  }
+    final bool restored = entitlement.state.isPremium;
 
-  static SnackBar _notice(String message) => SnackBar(
-    backgroundColor: const Color(0xFF2A2A2A),
-    content: Text(
-      message,
-      style: GoogleFonts.inter(color: Colors.white, fontSize: 12.sp),
-    ),
-  );
+    BulkrSnackBar.showOn(
+      messenger,
+      restored ? 'sub_restore_done'.tr() : 'premium_nothing_restored'.tr(),
+      tone: restored ? SnackTone.success : SnackTone.neutral,
+      // A pushed full-screen route: nothing of the shell is underneath it.
+      clearsNavBar: false,
+    );
+  }
 }
 
 /// Status, date, and where it was bought — the three things somebody opens

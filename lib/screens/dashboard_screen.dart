@@ -13,6 +13,7 @@ import '../models/plan_breakdown.dart';
 import '../models/user_profile.dart';
 import '../models/weight_entry.dart';
 import '../styles/app_color.dart';
+import '../widgets/bulkr_snack_bar.dart';
 import '../widgets/bulkr_image.dart';
 import '../widgets/bulkr_nav_bar.dart';
 import '../widgets/animations/entrance.dart';
@@ -53,17 +54,11 @@ class DashboardScreen extends StatelessWidget {
           current.actionErrorKey != null &&
           previous.actionErrorKey != current.actionErrorKey,
       listener: (context, state) {
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(
-            SnackBar(
-              backgroundColor: const Color(0xFF2A2A2A),
-              content: Text(
-                state.actionErrorKey!.tr(),
-                style: GoogleFonts.inter(color: Colors.white, fontSize: 13.sp),
-              ),
-            ),
-          );
+        BulkrSnackBar.show(
+          context,
+          state.actionErrorKey!.tr(),
+          tone: SnackTone.danger,
+        );
         context.read<ProfileCubit>().clearActionError();
       },
       child: BlocBuilder<ProfileCubit, ProfileState>(
@@ -126,17 +121,7 @@ class DashboardScreen extends StatelessWidget {
     // BMR needs an age, and `date_of_birth` is nullable. Without it the sheet
     // could only offer a disabled button, so say what is missing instead.
     if (cubit.planForPace(cubit.suggestedWeeklyGainKg) == null) {
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(
-            backgroundColor: const Color(0xFF2A2A2A),
-            content: Text(
-              'recalculate_needs_biometrics'.tr(),
-              style: GoogleFonts.inter(color: Colors.white, fontSize: 13.sp),
-            ),
-          ),
-        );
+      BulkrSnackBar.show(context, 'recalculate_needs_biometrics'.tr());
       return;
     }
 
@@ -251,15 +236,7 @@ class DashboardScreen extends StatelessWidget {
     // Said out loud. The sheet closes either way, and four numbers changing
     // behind it on a card the user may not be looking at is not confirmation
     // that anything happened.
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(
-        backgroundColor: const Color(0xFF2A2A2A),
-        content: Text(
-          'targets_saved'.tr(),
-          style: GoogleFonts.inter(color: Colors.white, fontSize: 12.sp),
-        ),
-      ));
+    BulkrSnackBar.showOn(messenger, 'targets_saved'.tr(), tone: SnackTone.success);
   }
 
   /// Corrects the biometrics, then offers to move the target that follows from

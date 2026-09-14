@@ -11,6 +11,7 @@ import '../models/food_item.dart';
 import '../styles/app_color.dart';
 import 'animations/press_scale.dart';
 import 'barcode_scanner_sheet.dart';
+import 'bulkr_snack_bar.dart';
 
 /// What one picked food and amount means to whoever opened the sheet.
 ///
@@ -186,20 +187,14 @@ class _ScanButton extends StatelessWidget {
     final FoodItem? food = await search.lookupBarcode(barcode);
 
     if (food == null || !food.hasNutrition) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(
-            backgroundColor: const Color(0xFF2A2A2A),
-            content: Text(
-              // Two different failures, one message: a code nothing has heard
-              // of and a product logged with no nutrition are the same dead
-              // end from here, and the fix for both is to search by name.
-              'food_scan_unknown'.tr(),
-              style: GoogleFonts.inter(color: Colors.white, fontSize: 13.sp),
-            ),
-          ),
-        );
+      // Two different failures, one message: a code nothing has heard of and
+      // a product logged with no nutrition are the same dead end from here,
+      // and the fix for both is to search by name.
+      BulkrSnackBar.showOn(
+        messenger,
+        'food_scan_unknown'.tr(),
+        tone: SnackTone.danger,
+      );
       return;
     }
 
@@ -209,14 +204,39 @@ class _ScanButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Locked rather than absent: a free account that never sees the scanner
+    // never learns it exists, and the tap still opens something — the offer
+    // instead of the camera. The refusal itself is in
+    // `BarcodeScannerSheet.show`, not here.
+    final bool locked = !BarcodeScannerSheet.isUnlocked(context);
+
     return IconButton(
       onPressed: () => _scan(context),
-      icon: Icon(
-        Icons.qr_code_scanner,
-        color: AppColors.primaryNeon,
-        size: 22.sp,
+      icon: Stack(
+        clipBehavior: Clip.none,
+        children: <Widget>[
+          Icon(
+            Icons.qr_code_scanner,
+            color: locked
+                ? AppColors.primaryNeon.withValues(alpha: 0.55)
+                : AppColors.primaryNeon,
+            size: 22.sp,
+          ),
+          if (locked)
+            Positioned(
+              right: -4.w,
+              top: -4.h,
+              child: Icon(
+                Icons.workspace_premium_rounded,
+                color: AppColors.primaryNeon,
+                size: 12.sp,
+              ),
+            ),
+        ],
       ),
-      tooltip: 'food_scan_tooltip'.tr(),
+      tooltip: locked
+          ? 'food_scan_tooltip_locked'.tr()
+          : 'food_scan_tooltip'.tr(),
     );
   }
 }

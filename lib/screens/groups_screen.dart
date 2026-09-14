@@ -13,6 +13,7 @@ import '../widgets/animations/motion.dart';
 import '../widgets/animations/press_scale.dart';
 import '../widgets/group_row.dart';
 import 'group_screen.dart';
+import '../widgets/bulkr_snack_bar.dart';
 
 /// Groups: the ones you're in, the ones you could join, and starting one.
 class GroupsScreen extends StatelessWidget {
@@ -49,17 +50,11 @@ class GroupsScreen extends StatelessWidget {
           current.actionErrorKey != null &&
           previous.actionErrorKey != current.actionErrorKey,
       listener: (context, state) {
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(
-            SnackBar(
-              backgroundColor: const Color(0xFF2A2A2A),
-              content: Text(
-                state.actionErrorDetail ?? state.actionErrorKey!.tr(),
-                style: GoogleFonts.inter(color: Colors.white, fontSize: 12.sp),
-              ),
-            ),
-          );
+        BulkrSnackBar.show(
+          context,
+          state.actionErrorDetail ?? state.actionErrorKey!.tr(),
+          tone: SnackTone.danger,
+        );
         context.read<GroupsCubit>().clearNotice();
       },
       child: Scaffold(

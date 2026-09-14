@@ -1,20 +1,53 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
+import '../core/plan_limit_error.dart';
+import '../cubit/entitlement/entitlement_cubit.dart';
 import '../styles/app_color.dart';
+import 'premium_sheet.dart';
 
 /// Reads a barcode off a package.
 ///
 /// The one input that identifies a packaged food exactly: no spelling, no
-/// ranking, no choosing between six versions of the same yoghurt.
+/// ranking, no choosing between six versions of the same yoghurt. Which is
+/// also why it is the premium tier's one added capability rather than another
+/// ceiling — see `PlanLimits.scansBarcodes`.
 class BarcodeScannerSheet extends StatefulWidget {
   const BarcodeScannerSheet({super.key});
 
-  /// Resolves to the scanned code, or null when dismissed.
-  static Future<String?> show(BuildContext context) {
+  /// Whether this account may scan.
+  ///
+  /// Exposed so a scan button can draw itself as locked rather than looking
+  /// available and then refusing. The gate itself is in [show]; this is only
+  /// how it looks.
+  static bool isUnlocked(BuildContext context) =>
+      context.watch<EntitlementCubit>().state.limits.scansBarcodes;
+
+  /// Resolves to the scanned code, or null when dismissed — and null, without
+  /// ever opening the camera, for an account that has not paid.
+  ///
+  /// The gate lives here rather than at the two buttons that call it, because
+  /// a gate on a call site is a gate somebody adds a third call site around.
+  /// Nothing that wants a barcode can get one without going past this line.
+  ///
+  /// Refusing is not silent: the sheet that explains it opens instead, so a
+  /// tap that cannot do what it says always produces something.
+  static Future<String?> show(BuildContext context) async {
+    if (!context.read<EntitlementCubit>().state.limits.scansBarcodes) {
+      await PremiumSheet.show(
+        context,
+        limit: PlanLimit.barcodeScan,
+        source: 'barcode_scan',
+      );
+      return null;
+    }
+
+    if (!context.mounted) return null;
+
     return showModalBottomSheet<String>(
       context: context,
       backgroundColor: Colors.transparent,
