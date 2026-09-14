@@ -784,8 +784,6 @@
   "premium_benefit_scan_sub": "Point at the packet instead of typing",
   "food_scan_tooltip_locked": "Scan a barcode — Premium",
   "ads_offer_title": "Turn off ads for 24 hours",
-  "ads_offer_sub": "Watch one short video",
-  "ads_offer_premium_sub": "Premium removes them for good",
   "ads_offer_active": "Ads are off for another {hours}h",
   "ads_offer_watch": "Watch"
 }

@@ -167,6 +167,14 @@ class _FeedHeader extends StatelessWidget {
           ),
         ),
         SizedBox(height: 12.h),
+        // Pinned rather than riding on the first post. It was in the list, and
+        // in the list it is gone after one flick of the thumb — which is
+        // before the first banner ad, so the offer to remove ads was never on
+        // screen at the same time as an ad. Here it stays put, which is why it
+        // is one line: a permanent row earns its height once, not every time
+        // somebody scrolls past it. Draws nothing at all for a premium
+        // account.
+        const AdFreeOffer(),
       ],
     );
   }
@@ -577,28 +585,11 @@ class _FeedListState extends State<_FeedList> {
           isJoiningChallenge: busyPostId == post.id,
         );
 
-        // Above the first card rather than in the header, which is pinned:
-        // an offer that never scrolls away stops being an offer and starts
-        // being a banner of our own. Here it is the first thing on the feed
-        // and then it is gone, and it comes back whenever somebody returns to
-        // the top — which is also when they have just been shown ads.
-        //
-        // Prepended to the first card rather than given a slot of its own so
-        // that `index` stays "post at index" and the banner arithmetic below
-        // keeps pointing at the right posts.
-        final bool opensTheFeed = index == 0;
-        final bool carriesAd = FeedBannerAd.followsPost(index);
-
-        if (!opensTheFeed && !carriesAd) return card;
+        if (!FeedBannerAd.followsPost(index)) return card;
 
         return Column(
           mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            if (opensTheFeed)
-              AdFreeOffer(padding: EdgeInsets.only(bottom: 12.h)),
-            card,
-            if (carriesAd) const FeedBannerAd(),
-          ],
+          children: <Widget>[card, const FeedBannerAd()],
         );
       },
     );

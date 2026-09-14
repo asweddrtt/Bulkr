@@ -15,12 +15,21 @@ import 'premium_sheet.dart';
 
 /// Turning the ads off for a day, offered where the ads are.
 ///
-/// ## Why it belongs on the feed
+/// ## Why it belongs on the feed, pinned
 ///
 /// It lived only in the account sheet, three taps behind an avatar, which is
 /// the one place somebody annoyed by an ad is not looking. The feed is where
 /// the banners are; it is also the only screen in the app where an offer to
 /// remove them is obviously an offer rather than an interruption.
+///
+/// It then spent a version riding above the first post, where it scrolled away
+/// after one flick — and the first banner ad is five posts down, so the offer
+/// to remove ads was never on screen at the same time as an ad. Pinned to the
+/// header it is there when the ad is.
+///
+/// Which is also why it is a single line. A row that scrolls past can afford
+/// two; a row that is always there pays for its height on every screen of
+/// every session, so it says one thing and gets out of the way.
 ///
 /// ## Two offers, one row
 ///
@@ -37,6 +46,8 @@ import 'premium_sheet.dart';
 class AdFreeOffer extends StatelessWidget {
   const AdFreeOffer({super.key, this.padding});
 
+  /// Overrides the default gutter. For a caller placing it somewhere with its
+  /// own padding already.
   final EdgeInsetsGeometry? padding;
 
   @override
@@ -71,13 +82,11 @@ class AdFreeOffer extends StatelessWidget {
                 source: 'feed_ad_free',
               ),
               child: Container(
-                padding: EdgeInsets.symmetric(
-                  horizontal: 12.w,
-                  vertical: 10.h,
-                ),
+                height: 38.h,
+                padding: EdgeInsets.symmetric(horizontal: 12.w),
                 decoration: BoxDecoration(
                   color: const Color(0xFF16190A),
-                  borderRadius: BorderRadius.circular(12.r),
+                  borderRadius: BorderRadius.circular(10.r),
                   border: Border.all(
                     color: AppColors.primaryNeon.withValues(alpha: 0.22),
                   ),
@@ -89,38 +98,25 @@ class AdFreeOffer extends StatelessWidget {
                           ? Icons.do_not_disturb_on_outlined
                           : Icons.block_flipped,
                       color: AppColors.primaryNeon,
-                      size: 16.sp,
+                      size: 15.sp,
                     ),
-                    SizedBox(width: 10.w),
+                    SizedBox(width: 9.w),
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Text(
-                            active
-                                ? 'ads_offer_active'.tr(
-                                    namedArgs: <String, String>{
-                                      'hours': '${_hoursLeft(left)}',
-                                    },
-                                  )
-                                : 'ads_offer_title'.tr(),
-                            style: GoogleFonts.inter(
-                              color: Colors.white,
-                              fontSize: 11.5.sp,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          SizedBox(height: 2.h),
-                          Text(
-                            active || !AdsConfig.hasRewarded
-                                ? 'ads_offer_premium_sub'.tr()
-                                : 'ads_offer_sub'.tr(),
-                            style: GoogleFonts.inter(
-                              color: Colors.white38,
-                              fontSize: 10.sp,
-                            ),
-                          ),
-                        ],
+                      child: Text(
+                        active
+                            ? 'ads_offer_active'.tr(
+                                namedArgs: <String, String>{
+                                  'hours': '${_hoursLeft(left)}',
+                                },
+                              )
+                            : 'ads_offer_title'.tr(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.inter(
+                          color: Colors.white,
+                          fontSize: 11.sp,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                     SizedBox(width: 8.w),
