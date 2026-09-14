@@ -49,6 +49,7 @@ import 'post_comments_sheet.dart';
 import 'post_composer_screen.dart';
 import 'subscription_screen.dart';
 import 'upgrade_screen.dart';
+import '../core/image_resize.dart';
 
 /// The signed-in user's own profile.
 ///
@@ -572,12 +573,10 @@ class _EditableAvatar extends StatefulWidget {
 }
 
 class _EditableAvatarState extends State<_EditableAvatar> {
-  /// Resized on the way in, like every other photo the app takes. An avatar is
-  /// rendered at 64 logical pixels and downloaded by everyone who reads a post
-  /// — a full-resolution camera image would be several megabytes for something
-  /// shown the size of a thumbnail.
-  static const int _maxWidth = 512;
-  static const int _quality = 85;
+  // Resized on the way in, like every other photo the app takes. An avatar is
+  // rendered at 64 logical pixels at most and downloaded by everyone who reads
+  // a post — a full-resolution camera image would be several megabytes for
+  // something shown the size of a thumbnail. See `ImageResize.avatarEdge`.
 
   bool _isSaving = false;
 
@@ -671,8 +670,8 @@ class _EditableAvatarState extends State<_EditableAvatar> {
     try {
       picked = await ImagePicker().pickImage(
         source: source,
-        maxWidth: _maxWidth.toDouble(),
-        imageQuality: _quality,
+        maxWidth: ImageResize.avatarEdge.toDouble(),
+        imageQuality: ImageResize.avatarQuality,
       );
     } catch (error) {
       // A denied camera permission or a cancelled picker throws on some

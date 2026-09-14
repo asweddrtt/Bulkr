@@ -31,6 +31,7 @@ import '../widgets/image_source_sheet.dart';
 import '../widgets/ingredient_amount_sheet.dart';
 import '../widgets/macro_bar.dart';
 import '../widgets/plan_limit_notice.dart';
+import '../core/image_resize.dart';
 
 /// Writes a meal: a photo, a name, what is in it, and how it is made.
 ///
@@ -243,11 +244,10 @@ class _MealEditorView extends StatelessWidget {
 class _PhotoPicker extends StatelessWidget {
   const _PhotoPicker();
 
-  /// Re-encoded on the way in. A modern phone camera produces 4-12MB per frame;
-  /// nobody needs that behind a 16:10 card, and it is the difference between an
-  /// upload that finishes on mobile data and one that times out.
-  static const int _maxWidth = 1600;
-  static const int _quality = 82;
+  // Re-encoded on the way in. A modern phone camera produces 4-12MB per
+  // frame; nobody needs that behind a 16:10 card, and it is the difference
+  // between an upload that finishes on mobile data and one that times out.
+  // The numbers are in `ImageResize` with the rest of the image budget.
 
   @override
   Widget build(BuildContext context) {
@@ -372,8 +372,8 @@ class _PhotoPicker extends StatelessWidget {
     try {
       final XFile? picked = await ImagePicker().pickImage(
         source: source,
-        maxWidth: _maxWidth.toDouble(),
-        imageQuality: _quality,
+        maxWidth: ImageResize.captureEdge.toDouble(),
+        imageQuality: ImageResize.captureQuality,
       );
       if (picked == null) return;
 

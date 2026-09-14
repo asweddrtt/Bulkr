@@ -28,6 +28,7 @@ import '../widgets/image_source_sheet.dart';
 import '../widgets/sheet_action_row.dart';
 import 'meal_editor_screen.dart';
 import '../widgets/bulkr_snack_bar.dart';
+import '../core/image_resize.dart';
 
 /// Writing a post.
 ///
@@ -950,8 +951,6 @@ class _ContentFieldState extends State<_ContentField> {
 class _ImageStrip extends StatelessWidget {
   const _ImageStrip();
 
-  static const int _maxWidth = 1600;
-  static const int _quality = 82;
 
   @override
   Widget build(BuildContext context) {
@@ -1035,8 +1034,8 @@ class _ImageStrip extends StatelessWidget {
     try {
       final XFile? picked = await ImagePicker().pickImage(
         source: source,
-        maxWidth: _maxWidth.toDouble(),
-        imageQuality: _quality,
+        maxWidth: ImageResize.captureEdge.toDouble(),
+        imageQuality: ImageResize.captureQuality,
       );
       if (picked == null) return;
 
