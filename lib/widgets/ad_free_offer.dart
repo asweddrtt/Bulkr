@@ -33,12 +33,18 @@ import 'premium_sheet.dart';
 ///
 /// ## Two offers, one row
 ///
-/// When a rewarded ad unit exists, the row's action is the trade: thirty
-/// seconds of video for twenty-four hours without ads. When one does not —
-/// which is every build until the units are created in the AdMob console, see
-/// `docs/ADMOB.md` — the row is still drawn, and it is the premium pitch
-/// instead. A free account is told what removes the ads either way, which is
-/// the whole point of putting it here.
+/// The row's action is normally the trade: thirty seconds of video for
+/// twenty-four hours without ads. Both platforms have a rewarded-interstitial
+/// unit configured (`docs/ADMOB.md`), so that is what nearly every build
+/// shows.
+///
+/// `AdsConfig.hasRewarded` is false on desktop, and would be again if the ids
+/// were ever blanked — and there the row is still drawn and is the premium
+/// pitch instead. A free account is told what removes the ads either way,
+/// which is the whole point of putting it here. Note this is about whether a
+/// unit *exists*, not whether an ad *fills*: a unit that cannot fill is
+/// handled at the tap, by `AdFreeOffer.watch`, which says so rather than
+/// taking thirty seconds and delivering nothing.
 ///
 /// It draws nothing at all for a premium account. There is nothing to sell
 /// somebody who already has it, and a row offering to remove ads they are not

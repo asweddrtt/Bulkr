@@ -264,9 +264,10 @@ spent later on a win-back than at launch, when there is nobody to win back.
 - **Turning ads off for a day, on the feed** — `AdFreeOffer`, above the first
   post rather than pinned in the header. It was reachable only from the
   account sheet, three taps behind an avatar, which is the one place somebody
-  annoyed by an ad is not looking. When no rewarded ad unit exists — which is
-  every build until the units are created, see `docs/ADMOB.md` — the row is
-  still drawn and is the premium pitch instead.
+  annoyed by an ad is not looking. Both platforms have a rewarded-interstitial
+  unit (`docs/ADMOB.md`), so the row normally offers the video; where one does
+  not exist — desktop, or blanked ids — it is still drawn and is the premium
+  pitch instead.
 - **The limits** — `premium_limits.sql`. The meal library and the challenge
   cap are enforced by triggers raising their own SQLSTATE, so the app can say
   "you have reached the 5 meals a free account keeps" rather than "you do not
